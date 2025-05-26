@@ -1,0 +1,81 @@
+
+import React from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { 
+  LayoutDashboard, 
+  Users, 
+  Settings, 
+  BarChart, 
+  User,
+  Activity
+} from 'lucide-react';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarTrigger,
+  useSidebar,
+} from '@/components/ui/sidebar';
+
+const navigationItems = [
+  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+  { title: 'Campaigns', url: '/campaigns', icon: BarChart },
+  { title: 'Users', url: '/users', icon: Users },
+  { title: 'Analytics', url: '/analytics', icon: Activity },
+  { title: 'Settings', url: '/settings', icon: Settings },
+];
+
+export function AppSidebar() {
+  const { collapsed } = useSidebar();
+  const location = useLocation();
+  const currentPath = location.pathname;
+
+  const isActive = (path: string) => currentPath === path;
+  const getNavCls = ({ isActive }: { isActive: boolean }) =>
+    isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-accent hover:text-accent-foreground';
+
+  return (
+    <Sidebar className={collapsed ? 'w-14' : 'w-64'} collapsible>
+      <div className="p-4">
+        <div className="flex items-center space-x-2">
+          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+            <User className="w-4 h-4 text-primary-foreground" />
+          </div>
+          {!collapsed && (
+            <div>
+              <h1 className="text-lg font-bold">AI Platform</h1>
+              <p className="text-xs text-muted-foreground">Campaign Manager</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <SidebarTrigger className="m-2 self-end" />
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Main Navigation</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navigationItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink to={item.url} end className={getNavCls}>
+                      <item.icon className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+  );
+}
