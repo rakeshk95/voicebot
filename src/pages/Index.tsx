@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Mic, Play, Pause, Download, Settings, Waveform, Brain, Sparkles, Volume2, Save } from 'lucide-react';
+import { Mic, Play, Pause, Download, Settings, AudioWaveform, Brain, Sparkles, Volume2, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -233,7 +233,7 @@ const Index = () => {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <Button variant="ghost" className="w-full justify-start text-white hover:bg-white/10">
-                      <Waveform className="w-4 h-4 mr-2" />
+                      <AudioWaveform className="w-4 h-4 mr-2" />
                       Clone Voice
                     </Button>
                     <Button variant="ghost" className="w-full justify-start text-white hover:bg-white/10">
