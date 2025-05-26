@@ -6,7 +6,6 @@ import {
   Users, 
   Settings, 
   BarChart, 
-  User,
   Activity,
   Phone,
   History
@@ -44,8 +43,8 @@ export function AppSidebar() {
     isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-accent hover:text-accent-foreground';
 
   return (
-    <Sidebar className={collapsed ? 'w-14' : 'w-64'}>
-      <div className="p-4">
+    <Sidebar className={`${collapsed ? 'w-14' : 'w-64'} border-r bg-white`}>
+      <div className="p-4 border-b">
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
             <Phone className="w-4 h-4 text-primary-foreground" />
@@ -61,9 +60,9 @@ export function AppSidebar() {
 
       <SidebarTrigger className="m-2 self-end" />
 
-      <SidebarContent>
+      <SidebarContent className="px-2">
         <SidebarGroup>
-          <SidebarGroupLabel>Main Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navigationItems.map((item) => (

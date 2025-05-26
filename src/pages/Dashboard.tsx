@@ -1,43 +1,15 @@
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, BarChart, Activity, Phone, Clock, TrendingUp, Target, Zap } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Phone, Clock, Target, TrendingUp } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const Dashboard = () => {
   const stats = [
     { title: 'Total Calls Today', value: '1,247', change: '+12%', icon: Phone, color: 'text-blue-600' },
-    { title: 'Active Campaigns', value: '8', change: '+2', icon: BarChart, color: 'text-green-600' },
+    { title: 'Active Campaigns', value: '8', change: '+2', icon: TrendingUp, color: 'text-green-600' },
     { title: 'Success Rate', value: '87.3%', change: '+2.1%', icon: Target, color: 'text-purple-600' },
     { title: 'Avg Call Duration', value: '2:34', change: '+8s', icon: Clock, color: 'text-orange-600' },
-  ];
-
-  const recentCampaigns = [
-    { 
-      name: 'Summer Sale 2024', 
-      status: 'Active', 
-      callsToday: 342,
-      successRate: '89%',
-      sentiment: 'Positive',
-      nextCall: '2 mins'
-    },
-    { 
-      name: 'Product Launch', 
-      status: 'Active', 
-      callsToday: 156,
-      successRate: '76%',
-      sentiment: 'Neutral',
-      nextCall: '5 mins'
-    },
-    { 
-      name: 'Customer Survey', 
-      status: 'Paused', 
-      callsToday: 0,
-      successRate: '92%',
-      sentiment: 'Positive',
-      nextCall: 'Paused'
-    },
   ];
 
   const hourlyData = [
@@ -59,31 +31,24 @@ const Dashboard = () => {
     { name: 'Follow-up', calls: 4800, success: 4100, conversion: 85 },
   ];
 
-  const sentimentData = [
-    { name: 'Positive', value: 73, color: '#10b981' },
-    { name: 'Neutral', value: 19, color: '#f59e0b' },
-    { name: 'Negative', value: 8, color: '#ef4444' },
+  const callOutcomes = [
+    { name: 'Successful', value: 73, color: '#10b981' },
+    { name: 'No Answer', value: 19, color: '#f59e0b' },
+    { name: 'Failed', value: 8, color: '#ef4444' },
   ];
 
   const weeklyTrends = [
-    { day: 'Mon', calls: 1200, revenue: 15400 },
-    { day: 'Tue', calls: 1350, revenue: 17200 },
-    { day: 'Wed', calls: 1100, revenue: 14100 },
-    { day: 'Thu', calls: 1450, revenue: 18900 },
-    { day: 'Fri', calls: 1600, revenue: 21200 },
-    { day: 'Sat', calls: 800, revenue: 10400 },
-    { day: 'Sun', calls: 600, revenue: 7800 },
+    { day: 'Mon', calls: 1200, campaigns: 6 },
+    { day: 'Tue', calls: 1350, campaigns: 7 },
+    { day: 'Wed', calls: 1100, campaigns: 5 },
+    { day: 'Thu', calls: 1450, campaigns: 8 },
+    { day: 'Fri', calls: 1600, campaigns: 9 },
+    { day: 'Sat', calls: 800, campaigns: 4 },
+    { day: 'Sun', calls: 600, campaigns: 3 },
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <Button className="bg-primary">
-          <Phone className="w-4 h-4 mr-2" />
-          Start New Campaign
-        </Button>
-      </div>
-
+    <div className="space-y-6">
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => (
@@ -103,14 +68,14 @@ const Dashboard = () => {
       </div>
 
       {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Hourly Call Performance */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Today's Call Performance</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={hourlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="time" />
@@ -129,7 +94,7 @@ const Dashboard = () => {
             <CardTitle className="text-lg">Campaign Performance</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={280}>
               <RechartsBarChart data={campaignPerformance}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
@@ -142,42 +107,42 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Weekly Revenue Trend */}
+        {/* Weekly Call Trends */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Weekly Revenue Trend</CardTitle>
+            <CardTitle className="text-lg">Weekly Call Trends</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={280}>
               <LineChart data={weeklyTrends}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="day" />
                 <YAxis />
-                <Tooltip formatter={(value) => [`$${value}`, 'Revenue']} />
-                <Line type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={3} dot={{ fill: '#8b5cf6' }} />
+                <Tooltip />
+                <Line type="monotone" dataKey="calls" stroke="#8b5cf6" strokeWidth={3} dot={{ fill: '#8b5cf6' }} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Sentiment Analysis */}
+        {/* Call Outcomes */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Call Sentiment Analysis</CardTitle>
+            <CardTitle className="text-lg">Call Outcomes</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie
-                  data={sentimentData}
+                  data={callOutcomes}
                   cx="50%"
                   cy="50%"
-                  innerRadius={40}
-                  outerRadius={80}
+                  innerRadius={50}
+                  outerRadius={100}
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {sentimentData.map((entry, index) => (
+                  {callOutcomes.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -185,7 +150,7 @@ const Dashboard = () => {
               </PieChart>
             </ResponsiveContainer>
             <div className="flex justify-center space-x-4 mt-4">
-              {sentimentData.map((item, index) => (
+              {callOutcomes.map((item, index) => (
                 <div key={index} className="flex items-center space-x-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
                   <span className="text-sm">{item.name}: {item.value}%</span>
@@ -195,50 +160,6 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
-
-      {/* Real-time Campaign Activity */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center space-x-2 text-lg">
-            <Activity className="w-5 h-5" />
-            <span>Real-time Campaign Activity</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {recentCampaigns.map((campaign, index) => (
-              <div key={index} className="flex items-center justify-between p-3 border rounded-lg bg-gradient-to-r from-slate-50 to-white">
-                <div className="flex items-center space-x-3">
-                  <div className={`w-3 h-3 rounded-full ${
-                    campaign.status === 'Active' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
-                  }`}></div>
-                  <div>
-                    <h4 className="font-medium">{campaign.name}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {campaign.callsToday} calls today • {campaign.successRate} success • Next: {campaign.nextCall}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    campaign.sentiment === 'Positive' ? 'bg-green-100 text-green-800' :
-                    campaign.sentiment === 'Neutral' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                    {campaign.sentiment}
-                  </span>
-                  <span className={`px-2 py-1 rounded-full text-xs ${
-                    campaign.status === 'Active' ? 'bg-green-100 text-green-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {campaign.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 };
