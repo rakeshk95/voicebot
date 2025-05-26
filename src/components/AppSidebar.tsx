@@ -7,7 +7,9 @@ import {
   Settings, 
   BarChart, 
   User,
-  Activity
+  Activity,
+  Phone,
+  History
 } from 'lucide-react';
 import {
   Sidebar,
@@ -25,30 +27,32 @@ import {
 const navigationItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Campaigns', url: '/campaigns', icon: BarChart },
+  { title: 'Call History', url: '/call-history', icon: History },
   { title: 'Users', url: '/users', icon: Users },
   { title: 'Analytics', url: '/analytics', icon: Activity },
   { title: 'Settings', url: '/settings', icon: Settings },
 ];
 
 export function AppSidebar() {
-  const { collapsed } = useSidebar();
+  const { state } = useSidebar();
   const location = useLocation();
   const currentPath = location.pathname;
+  const collapsed = state === 'collapsed';
 
   const isActive = (path: string) => currentPath === path;
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
     isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-accent hover:text-accent-foreground';
 
   return (
-    <Sidebar className={collapsed ? 'w-14' : 'w-64'} collapsible>
+    <Sidebar className={collapsed ? 'w-14' : 'w-64'}>
       <div className="p-4">
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <User className="w-4 h-4 text-primary-foreground" />
+            <Phone className="w-4 h-4 text-primary-foreground" />
           </div>
           {!collapsed && (
             <div>
-              <h1 className="text-lg font-bold">AI Platform</h1>
+              <h1 className="text-lg font-bold">VoiceBot AI</h1>
               <p className="text-xs text-muted-foreground">Campaign Manager</p>
             </div>
           )}
