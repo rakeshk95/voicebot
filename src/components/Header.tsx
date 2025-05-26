@@ -7,20 +7,20 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 
 export const Header = () => {
   return (
-    <header className="border-b bg-white px-6 py-4">
+    <header className="border-b bg-white px-4 py-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-3">
           <SidebarTrigger />
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <Input
               placeholder="Search campaigns, users..."
-              className="pl-10 w-96"
+              className="pl-10 w-80"
             />
           </div>
         </div>
         
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2">
           <Button variant="ghost" size="icon">
             <Bell className="w-4 h-4" />
           </Button>
