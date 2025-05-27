@@ -46,19 +46,17 @@ export function AppSidebar() {
   return (
     <Sidebar 
       className="bg-gradient-to-b from-white via-slate-50 to-blue-50 border-r border-slate-200 shadow-2xl"
-      collapsible="icon"
+      collapsible="offcanvas"
     >
       <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg">
         <div className="flex items-center space-x-3">
           <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-xl">
             <Phone className="w-6 h-6 text-blue-600" />
           </div>
-          {!collapsed && (
-            <div>
-              <h1 className="text-xl font-bold text-white">VoiceBot AI</h1>
-              <p className="text-sm text-blue-100">Campaign Manager</p>
-            </div>
-          )}
+          <div>
+            <h1 className="text-xl font-bold text-white">VoiceBot AI</h1>
+            <p className="text-sm text-blue-100">Campaign Manager</p>
+          </div>
         </div>
       </div>
 
@@ -79,7 +77,7 @@ export function AppSidebar() {
                       <div className="flex-shrink-0">
                         <item.icon className="h-6 w-6" />
                       </div>
-                      {!collapsed && <span className="text-sm font-medium">{item.title}</span>}
+                      <span className="text-sm font-medium">{item.title}</span>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -90,19 +88,17 @@ export function AppSidebar() {
       </SidebarContent>
 
       {/* Footer section */}
-      {!collapsed && (
-        <div className="mt-auto p-4 border-t border-slate-200 bg-gradient-to-r from-slate-50 to-blue-50">
-          <div className="flex items-center space-x-3 p-3 bg-white rounded-xl shadow-md">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-              <Users className="w-4 h-4 text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">Admin User</p>
-              <p className="text-xs text-slate-500 truncate">admin@voicebot.ai</p>
-            </div>
+      <div className="mt-auto p-4 border-t border-slate-200 bg-gradient-to-r from-slate-50 to-blue-50">
+        <div className="flex items-center space-x-3 p-3 bg-white rounded-xl shadow-md">
+          <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+            <Users className="w-4 h-4 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-slate-900 truncate">Admin User</p>
+            <p className="text-xs text-slate-500 truncate">admin@voicebot.ai</p>
           </div>
         </div>
-      )}
+      </div>
     </Sidebar>
   );
 }
