@@ -45,7 +45,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar 
-      className={`${collapsed ? 'w-16' : 'w-72'} bg-gradient-to-b from-white via-slate-50 to-blue-50 border-r border-slate-200 shadow-2xl flex-shrink-0`}
+      className="bg-gradient-to-b from-white via-slate-50 to-blue-50 border-r border-slate-200 shadow-2xl"
       collapsible="icon"
     >
       <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg">
@@ -66,7 +66,7 @@ export function AppSidebar() {
 
       <SidebarContent className="px-4">
         <SidebarGroup>
-          <SidebarGroupContent className="mt-2">
+          <SidebarGroupContent>
             <SidebarMenu className="space-y-2">
               {navigationItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
