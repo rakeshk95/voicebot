@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Phone, Clock, Target, TrendingUp, Users, PhoneCall } from 'lucide-react';
@@ -49,19 +48,6 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-8 bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
-      {/* Header Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-2xl shadow-xl">
-        <div className="flex items-center space-x-4">
-          <div className="bg-white/20 p-3 rounded-xl">
-            <PhoneCall className="w-8 h-8" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold">Voice Campaign Dashboard</h1>
-            <p className="text-blue-100 mt-1">Real-time insights and performance metrics</p>
-          </div>
-        </div>
-      </div>
-
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat) => (
