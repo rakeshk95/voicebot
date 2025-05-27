@@ -44,7 +44,10 @@ export function AppSidebar() {
       : 'hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-700 hover:border-l-4 hover:border-blue-300 transition-all duration-300 transform hover:translate-x-1';
 
   return (
-    <Sidebar className={`${collapsed ? 'w-16' : 'w-72'} bg-gradient-to-b from-white via-slate-50 to-blue-50 border-r border-slate-200 shadow-2xl`}>
+    <Sidebar 
+      className={`${collapsed ? 'w-16' : 'w-72'} bg-gradient-to-b from-white via-slate-50 to-blue-50 border-r border-slate-200 shadow-2xl flex-shrink-0`}
+      collapsible="icon"
+    >
       <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg">
         <div className="flex items-center space-x-3">
           <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-xl">
@@ -61,7 +64,7 @@ export function AppSidebar() {
 
       <SidebarTrigger className="m-4 bg-white border border-slate-200 hover:bg-slate-50 shadow-md hover:shadow-lg transition-all duration-200" />
 
-      <SidebarContent className="px-4 pt-2">
+      <SidebarContent className="px-4">
         <SidebarGroup>
           <SidebarGroupContent className="mt-2">
             <SidebarMenu className="space-y-2">
