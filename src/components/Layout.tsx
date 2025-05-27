@@ -8,11 +8,11 @@ import { Header } from '@/components/Header';
 export const Layout = () => {
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full">
+      <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-blue-50">
         <AppSidebar />
         <div className="flex-1 flex flex-col">
           <Header />
-          <main className="flex-1 p-6 bg-gray-50">
+          <main className="flex-1 p-6">
             <Outlet />
           </main>
         </div>

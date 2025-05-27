@@ -1,15 +1,15 @@
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Phone, Clock, Target, TrendingUp } from 'lucide-react';
+import { Phone, Clock, Target, TrendingUp, Users, PhoneCall } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const Dashboard = () => {
   const stats = [
-    { title: 'Total Calls Today', value: '1,247', change: '+12%', icon: Phone, color: 'text-blue-600' },
-    { title: 'Active Campaigns', value: '8', change: '+2', icon: TrendingUp, color: 'text-green-600' },
-    { title: 'Success Rate', value: '87.3%', change: '+2.1%', icon: Target, color: 'text-purple-600' },
-    { title: 'Avg Call Duration', value: '2:34', change: '+8s', icon: Clock, color: 'text-orange-600' },
+    { title: 'Total Calls Today', value: '1,247', change: '+12%', icon: Phone, color: 'from-blue-500 to-blue-600', textColor: 'text-blue-600' },
+    { title: 'Active Campaigns', value: '8', change: '+2', icon: TrendingUp, color: 'from-green-500 to-green-600', textColor: 'text-green-600' },
+    { title: 'Success Rate', value: '87.3%', change: '+2.1%', icon: Target, color: 'from-purple-500 to-purple-600', textColor: 'text-purple-600' },
+    { title: 'Avg Call Duration', value: '2:34', change: '+8s', icon: Clock, color: 'from-orange-500 to-orange-600', textColor: 'text-orange-600' },
   ];
 
   const hourlyData = [
@@ -48,19 +48,35 @@ const Dashboard = () => {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
+      {/* Header Section */}
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-2xl shadow-xl">
+        <div className="flex items-center space-x-4">
+          <div className="bg-white/20 p-3 rounded-xl">
+            <PhoneCall className="w-8 h-8" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold">Voice Campaign Dashboard</h1>
+            <p className="text-blue-100 mt-1">Real-time insights and performance metrics</p>
+          </div>
+        </div>
+      </div>
+
       {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat) => (
-          <Card key={stat.title} className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-4">
+          <Card key={stat.title} className="relative overflow-hidden border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105">
+            <div className={`absolute inset-0 bg-gradient-to-r ${stat.color} opacity-5`}></div>
+            <CardContent className="p-6 relative">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
-                  <p className="text-xl font-bold">{stat.value}</p>
-                  <p className="text-xs text-green-600">{stat.change}</p>
+                  <p className="text-sm font-medium text-slate-600 mb-2">{stat.title}</p>
+                  <p className="text-3xl font-bold text-slate-900">{stat.value}</p>
+                  <p className="text-sm text-green-600 font-medium mt-1">{stat.change}</p>
                 </div>
-                <stat.icon className={`w-6 h-6 ${stat.color}`} />
+                <div className={`p-4 rounded-2xl bg-gradient-to-r ${stat.color} shadow-lg`}>
+                  <stat.icon className="w-6 h-6 text-white" />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -68,92 +84,167 @@ const Dashboard = () => {
       </div>
 
       {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Hourly Call Performance */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Today's Call Performance</CardTitle>
+        <Card className="border-0 shadow-xl">
+          <CardHeader className="pb-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-t-xl">
+            <CardTitle className="text-xl font-bold text-slate-800 flex items-center space-x-2">
+              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              <span>Today's Call Performance</span>
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
+          <CardContent className="p-6">
+            <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={hourlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="time" />
-                <YAxis />
-                <Tooltip />
-                <Area type="monotone" dataKey="calls" stackId="1" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
-                <Area type="monotone" dataKey="success" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.6} />
+                <defs>
+                  <linearGradient id="callsGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                  </linearGradient>
+                  <linearGradient id="successGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.1}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="time" stroke="#64748b" />
+                <YAxis stroke="#64748b" />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'white', 
+                    border: 'none', 
+                    borderRadius: '12px', 
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.1)' 
+                  }} 
+                />
+                <Area type="monotone" dataKey="calls" stackId="1" stroke="#3b82f6" fill="url(#callsGradient)" strokeWidth={2} />
+                <Area type="monotone" dataKey="success" stackId="1" stroke="#10b981" fill="url(#successGradient)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
         {/* Campaign Performance */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Campaign Performance</CardTitle>
+        <Card className="border-0 shadow-xl">
+          <CardHeader className="pb-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-t-xl">
+            <CardTitle className="text-xl font-bold text-slate-800 flex items-center space-x-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span>Campaign Performance</span>
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
+          <CardContent className="p-6">
+            <ResponsiveContainer width="100%" height={300}>
               <RechartsBarChart data={campaignPerformance}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="calls" fill="#3b82f6" />
-                <Bar dataKey="success" fill="#10b981" />
+                <defs>
+                  <linearGradient id="barGradient1" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.6}/>
+                  </linearGradient>
+                  <linearGradient id="barGradient2" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.6}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="name" stroke="#64748b" />
+                <YAxis stroke="#64748b" />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'white', 
+                    border: 'none', 
+                    borderRadius: '12px', 
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.1)' 
+                  }} 
+                />
+                <Bar dataKey="calls" fill="url(#barGradient1)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="success" fill="url(#barGradient2)" radius={[4, 4, 0, 0]} />
               </RechartsBarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
         {/* Weekly Call Trends */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Weekly Call Trends</CardTitle>
+        <Card className="border-0 shadow-xl">
+          <CardHeader className="pb-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-t-xl">
+            <CardTitle className="text-xl font-bold text-slate-800 flex items-center space-x-2">
+              <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+              <span>Weekly Call Trends</span>
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
+          <CardContent className="p-6">
+            <ResponsiveContainer width="100%" height={300}>
               <LineChart data={weeklyTrends}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" />
-                <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="calls" stroke="#8b5cf6" strokeWidth={3} dot={{ fill: '#8b5cf6' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="day" stroke="#64748b" />
+                <YAxis stroke="#64748b" />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'white', 
+                    border: 'none', 
+                    borderRadius: '12px', 
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.1)' 
+                  }} 
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="calls" 
+                  stroke="#8b5cf6" 
+                  strokeWidth={4} 
+                  dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 6 }} 
+                  activeDot={{ r: 8, stroke: '#8b5cf6', strokeWidth: 2, fill: 'white' }}
+                />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
         {/* Call Outcomes */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Call Outcomes</CardTitle>
+        <Card className="border-0 shadow-xl">
+          <CardHeader className="pb-4 bg-gradient-to-r from-orange-50 to-red-50 rounded-t-xl">
+            <CardTitle className="text-xl font-bold text-slate-800 flex items-center space-x-2">
+              <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+              <span>Call Outcomes</span>
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
+          <CardContent className="p-6">
+            <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
                   data={callOutcomes}
                   cx="50%"
                   cy="50%"
-                  innerRadius={50}
-                  outerRadius={100}
+                  innerRadius={60}
+                  outerRadius={120}
                   paddingAngle={5}
                   dataKey="value"
+                  stroke="white"
+                  strokeWidth={3}
                 >
                   {callOutcomes.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => [`${value}%`, 'Percentage']} />
+                <Tooltip 
+                  formatter={(value) => [`${value}%`, 'Percentage']}
+                  contentStyle={{ 
+                    backgroundColor: 'white', 
+                    border: 'none', 
+                    borderRadius: '12px', 
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.1)' 
+                  }} 
+                />
               </PieChart>
             </ResponsiveContainer>
-            <div className="flex justify-center space-x-4 mt-4">
+            <div className="flex justify-center space-x-6 mt-6">
               {callOutcomes.map((item, index) => (
                 <div key={index} className="flex items-center space-x-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
-                  <span className="text-sm">{item.name}: {item.value}%</span>
+                  <div 
+                    className="w-4 h-4 rounded-full shadow-sm" 
+                    style={{ backgroundColor: item.color }}
+                  ></div>
+                  <span className="text-sm font-medium text-slate-700">
+                    {item.name}: {item.value}%
+                  </span>
                 </div>
               ))}
             </div>
