@@ -100,7 +100,7 @@ const Analytics = () => {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center space-x-2">
               <Brain className="w-5 h-5" />
-              <span>AI Performance Metrics</span>
+              <span>Performance Metrics</span>
             </CardTitle>
           </CardHeader>
           <CardContent>

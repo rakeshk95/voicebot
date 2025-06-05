@@ -1,73 +1,78 @@
-# Welcome to your Lovable project
+# VoxiFlow - Voice Bot Management System
 
-## Project info
+A modern web application for managing voice bots and automated call campaigns. Built with React, TypeScript, and Tailwind CSS.
 
-**URL**: https://lovable.dev/projects/cf15ed00-fddb-4d4d-945d-c0e5f49c2140
+## Features
 
-## How can I edit this code?
+- Campaign Management
+  - Create, edit, and delete voice bot campaigns
+  - Configure voice settings and flow
+  - Manage telephony settings
+  - Post-call actions and data extraction
 
-There are several ways of editing your application.
+- Call History
+  - Track and monitor call records
+  - Filter and search functionality
+  - Export call data to CSV
 
-**Use Lovable**
+- Real-time Campaign Monitoring
+  - View active campaigns
+  - Monitor call status
+  - Performance analytics
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/cf15ed00-fddb-4d4d-945d-c0e5f49c2140) and start prompting.
+## Tech Stack
 
-Changes made via Lovable will be committed automatically to this repo.
+- React 18
+- TypeScript
+- Tailwind CSS
+- Shadcn UI Components
+- React Hook Form
+- Zod Validation
+- React Router
 
-**Use your preferred IDE**
+## Getting Started
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/voicebot-vision-lab-1.git
+   ```
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+2. Install dependencies:
+   ```bash
+   cd voicebot-vision-lab-1
+   npm install
+   ```
 
-Follow these steps:
+3. Set up environment variables:
+   Create a `.env` file in the root directory and add:
+   ```
+   VITE_API_URL=your_api_url
+   ```
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+## Project Structure
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+src/
+├── components/     # Reusable UI components
+├── pages/         # Page components
+├── types/         # TypeScript type definitions
+├── lib/           # Utility functions and hooks
+└── assets/        # Static assets
 ```
 
-**Edit a file directly in GitHub**
+## Contributing
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-**Use GitHub Codespaces**
+## License
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/cf15ed00-fddb-4d4d-945d-c0e5f49c2140) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
