@@ -38,7 +38,10 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
           render={({ field }) => (
             <FormItem>
               <FormLabel className="text-sm font-medium text-gray-700">Telephony Provider</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select
+                onValueChange={val => field.onChange(val.toLowerCase())}
+                defaultValue={field.value}
+              >
                 <FormControl>
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Select provider" />
@@ -46,7 +49,8 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="exotel">Exotel</SelectItem>
-                  <SelectItem value="twilio">Twilio</SelectItem>
+                  <SelectItem value="sampark">Sampark</SelectItem>
+                  <SelectItem value="smallestai">SmallestAI</SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage className="text-xs" />

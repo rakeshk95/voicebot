@@ -57,14 +57,17 @@ const StepFlow = ({
           <div className="mt-4">
             <TabsContent value="context">
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Context</Label>
+                <div className="relative">
                   <Textarea
                     value={contextValue}
                     onChange={(e) => setContextValue(e.target.value)}
                     placeholder="Enter conversation context..."
-                    className="min-h-[200px] resize-none"
+                    className="min-h-[250px] resize-y bg-gray-50 border-2 border-blue-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl p-4 text-base shadow-sm transition-all duration-200"
+                    style={{ fontFamily: 'inherit', lineHeight: '1.6' }}
                   />
+                  <span className="absolute bottom-2 right-4 text-xs text-gray-400 select-none">
+                    {contextValue.length} characters
+                  </span>
                 </div>
               </div>
             </TabsContent>

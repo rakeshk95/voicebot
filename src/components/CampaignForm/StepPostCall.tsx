@@ -33,22 +33,73 @@ const StepPostCall = ({
       <div className="p-4 space-y-4 min-h-[400px]">
         {/* Callback Configuration */}
         <div className="space-y-4">
+          {/* New: Method and URL Row */}
+          <div className="flex flex-col md:flex-row gap-3 mb-2 items-center">
+            <FormField
+              control={form.control}
+              name="callback_method"
+              render={({ field }) => (
+                <FormItem className="w-36 min-w-[110px] flex-shrink-0">
+                  <FormLabel className="text-sm font-medium text-gray-700">Request Method</FormLabel>
+                  <select
+                    {...field}
+                    className="h-9 w-full rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  >
+                    <option value="POST">POST</option>
+                    <option value="GET">GET</option>
+                    <option value="PUT">PUT</option>
+                    <option value="PATCH">PATCH</option>
+                    <option value="DELETE">DELETE</option>
+                  </select>
+                  <FormDescription className="text-xs text-gray-500 mt-1">
+                    HTTP method for the callback
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="callback_endpoint"
+              render={({ field }) => (
+                <FormItem className="flex-1">
+                  <FormLabel className="text-sm font-medium text-gray-700">Callback URL</FormLabel>
+                  <div className="relative">
+                    <Input 
+                      {...field} 
+                      placeholder="https://your-callback-url.com/webhook"
+                      className="pl-8 h-9 text-sm"
+                    />
+                    <Globe className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                  </div>
+                  <FormDescription className="text-xs text-gray-500 mt-1">
+                    The webhook URL that will receive post-call data
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
+          </div>
+          {/* Auth Token below */}
           <FormField
             control={form.control}
-            name="callback_endpoint"
+            name="callback_auth_token"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-sm font-medium text-gray-700">Callback URL</FormLabel>
+              <FormItem className="flex-1">
+                <FormLabel className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                  <span>Auth Token</span>
+                  <span className="text-xs text-gray-400">(Bearer)</span>
+                </FormLabel>
                 <div className="relative">
-                  <Input 
-                    {...field} 
-                    placeholder="https://your-callback-url.com/webhook"
+                  <Input
+                    {...field}
+                    placeholder="Paste Bearer token here"
                     className="pl-8 h-9 text-sm"
                   />
-                  <Globe className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                  <span className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400">
+                    <svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20' stroke='currentColor' className='w-4 h-4'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' /></svg>
+                  </span>
                 </div>
                 <FormDescription className="text-xs text-gray-500 mt-1">
-                  The webhook URL that will receive post-call data
+                  The Bearer token for webhook authentication (optional)
                 </FormDescription>
               </FormItem>
             )}

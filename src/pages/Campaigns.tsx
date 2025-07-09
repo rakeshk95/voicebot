@@ -33,7 +33,12 @@ import {
   Tag,
   Globe,
   MessageCircle,
-  FileDown
+  FileDown,
+  Info,
+  Mic,
+  Volume2,
+  Clock,
+  Hourglass
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format, addDays, subDays, startOfDay, endOfDay, startOfToday, endOfToday } from 'date-fns';
@@ -59,6 +64,9 @@ import CampaignDetails from '@/components/CampaignDetails/CampaignDetails';
 import CampaignTable from '@/components/CampaignTable/CampaignTable';
 import CampaignCall from '@/components/CampaignCall/CampaignCall';
 import CampaignUpload from '@/components/CampaignUpload/CampaignUpload';
+import { Switch } from '@/components/ui/switch';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // Interfaces
 interface Organization {
@@ -81,6 +89,7 @@ interface Campaign {
     gender: string;
     language: string;
     voice_id: string;
+    vendor?: string;
   };
   llm?: {
     model: string;
@@ -119,6 +128,16 @@ interface Campaign {
     categories: Record<string, string>;
     data_extracted: Record<string, string>;
   };
+  speech_setting?: {
+    interruption?: {
+      status: boolean;
+    };
+    ambient_sound?: {
+      status: boolean;
+      sound: string;
+      volume: string;
+    };
+  };
 }
 
 interface CampaignFormData {
@@ -130,6 +149,7 @@ interface CampaignFormData {
     gender: string;
     language: string;
     voice_id: string;
+    vendor?: string;
   };
   telephonic_provider: string;
   knowledge_base: {
@@ -335,6 +355,12 @@ const Campaigns = () => {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedCampaignForUpload, setSelectedCampaignForUpload] = useState<Campaign | null>(null);
+  const [allowInterruptions, setAllowInterruptions] = useState(false);
+  const [ambientStatus, setAmbientStatus] = useState(false);
+  const [sound, setSound] = useState('office');
+  const [volume, setVolume] = useState(0.1);
+  const [maxIdleReminder, setMaxIdleReminder] = useState(3);
+  const [maxIdleDuration, setMaxIdleDuration] = useState(5);
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
@@ -375,7 +401,7 @@ const Campaigns = () => {
     }
 
     if (canProceed) {
-      setCurrentStep(prev => Math.min(prev + 1, 5));
+      setCurrentStep(prev => Math.min(prev + 1, 6));
     } else {
       toast({
         title: "Required Fields",
@@ -523,7 +549,11 @@ const Campaigns = () => {
       const campaignData = await response.json();
       setEditingCampaign(campaignData);
       setCurrentStep(1);
-      
+      // Set Speech section state from API response
+      setAllowInterruptions(campaignData.speech_setting?.interruption?.status ?? false);
+      setAmbientStatus(campaignData.speech_setting?.ambient_sound?.status ?? false);
+      setSound(campaignData.speech_setting?.ambient_sound?.sound ?? 'office');
+      setVolume(Number(campaignData.speech_setting?.ambient_sound?.volume ?? 0.1));
       // Map campaign data to form fields with null checks
       form.reset({
         name: campaignData.name || '',
@@ -533,7 +563,8 @@ const Campaigns = () => {
         tts: {
           gender: campaignData.tts?.gender || 'female',
           language: campaignData.tts?.language || 'hindi',
-          voice_id: campaignData.tts?.voice_id || 'hi-IN-AnanyaNeural'
+          voice_id: campaignData.tts?.voice_id || 'hi-IN-AnanyaNeural',
+          vendor: campaignData.tts?.vendor || "11labs"
         },
         telephonic_provider: campaignData.telephonic_provider || 'exotel',
         knowledge_base: {
@@ -598,59 +629,133 @@ const Campaigns = () => {
         promptVariables[variable.key] = variable.value;
       });
 
-      // Prepare the request data according to API structure
-      const requestData = {
-        id: editingCampaign?.id || generateUUID(),
+      // Prepare the request data according to API structure (curl example)
+      let requestData;
+      if (editingCampaign) {
+        requestData = {
+          id: editingCampaign.id,
         name: data.name,
         direction: data.direction,
         inbound_number: "",
         caller_id_number: "",
         state: data.state,
-        version: 0,
-        org_id: data.org_id,
+          version: "0",
         llm: {
-          model: "gpt-4o",
-          prompt: "",
+            initialMessage: "",
+            useProxyLlm: false,
+            UseStructuredPrompt: false,
           provider: "OPENAI",
           promptJson: {
+              skeleton: "Simple output format.",
+              promptVariables,
+              knowledgeBase: data.knowledge_base,
             nodes: {},
             context: contextValue || "",
+              botStateDefinitions: {},
             language: data.tts?.language || "hindi",
-            skeleton: "Simple output format.",
-            mermaidGraph: "initial_message -->|edge| node1\nnode1 -->|edge| node2",
-            knowledgeBase: data.knowledge_base,
-            promptVariables,
-            botStateDefinitions: {}
+              mermaidGraph: "initial_message -->|edge| node1\nnode1 -->|edge| node2"
           },
           temperature: "0.5",
-          useProxyLlm: false,
+            maxCallDuration: "300",
+            model: "gpt-4o",
           useEmbeddings: false,
-          initialMessage: "",
-          maxCallDuration: 300,
-          UseStructuredPrompt: false
+            prompt: ""
         },
         tts: {
           gender: data.tts.gender,
+            voice_id: data.tts.voice_id,
           language: data.tts.language,
-          voice_id: data.tts.voice_id
-        },
-        stt: {},
-        timezone: "Asia/Kolkata",
-        post_call_actions: {
-          categories: data.post_call_actions.categories || {},
-          data_extracted: data.post_call_actions.data_extracted || {}
-        },
+            vendor: data.tts.vendor || "11labs"
+          },
+          stt: {
+            vendor: ""
+          },
+          speech_setting: {
+            interruption: {
+              status: allowInterruptions
+            },
+            ambient_sound: {
+              status: ambientStatus,
+              sound: sound,
+              volume: String(volume)
+            }
+          },
+          retry: {},
         live_actions: [],
+          post_call_actions: {
+            data_extracted: data.post_call_actions.data_extracted || {},
+            categories: data.post_call_actions.categories || {}
+          },
         callback_endpoint: data.callback_endpoint || "",
-        retry: {},
-        account_id: "a43b689f-b95f-4178-a7c7-7cfd547a1f68",
-        created_by: 1,
-        created_at: new Date().toISOString(),
+          timezone: "Asia/Kolkata",
+          telephonic_provider: data.telephonic_provider,
+          allow_interruption: allowInterruptions,
+          created_at: editingCampaign.created_at,
         updated_at: new Date().toISOString(),
-        is_active: true,
+          org_id: data.org_id,
+        };
+      } else {
+        requestData = {
+          live_actions: [],
+          allow_interruption: allowInterruptions,
         telephonic_provider: data.telephonic_provider,
-        knowledge_base: data.knowledge_base
-      };
+          version: "0",
+          account_id: "a43b689f-b95f-4178-a7c7-7cfd547a1f68",
+          post_call_actions: {
+            data_extracted: data.post_call_actions.data_extracted || {},
+            categories: data.post_call_actions.categories || {}
+          },
+          name: data.name,
+          retry: {},
+          llm: {
+            initialMessage: "",
+            useProxyLlm: false,
+            UseStructuredPrompt: false,
+            provider: "OPENAI",
+            promptJson: {
+              skeleton: "Simple output format.",
+              promptVariables,
+              knowledgeBase: data.knowledge_base,
+              nodes: {},
+              context: contextValue || "",
+              botStateDefinitions: {},
+              language: data.tts?.language || "hindi",
+              mermaidGraph: "initial_message -->|edge| node1\nnode1 -->|edge| node2"
+            },
+            temperature: "0.5",
+            maxCallDuration: "300",
+            model: "gpt-4o",
+            useEmbeddings: false,
+            prompt: ""
+          },
+          state: data.state,
+          tts: {
+            gender: data.tts.gender,
+            voice_id: data.tts.voice_id,
+            language: data.tts.language,
+            vendor: data.tts.vendor || "11labs"
+          },
+          stt: {
+            vendor: ""
+          },
+          speech_setting: {
+            interruption: {
+              status: allowInterruptions
+            },
+            ambient_sound: {
+              status: ambientStatus,
+              sound: sound,
+              volume: String(volume)
+            }
+          },
+          inbound_number: "",
+          caller_id_number: "",
+          direction: data.direction,
+          timezone: "Asia/Kolkata",
+          callback_endpoint: data.callback_endpoint || "",
+          org_id: data.org_id,
+        };
+      }
 
       console.log('Making API call with request data:', requestData);
 
@@ -1009,7 +1114,7 @@ const Campaigns = () => {
                 />
               </div>
               
-            {['Language', 'Voice', 'Flow', 'Telephony', 'Post Call Actions'].map((step, index) => (
+            {['Name', 'Speech and Call', 'Voice', 'Flow', 'Telephony', 'Post Call Actions'].map((step, index) => (
               <div
                 key={step}
                 className={`flex flex-col items-center relative ${
@@ -1060,12 +1165,103 @@ const Campaigns = () => {
                     )}
 
                     {currentStep === 2 && (
+                      <div className="w-full max-w-screen-lg mx-auto px-0 md:px-0">
+                        <div className="glass-card relative rounded-lg shadow border border-white/30 p-0 flex flex-col md:flex-row gap-0 items-stretch font-inter overflow-hidden">
+                          {/* Speech Section */}
+                          <div className="flex-1 bg-blue-50/40 rounded-none p-6 min-w-0 border-r border-blue-100 flex flex-col justify-center" style={{paddingRight: 0}}>
+                            <div className="flex items-center gap-2 mb-4 pl-2">
+                              <span className="icon-animate bg-blue-100 p-1 rounded-full"><Mic className="w-5 h-5 text-blue-600" /></span>
+                              <h4 className="font-extrabold text-lg text-blue-900 tracking-tight">Speech</h4>
+                            </div>
+                            <div className="flex flex-col gap-4 pl-10">
+                              {/* Allow Interruptions */}
                       <div>
-                        <StepVoice form={form} />
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Mic className="w-4 h-4 text-blue-400" />
+                                  <span className="text-blue-700 font-medium">Allow Interruptions</span>
+                                  <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate align-middle"><Info className="w-4 h-4 text-blue-400 inline" /></span></TooltipTrigger><TooltipContent>Allow the caller to interrupt the agent's speech.</TooltipContent></Tooltip></TooltipProvider>
+                                </div>
+                                <div className="mt-1"><button className={`relative w-10 h-6 rounded-full transition-colors duration-200 focus:outline-none border-2 border-blue-100 shadow-sm flex items-center ${allowInterruptions ? 'bg-blue-500' : 'bg-gray-200'}`} aria-pressed={allowInterruptions} onClick={() => setAllowInterruptions(!allowInterruptions)}><span className={`absolute left-1 top-0.5 w-4 h-4 rounded-full shadow-md transition-transform duration-200 flex items-center justify-center ${allowInterruptions ? 'translate-x-4 bg-white' : 'bg-white'}`} style={{ boxShadow: allowInterruptions ? '0 0 8px 2px #3b82f6aa' : '0 1px 4px #cbd5e1' }}><Mic className={`w-3 h-3 transition-colors duration-200 ${allowInterruptions ? 'text-blue-500' : 'text-gray-400'} ${allowInterruptions ? 'scale-100' : 'scale-0'}`} /><Mic className={`w-3 h-3 absolute transition-colors duration-200 ${allowInterruptions ? 'scale-0' : 'scale-100'} text-gray-400`} /></span></button></div>
+                              </div>
+                              {/* Ambient Status */}
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Volume2 className="w-4 h-4 text-blue-400" />
+                                  <span className="text-blue-700 font-medium">Ambient Status</span>
+                                  <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate align-middle"><Info className="w-4 h-4 text-blue-400 inline" /></span></TooltipTrigger><TooltipContent>Enable or disable ambient background sound.</TooltipContent></Tooltip></TooltipProvider>
+                                </div>
+                                <div className="mt-1"><button className={`relative w-10 h-6 rounded-full transition-colors duration-200 focus:outline-none border-2 border-blue-100 shadow-sm flex items-center ${ambientStatus ? 'bg-blue-500' : 'bg-gray-200'}`} aria-pressed={ambientStatus} onClick={() => setAmbientStatus(!ambientStatus)}><span className={`absolute left-1 top-0.5 w-4 h-4 rounded-full shadow-md transition-transform duration-200 flex items-center justify-center ${ambientStatus ? 'translate-x-4 bg-white' : 'bg-white'}`} style={{ boxShadow: ambientStatus ? '0 0 8px 2px #3b82f6aa' : '0 1px 4px #cbd5e1' }}><Volume2 className={`w-3 h-3 transition-colors duration-200 ${ambientStatus ? 'text-blue-500' : 'text-gray-400'} ${ambientStatus ? 'scale-100' : 'scale-0'}`} /><Volume2 className={`w-3 h-3 absolute transition-colors duration-200 ${ambientStatus ? 'scale-0' : 'scale-100'} text-gray-400`} /></span></button></div>
+                              </div>
+                              {/* Sound */}
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="inline-block"><svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l-2 2H5a2 2 0 00-2 2v4a2 2 0 002 2h2l2 2z" /></svg></span>
+                                  <span className="text-blue-700 font-medium">Sound</span>
+                                  <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate align-middle"><Info className="w-4 h-4 text-blue-400 inline" /></span></TooltipTrigger><TooltipContent>Select the type of background sound.</TooltipContent></Tooltip></TooltipProvider>
+                                </div>
+                                <div className="mt-1"><select className="rounded border border-blue-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300" value={sound} onChange={e => setSound(e.target.value)} style={{ minWidth: 110 }}><option value="call-center">Call Center</option><option value="coffee-shop">Coffee Shop</option><option value="office">Office</option></select></div>
+                              </div>
+                              {/* Volume */}
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="inline-block"><svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3" /></svg></span>
+                                  <span className="text-blue-700 font-medium">Volume</span>
+                                  <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate align-middle"><Info className="w-4 h-4 text-blue-400 inline" /></span></TooltipTrigger><TooltipContent>Set the background sound volume (0 to 1).</TooltipContent></Tooltip></TooltipProvider>
+                                </div>
+                                <div className="flex items-center gap-2 mt-1"><input type="range" min={0} max={1} step={0.01} value={volume} onChange={e => setVolume(Number(e.target.value))} className="accent-blue-500 w-24" /><span className="text-xs text-gray-700 w-8 text-right">{volume}</span></div>
+                              </div>
+                            </div>
+                          </div>
+                          {/* Call Section */}
+                          <div className="flex-1 bg-blue-50/40 rounded-none p-6 min-w-0 flex flex-col justify-center" style={{paddingLeft: 0}}>
+                            <div className="flex items-center gap-2 mb-4 pl-2">
+                              <span className="icon-animate bg-blue-100 p-1 rounded-full"><Clock className="w-5 h-5 text-blue-600" /></span>
+                              <h4 className="font-extrabold text-lg text-blue-900 tracking-tight">Call</h4>
+                            </div>
+                            <div className="flex flex-col gap-6 pl-10">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-sm font-semibold text-gray-800 flex items-center">Max idle reminder</span>
+                                  <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate"><Info className="w-4 h-4 text-blue-400" /></span></TooltipTrigger><TooltipContent>When a caller is idle, the agent repeats the last question.</TooltipContent></Tooltip></TooltipProvider>
+                                </div>
+                                <span className="text-xs text-gray-500 block mb-1">When a caller is idle, the agent repeats the last question.</span>
+                                <div className="flex gap-2 mt-1 flex-nowrap overflow-x-auto pb-1">
+                                  {[3,5,7,9].map((sec) => (
+                                    <label key={sec} className="group flex items-center cursor-pointer">
+                                      <input type="radio" name="maxIdleReminder" className="sr-only" checked={maxIdleReminder === Number(sec)} onChange={() => setMaxIdleReminder(Number(sec))} />
+                                      <span className={`rounded-full border border-blue-200 px-2 py-1 text-xs font-medium transition-colors duration-200 ${maxIdleReminder === Number(sec) ? 'bg-blue-500 text-white border-blue-500 shadow' : 'bg-white text-blue-700 hover:bg-blue-100'}`}>{sec} secs</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-sm font-semibold text-gray-800 flex items-center">Max idle duration</span>
+                                  <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate"><Hourglass className="w-4 h-4 text-blue-400" /></span></TooltipTrigger><TooltipContent>Set the total time the agent will issue idle reminders before hanging up.</TooltipContent></Tooltip></TooltipProvider>
+                                </div>
+                                <span className="text-xs text-gray-500 block mb-1">Set the total time the agent will issue idle reminders before hanging up</span>
+                                <div className="flex gap-2 mt-1 flex-nowrap overflow-x-auto pb-1">
+                                  {[5,10,20,30].map((sec) => (
+                                    <label key={sec} className="group flex items-center cursor-pointer">
+                                      <input type="radio" name="maxIdleDuration" className="sr-only" checked={maxIdleDuration === Number(sec)} onChange={() => setMaxIdleDuration(Number(sec))} />
+                                      <span className={`rounded-full border border-blue-200 px-2 py-1 text-xs font-medium transition-colors duration-200 ${maxIdleDuration === Number(sec) ? 'bg-blue-500 text-white border-blue-500 shadow' : 'bg-white text-blue-700 hover:bg-blue-100'}`}>{sec} secs</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
 
                     {currentStep === 3 && (
+                      <div>
+                        <StepVoice form={form} selectedVoiceId={form.getValues('tts.voice_id')} />
+                      </div>
+                    )}
+
+                    {currentStep === 4 && (
                       <div>
                         <StepFlow
                           form={form}
@@ -1086,13 +1282,13 @@ const Campaigns = () => {
                       </div>
                     )}
 
-                    {currentStep === 4 && (
+                    {currentStep === 5 && (
                       <div>
                         <StepTelephony form={form} />
                       </div>
                     )}
 
-                    {currentStep === 5 && (
+                    {currentStep === 6 && (
                       <div>
                         <StepPostCall
                           form={form}
@@ -1127,7 +1323,7 @@ const Campaigns = () => {
                   <div></div>
                 )}
                 
-                {currentStep < 5 ? (
+                {currentStep < 6 ? (
                   <Button
                     type="button"
                     onClick={nextStep}
@@ -1432,7 +1628,7 @@ const Campaigns = () => {
                       />
                     </div>
 
-                    {['Language', 'Voice', 'Flow', 'Telephony', 'Post Call Actions'].map((step, index) => (
+                    {['Name', 'Speech and Call', 'Voice', 'Flow', 'Telephony', 'Post Call Actions'].map((step, index) => (
                       <div
                         key={step}
                         className={`flex flex-col items-center relative ${
@@ -1483,12 +1679,103 @@ const Campaigns = () => {
                             )}
 
                             {currentStep === 2 && (
+                              <div className="w-full max-w-screen-lg mx-auto px-0 md:px-0">
+                                <div className="glass-card relative rounded-lg shadow border border-white/30 p-0 flex flex-col md:flex-row gap-0 items-stretch font-inter overflow-hidden">
+                                  {/* Speech Section */}
+                                  <div className="flex-1 bg-blue-50/40 rounded-none p-6 min-w-0 border-r border-blue-100 flex flex-col justify-center" style={{paddingRight: 0}}>
+                                    <div className="flex items-center gap-2 mb-4 pl-2">
+                                      <span className="icon-animate bg-blue-100 p-1 rounded-full"><Mic className="w-5 h-5 text-blue-600" /></span>
+                                      <h4 className="font-extrabold text-lg text-blue-900 tracking-tight">Speech</h4>
+                                    </div>
+                                    <div className="flex flex-col gap-4 pl-10">
+                                      {/* Allow Interruptions */}
                               <div>
-                                <StepVoice form={form} />
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <Mic className="w-4 h-4 text-blue-400" />
+                                          <span className="text-blue-700 font-medium">Allow Interruptions</span>
+                                          <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate align-middle"><Info className="w-4 h-4 text-blue-400 inline" /></span></TooltipTrigger><TooltipContent>Allow the caller to interrupt the agent's speech.</TooltipContent></Tooltip></TooltipProvider>
+                                        </div>
+                                        <div className="mt-1"><button className={`relative w-10 h-6 rounded-full transition-colors duration-200 focus:outline-none border-2 border-blue-100 shadow-sm flex items-center ${allowInterruptions ? 'bg-blue-500' : 'bg-gray-200'}`} aria-pressed={allowInterruptions} onClick={() => setAllowInterruptions(!allowInterruptions)}><span className={`absolute left-1 top-0.5 w-4 h-4 rounded-full shadow-md transition-transform duration-200 flex items-center justify-center ${allowInterruptions ? 'translate-x-4 bg-white' : 'bg-white'}`} style={{ boxShadow: allowInterruptions ? '0 0 8px 2px #3b82f6aa' : '0 1px 4px #cbd5e1' }}><Mic className={`w-3 h-3 transition-colors duration-200 ${allowInterruptions ? 'text-blue-500' : 'text-gray-400'} ${allowInterruptions ? 'scale-100' : 'scale-0'}`} /><Mic className={`w-3 h-3 absolute transition-colors duration-200 ${allowInterruptions ? 'scale-0' : 'scale-100'} text-gray-400`} /></span></button></div>
+                                      </div>
+                                      {/* Ambient Status */}
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <Volume2 className="w-4 h-4 text-blue-400" />
+                                          <span className="text-blue-700 font-medium">Ambient Status</span>
+                                          <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate align-middle"><Info className="w-4 h-4 text-blue-400 inline" /></span></TooltipTrigger><TooltipContent>Enable or disable ambient background sound.</TooltipContent></Tooltip></TooltipProvider>
+                                        </div>
+                                        <div className="mt-1"><button className={`relative w-10 h-6 rounded-full transition-colors duration-200 focus:outline-none border-2 border-blue-100 shadow-sm flex items-center ${ambientStatus ? 'bg-blue-500' : 'bg-gray-200'}`} aria-pressed={ambientStatus} onClick={() => setAmbientStatus(!ambientStatus)}><span className={`absolute left-1 top-0.5 w-4 h-4 rounded-full shadow-md transition-transform duration-200 flex items-center justify-center ${ambientStatus ? 'translate-x-4 bg-white' : 'bg-white'}`} style={{ boxShadow: ambientStatus ? '0 0 8px 2px #3b82f6aa' : '0 1px 4px #cbd5e1' }}><Volume2 className={`w-3 h-3 transition-colors duration-200 ${ambientStatus ? 'text-blue-500' : 'text-gray-400'} ${ambientStatus ? 'scale-100' : 'scale-0'}`} /><Volume2 className={`w-3 h-3 absolute transition-colors duration-200 ${ambientStatus ? 'scale-0' : 'scale-100'} text-gray-400`} /></span></button></div>
+                                      </div>
+                                      {/* Sound */}
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="inline-block"><svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l-2 2H5a2 2 0 00-2 2v4a2 2 0 002 2h2l2 2z" /></svg></span>
+                                          <span className="text-blue-700 font-medium">Sound</span>
+                                          <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate align-middle"><Info className="w-4 h-4 text-blue-400 inline" /></span></TooltipTrigger><TooltipContent>Select the type of background sound.</TooltipContent></Tooltip></TooltipProvider>
+                                        </div>
+                                        <div className="mt-1"><select className="rounded border border-blue-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300" value={sound} onChange={e => setSound(e.target.value)} style={{ minWidth: 110 }}><option value="call-center">Call Center</option><option value="coffee-shop">Coffee Shop</option><option value="office">Office</option></select></div>
+                                      </div>
+                                      {/* Volume */}
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="inline-block"><svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3" /></svg></span>
+                                          <span className="text-blue-700 font-medium">Volume</span>
+                                          <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate align-middle"><Info className="w-4 h-4 text-blue-400 inline" /></span></TooltipTrigger><TooltipContent>Set the background sound volume (0 to 1).</TooltipContent></Tooltip></TooltipProvider>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-1"><input type="range" min={0} max={1} step={0.01} value={volume} onChange={e => setVolume(Number(e.target.value))} className="accent-blue-500 w-24" /><span className="text-xs text-gray-700 w-8 text-right">{volume}</span></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {/* Call Section */}
+                                  <div className="flex-1 bg-blue-50/40 rounded-none p-6 min-w-0 flex flex-col justify-center" style={{paddingLeft: 0}}>
+                                    <div className="flex items-center gap-2 mb-4 pl-2">
+                                      <span className="icon-animate bg-blue-100 p-1 rounded-full"><Clock className="w-5 h-5 text-blue-600" /></span>
+                                      <h4 className="font-extrabold text-lg text-blue-900 tracking-tight">Call</h4>
+                                    </div>
+                                    <div className="flex flex-col gap-6 pl-10">
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="text-sm font-semibold text-gray-800 flex items-center">Max idle reminder</span>
+                                          <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate"><Info className="w-4 h-4 text-blue-400" /></span></TooltipTrigger><TooltipContent>When a caller is idle, the agent repeats the last question.</TooltipContent></Tooltip></TooltipProvider>
+                                        </div>
+                                        <span className="text-xs text-gray-500 block mb-1">When a caller is idle, the agent repeats the last question.</span>
+                                        <div className="flex gap-2 mt-1 flex-nowrap overflow-x-auto pb-1">
+                                          {[3,5,7,9].map((sec) => (
+                                            <label key={sec} className="group flex items-center cursor-pointer">
+                                              <input type="radio" name="maxIdleReminder" className="sr-only" checked={maxIdleReminder === Number(sec)} onChange={() => setMaxIdleReminder(Number(sec))} />
+                                              <span className={`rounded-full border border-blue-200 px-2 py-1 text-xs font-medium transition-colors duration-200 ${maxIdleReminder === Number(sec) ? 'bg-blue-500 text-white border-blue-500 shadow' : 'bg-white text-blue-700 hover:bg-blue-100'}`}>{sec} secs</span>
+                                            </label>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="text-sm font-semibold text-gray-800 flex items-center">Max idle duration</span>
+                                          <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate"><Hourglass className="w-4 h-4 text-blue-400" /></span></TooltipTrigger><TooltipContent>Set the total time the agent will issue idle reminders before hanging up.</TooltipContent></Tooltip></TooltipProvider>
+                                        </div>
+                                        <span className="text-xs text-gray-500 block mb-1">Set the total time the agent will issue idle reminders before hanging up</span>
+                                        <div className="flex gap-2 mt-1 flex-nowrap overflow-x-auto pb-1">
+                                          {[5,10,20,30].map((sec) => (
+                                            <label key={sec} className="group flex items-center cursor-pointer">
+                                              <input type="radio" name="maxIdleDuration" className="sr-only" checked={maxIdleDuration === Number(sec)} onChange={() => setMaxIdleDuration(Number(sec))} />
+                                              <span className={`rounded-full border border-blue-200 px-2 py-1 text-xs font-medium transition-colors duration-200 ${maxIdleDuration === Number(sec) ? 'bg-blue-500 text-white border-blue-500 shadow' : 'bg-white text-blue-700 hover:bg-blue-100'}`}>{sec} secs</span>
+                                            </label>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             )}
 
                             {currentStep === 3 && (
+                              <div>
+                                <StepVoice form={form} selectedVoiceId={form.getValues('tts.voice_id')} />
+                              </div>
+                            )}
+
+                            {currentStep === 4 && (
                               <div>
                                 <StepFlow
                                   form={form}
@@ -1509,13 +1796,13 @@ const Campaigns = () => {
                               </div>
                             )}
 
-                            {currentStep === 4 && (
+                            {currentStep === 5 && (
                               <div>
                                 <StepTelephony form={form} />
                               </div>
                             )}
 
-                            {currentStep === 5 && (
+                            {currentStep === 6 && (
                               <div>
                                 <StepPostCall
                                   form={form}
@@ -1550,7 +1837,7 @@ const Campaigns = () => {
                           <div></div>
                         )}
                         
-                        {currentStep < 5 ? (
+                        {currentStep < 6 ? (
                           <Button
                             type="button"
                             onClick={nextStep}

@@ -18,6 +18,10 @@ export interface Campaign {
     gender: string;
     language: string;
     voice_id: string;
+    preview_url?: string;
+    name?: string;
+    main_accent?: string;
+    country?: string;
   };
   llm?: {
     model: string;
@@ -40,6 +44,18 @@ export interface Campaign {
     categories: Record<string, string>;
     data_extracted: Record<string, string>;
   };
+  speech_setting?: {
+    interruption?: {
+      status: boolean;
+    };
+    ambient_sound?: {
+      status: boolean;
+      sound: string;
+      volume: string;
+    };
+  };
+  max_idle_reminder?: number;
+  max_idle_duration?: number;
 }
 
 export interface CampaignFormData {
