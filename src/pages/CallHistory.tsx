@@ -162,7 +162,7 @@ const CallHistory = () => {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  const exportToCSV = (calls: Call[], campaignName: string) => {
+  const exportToCSV = async (calls: Call[], campaignName: string) => {
     const headers = [
       'Date Created',
       'Campaign',
@@ -171,10 +171,36 @@ const CallHistory = () => {
       'Duration',
       'Status',
       'Caller Name',
-      'Rating'
+      'Rating',
+      'Summary',
+      'Category',
+      'Extracted Data'
     ];
 
-    const data = calls.map(call => [
+    // Fetch insights for all calls in parallel
+    const insights = await Promise.all(
+      calls.map(async call => {
+        try {
+          const response = await fetch(`http://192.168.0.4:8005/api/v1/calls/${call.Sid}/artifacts`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          if (!response.ok) return {};
+          const data = await response.json();
+          return {
+            summary: data.summary || '',
+            category: data.category || '',
+            extracted: data['extracted-data'] || ''
+          };
+        } catch {
+          return {};
+        }
+      })
+    );
+
+    const data = calls.map((call, i) => [
       call.DateCreated ? format(new Date(call.DateCreated), "yyyy-MM-dd HH:mm:ss") : '',
       campaignName,
       call.From,
@@ -182,7 +208,10 @@ const CallHistory = () => {
       formatDuration(call.Duration || 0),
       call.Status,
       call.CallerName || '',
-      call.rating || ''
+      call.rating || '',
+      insights[i].summary || '',
+      insights[i].category || '',
+      insights[i].extracted || ''
     ]);
 
     const csvContent = [
@@ -225,7 +254,7 @@ const CallHistory = () => {
         formattedEndDate = format(end, "yyyy-MM-dd'T'HH:mm:ss'Z'");
       }
 
-      const apiUrl = new URL(`https://platform.voxiflow.com/backend/api/v1/calls/external/${targetCampaignId}/list`);
+      const apiUrl = new URL(`http://192.168.0.4:8005/api/v1/calls/external/${targetCampaignId}/list`);
       
       apiUrl.searchParams.append('start_date', formattedStartDate);
       apiUrl.searchParams.append('end_date', formattedEndDate);
@@ -332,7 +361,7 @@ const CallHistory = () => {
 
   const fetchCampaigns = async () => {
     try {
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
+      const response = await fetch('http://192.168.0.4:8005/api/v1/campaigns/', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         },
@@ -452,7 +481,7 @@ const CallHistory = () => {
     setIsLoadingTranscription(true);
 
     try {
-      const apiUrl = `https://platform.voxiflow.com/backend/api/v1/calls/${callId}/artifacts`;
+      const apiUrl = `http://192.168.0.4:8005/api/v1/calls/${callId}/artifacts`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -535,7 +564,7 @@ const CallHistory = () => {
     setIsSubmittingRating(true);
     try {
       const response = await fetch(
-        `https://platform.voxiflow.com/backend/api/v1/calls/${selectedCallForRating.Sid}/rating`,
+        `http://192.168.0.4:8005/api/v1/calls/${selectedCallForRating.Sid}/rating`,
         {
           method: 'POST',
           headers: {
@@ -605,7 +634,7 @@ const CallHistory = () => {
       campaign_id: selectedCampaign
     });
     try {
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/calls/', {
+      const response = await fetch('http://192.168.0.4:8005/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -663,7 +692,7 @@ const CallHistory = () => {
         throw new Error('Call ID or Campaign ID is missing.');
       }
 
-      const apiUrl = `https://platform.voxiflow.com/backend/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
+      const apiUrl = `http://192.168.0.4:8005/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
 
       const response = await fetch(apiUrl, {
         headers: {
