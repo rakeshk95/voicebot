@@ -181,7 +181,7 @@ const CallHistory = () => {
     const insights = await Promise.all(
       calls.map(async call => {
         try {
-          const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/calls/${call.Sid}/artifacts`, {
+          const response = await fetch(`http://192.168.2.191:8000/api/v1/calls/${call.Sid}/artifacts`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -254,7 +254,7 @@ const CallHistory = () => {
         formattedEndDate = format(end, "yyyy-MM-dd'T'HH:mm:ss'Z'");
       }
 
-      const apiUrl = new URL(`https://platform.voxiflow.com/backend/api/v1/calls/external/${targetCampaignId}/list`);
+      const apiUrl = new URL(`http://192.168.2.191:8000/api/v1/calls/external/${targetCampaignId}/list`);
       
       apiUrl.searchParams.append('start_date', formattedStartDate);
       apiUrl.searchParams.append('end_date', formattedEndDate);
@@ -325,6 +325,13 @@ const CallHistory = () => {
         rating: call.rating || 0
       }));
 
+      // Sort mappedCalls by DateCreated descending (most recent first)
+      mappedCalls.sort((a, b) => {
+        const dateA = a.DateCreated ? new Date(a.DateCreated).getTime() : 0;
+        const dateB = b.DateCreated ? new Date(b.DateCreated).getTime() : 0;
+        return dateB - dateA;
+      });
+
       console.log('Mapped Calls:', mappedCalls);
 
       if (append) {
@@ -361,7 +368,7 @@ const CallHistory = () => {
 
   const fetchCampaigns = async () => {
     try {
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
+      const response = await fetch('http://192.168.2.191:8000/api/v1/campaigns/', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         },
@@ -481,7 +488,7 @@ const CallHistory = () => {
     setIsLoadingTranscription(true);
 
     try {
-      const apiUrl = `https://platform.voxiflow.com/backend/api/v1/calls/${callId}/artifacts`;
+      const apiUrl = `http://192.168.2.191:8000/api/v1/calls/${callId}/artifacts`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -564,7 +571,7 @@ const CallHistory = () => {
     setIsSubmittingRating(true);
     try {
       const response = await fetch(
-        `https://platform.voxiflow.com/backend/api/v1/calls/${selectedCallForRating.Sid}/rating`,
+        `http://192.168.2.191:8000/api/v1/calls/${selectedCallForRating.Sid}/rating`,
         {
           method: 'POST',
           headers: {
@@ -634,7 +641,7 @@ const CallHistory = () => {
       campaign_id: selectedCampaign
     });
     try {
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/calls/', {
+      const response = await fetch('http://192.168.2.191:8000/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -692,7 +699,8 @@ const CallHistory = () => {
         throw new Error('Call ID or Campaign ID is missing.');
       }
 
-      const apiUrl = `https://platform.voxiflow.com/backend/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
+      // Updated API endpoint as per user instruction
+      const apiUrl = `http://192.168.2.191:8000/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -1012,25 +1020,14 @@ const CallHistory = () => {
                               >
                                 <Database className="h-4 w-4" />
                               </Button>
-                              {call.RecordingUrl ? (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handlePlayRecording(call.Sid, call.RecordingUrl)}
-                                  className="h-8 w-8 bg-green-50 hover:bg-green-100 text-green-600"
-                                >
-                                  <Play className="h-4 w-4" />
-                                </Button>
-                              ) : (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  disabled
-                                  className="h-8 w-8 bg-gray-50 text-gray-400"
-                                >
-                                  <Play className="h-4 w-4" />
-                                </Button>
-                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handlePlayRecording(call.Sid, call.RecordingUrl)}
+                                className="h-8 w-8 bg-green-50 hover:bg-green-100 text-green-600"
+                              >
+                                <Play className="h-4 w-4" />
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
