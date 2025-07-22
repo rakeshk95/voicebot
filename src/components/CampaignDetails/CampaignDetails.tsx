@@ -63,7 +63,7 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
 
   // Fetch organizations for display
   useEffect(() => {
-    fetch('http://192.168.0.8:8000/api/v1/organizations', {
+    fetch('https:platform.voxiflow.com/backend/api/v1/organizations', {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         'Content-Type': 'application/json'
@@ -77,7 +77,7 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
   // Fetch voices for display
   useEffect(() => {
     setLoadingVoices(true);
-    fetch('http://192.168.0.8:8000/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222', {
+    fetch('https:platform.voxiflow.com/backend/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222', {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         'accept': 'application/json',

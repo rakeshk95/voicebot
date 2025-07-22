@@ -16,7 +16,7 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     try {
-      const response = await fetch('http://192.168.0.8:8000/api/v1/auth/logout', {
+      const response = await fetch('https:platform.voxiflow.com/backend/api/v1/auth/logout', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,

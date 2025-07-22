@@ -446,7 +446,7 @@ const Campaigns = () => {
   useEffect(() => {
     const fetchCampaigns = async () => {
       try {
-        const response = await fetch('http://192.168.0.8:8000/api/v1/campaigns/', {
+        const response = await fetch('https:platform.voxiflow.com/backend/api/v1/campaigns/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -496,7 +496,7 @@ const Campaigns = () => {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await fetch('http://192.168.0.8:8000/api/v1/organizations', {
+        const response = await fetch('https:platform.voxiflow.com/backend/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -549,7 +549,7 @@ const Campaigns = () => {
   const handleEdit = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`http://192.168.0.8:8000/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`https:platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -804,8 +804,8 @@ const Campaigns = () => {
       // Remove FormData and Excel template logic for campaign create/edit
       // Send JSON body instead
       const url = editingCampaign 
-        ? `http://192.168.0.8:8000/api/v1/campaigns/${editingCampaign.id}`
-        : 'http://192.168.0.8:8000/api/v1/campaigns/';
+        ? `https:platform.voxiflow.com/backend/api/v1/campaigns/${editingCampaign.id}`
+        : 'https:platform.voxiflow.com/backend/api/v1/campaigns/';
 
       const response = await fetch(url, {
         method: editingCampaign ? 'PUT' : 'POST',
@@ -896,7 +896,7 @@ const Campaigns = () => {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
 
     try {
-      const response = await fetch(`http://192.168.0.8:8000/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`https:platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -947,7 +947,7 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`http://192.168.0.8:8000/api/v1/campaigns/${campaignId}/upload`, {
+      const response = await fetch(`https:platform.voxiflow.com/backend/api/v1/campaigns/${campaignId}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -998,7 +998,7 @@ const Campaigns = () => {
         campaign_id: selectedCampaignForCall?.id || ""
       };
 
-      const response = await fetch('http://192.168.0.8:8000/api/v1/calls/', {
+      const response = await fetch('https:platform.voxiflow.com/backend/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1083,7 +1083,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`http://192.168.0.8:8000/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`https:platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'

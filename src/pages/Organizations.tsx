@@ -149,7 +149,7 @@ const Organizations = () => {
     }
 
     try {
-      const response = await fetch('http://192.168.0.8:8000/api/v1/organizations', {
+      const response = await fetch('https:platform.voxiflow.com/backend/api/v1/organizations', {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -210,7 +210,7 @@ const Organizations = () => {
         status: 'active'
       };
 
-      const response = await fetch('http://192.168.0.8:8000/api/v1/organizations', {
+      const response = await fetch('https:platform.voxiflow.com/backend/api/v1/organizations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -251,7 +251,7 @@ const Organizations = () => {
     setIsActionLoading(true);
 
     try {
-      const response = await fetch(`http://192.168.0.8:8000/api/v1/organizations/${editingOrg.id}`, {
+      const response = await fetch(`https:platform.voxiflow.com/backend/api/v1/organizations/${editingOrg.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -290,7 +290,7 @@ const Organizations = () => {
     setIsActionLoading(true);
 
     try {
-      const response = await fetch(`http://192.168.0.8:8000/api/v1/organizations/${id}`, {
+      const response = await fetch(`https:platform.voxiflow.com/backend/api/v1/organizations/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -360,7 +360,7 @@ const Organizations = () => {
   const handleView = async (orgId: string) => {
     setIsActionLoading(true);
     try {
-      const response = await fetch(`http://192.168.0.8:8000/api/v1/organizations/${orgId}`, {
+      const response = await fetch(`https:platform.voxiflow.com/backend/api/v1/organizations/${orgId}`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,

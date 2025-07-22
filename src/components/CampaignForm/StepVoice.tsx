@@ -25,7 +25,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
   const [selected, setSelected] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const ELEVEN_LABS_API = 'http://192.168.0.8:8000/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222';
+  const ELEVEN_LABS_API = 'https:platform.voxiflow.com/backend/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222';
   // Use the login token from localStorage for Authorization
 
   useEffect(() => {
