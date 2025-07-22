@@ -184,7 +184,7 @@ export default function RolesPermissions() {
   const fetchRoles = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('http://192.168.2.135:8000/api/v1/roles/', {
+      const response = await fetch('http://192.168.0.8:8000/api/v1/roles/', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -242,7 +242,7 @@ export default function RolesPermissions() {
   const fetchOrganizations = async () => {
     try {
       setIsLoadingOrgs(true);
-      const response = await fetch('http://192.168.2.135:8000/api/v1/organizations', {
+      const response = await fetch('http://192.168.0.8:8000/api/v1/organizations', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -293,7 +293,7 @@ export default function RolesPermissions() {
 
       console.log('Sending role data to API:', roleData);
 
-      const baseUrl = 'http://192.168.2.135:8000/api/v1/roles';
+      const baseUrl = 'http://192.168.0.8:8000/api/v1/roles';
       const url = editMode === "edit" ? `${baseUrl}/${newRole.id}` : baseUrl;
       
       const response = await fetch(url, {
@@ -351,7 +351,7 @@ export default function RolesPermissions() {
   const handleDeleteRole = async (role: Role) => {
     try {
       setIsDeleting(true);
-      const response = await fetch(`http://192.168.2.135:8000/api/v1/roles/${role.id}`, {
+      const response = await fetch(`http://192.168.0.8:8000/api/v1/roles/${role.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,

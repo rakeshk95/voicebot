@@ -9,7 +9,7 @@ import { UseFormReturn } from "react-hook-form";
 import { Plus, X, Upload } from 'lucide-react';
 import { KeyValuePair } from "@/types/campaign";
 import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import "quill/dist/quill.snow.css";
 // @ts-ignore
 // eslint-disable-next-line
 import type {} from 'react-quill';

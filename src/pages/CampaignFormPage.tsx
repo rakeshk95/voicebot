@@ -49,7 +49,31 @@ const campaignFormSchema = z.object({
   }),
   callback_endpoint: z.string().optional(),
   callback_method: z.string().optional(),
-  callback_auth_token: z.string().optional()
+  callback_auth_token: z.string().optional(),
+  llm: z.object({
+    initialMessage: z.string().optional(),
+    useProxyLlm: z.boolean().optional(),
+    UseStructuredPrompt: z.boolean().optional(),
+    provider: z.string().optional(),
+    promptJson: z.object({
+      skeleton: z.string().optional(),
+      promptVariables: z.record(z.string()).optional(),
+      knowledgeBase: z.object({
+        url: z.string().optional(),
+        file: z.any().nullable().optional()
+      }).optional(),
+      nodes: z.record(z.any()).optional(),
+      context: z.string().optional(),
+      botStateDefinitions: z.record(z.any()).optional(),
+      language: z.string().optional(),
+      mermaidGraph: z.string().optional()
+    }).optional(),
+    temperature: z.string().optional(),
+    maxCallDuration: z.string().optional(),
+    model: z.string().optional(),
+    useEmbeddings: z.boolean().optional(),
+    prompt: z.string().optional()
+  }).optional(),
 }).strict();
 
 // --- Update CampaignFormValues type to match new schema ---
@@ -210,11 +234,28 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
     form.setValue('post_call_actions.categories.system_prompt', String(categoriesSystemPrompt || ''));
   }, [categoriesSystemPrompt]);
 
+  // --- Sync variables to llm.promptJson.promptVariables in form state ---
+  React.useEffect(() => {
+    const promptVariablesObj = variables.reduce((acc, pair) => {
+      if (pair.key) acc[pair.key] = pair.value;
+      return acc;
+    }, {} as Record<string, string>);
+    const currentLlm = form.getValues('llm') || {};
+    const currentPromptJson = currentLlm.promptJson || {};
+    form.setValue('llm', {
+      ...currentLlm,
+      promptJson: {
+        ...currentPromptJson,
+        promptVariables: promptVariablesObj
+      }
+    });
+  }, [variables]);
+
   // --- Fetch organizations ---
   useEffect(() => {
     async function fetchOrganizations() {
       try {
-        const response = await fetch('http://192.168.2.135:8000/api/v1/organizations', {
+        const response = await fetch('http://192.168.0.8:8000/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -237,7 +278,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
     if (mode === 'edit' && params.id) {
       (async () => {
         try {
-          const response = await fetch(`http://192.168.2.135:8000/api/v1/campaigns/${params.id}`, {
+          const response = await fetch(`http://192.168.0.8:8000/api/v1/campaigns/${params.id}`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -399,7 +440,10 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
           provider: "OPENAI",
           promptJson: {
             skeleton: "Simple output format.",
-            promptVariables: Object.fromEntries(variables.map(v => [v.key, v.value])),
+            promptVariables: variables.reduce((acc, v) => {
+              if (v.key) acc[v.key] = v.value;
+              return acc;
+            }, {} as Record<string, string>),
             knowledgeBase: data.knowledge_base,
             nodes: {},
             context: contextValue || "",
@@ -450,8 +494,8 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
       };
       console.log('Campaign create/edit payload:', requestData); // Debug: verify campaign_id in payload
       const url = mode === 'edit' && params.id
-        ? `http://192.168.2.135:8000/api/v1/campaigns/${params.id}`
-        : 'http://192.168.2.135:8000/api/v1/campaigns/';
+        ? `http://192.168.0.8:8000/api/v1/campaigns/${params.id}`
+        : 'http://192.168.0.8:8000/api/v1/campaigns/';
       const response = await fetch(url, {
         method: mode === 'edit' ? 'PUT' : 'POST',
         headers: {
