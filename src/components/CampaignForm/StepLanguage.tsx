@@ -12,7 +12,7 @@ interface StepLanguageProps {
 const StepLanguage = ({ form, organizations }: StepLanguageProps) => {
   return (
     <div className="bg-white rounded-lg border shadow-sm">
-      <div className="p-4 space-y-4 min-h-[400px]">
+      <div className="p-4 space-y-4">
         <FormField
           control={form.control}
           name="name"
@@ -32,7 +32,7 @@ const StepLanguage = ({ form, organizations }: StepLanguageProps) => {
           render={({ field }) => (
             <FormItem>
               <FormLabel className="text-sm font-medium text-gray-700">State</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Select state" />
@@ -54,7 +54,7 @@ const StepLanguage = ({ form, organizations }: StepLanguageProps) => {
           render={({ field }) => (
             <FormItem>
               <FormLabel className="text-sm font-medium text-gray-700">Organization</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Select organization" />

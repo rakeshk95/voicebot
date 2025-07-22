@@ -67,6 +67,7 @@ import CampaignUpload from '@/components/CampaignUpload/CampaignUpload';
 import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import * as XLSX from 'xlsx-js-style';
 
 // Interfaces
 interface Organization {
@@ -141,6 +142,7 @@ interface Campaign {
 }
 
 interface CampaignFormData {
+  campaign_id: string;
   name: string;
   direction: 'INBOUND' | 'OUTBOUND';
   state: 'TRIAL' | 'ACTIVE' | 'INACTIVE';
@@ -150,6 +152,9 @@ interface CampaignFormData {
     language: string;
     voice_id: string;
     vendor?: string;
+  };
+  stt: {
+    vendor: string;
   };
   telephonic_provider: string;
   knowledge_base: {
@@ -206,6 +211,7 @@ interface ExtractedData {
 
 // Form schema
 const campaignFormSchema = z.object({
+  campaign_id: z.string().min(1, "Campaign ID is required"),
   name: z.string().min(1, "Campaign name is required"),
   direction: z.enum(['INBOUND', 'OUTBOUND']),
   state: z.enum(['TRIAL', 'ACTIVE', 'INACTIVE']),
@@ -215,21 +221,25 @@ const campaignFormSchema = z.object({
     language: z.string(),
     voice_id: z.string()
   }),
+  stt: z.object({
+    vendor: z.string()
+  }),
   telephonic_provider: z.string(),
   knowledge_base: z.object({
     url: z.string(),
     file: z.any().nullable()
   }),
   post_call_actions: z.object({
-    categories: z.record(z.string()),
-    data_extracted: z.record(z.string())
-  }),
+    categories: z.record(z.string()).optional(),
+    data_extracted: z.record(z.string()).optional()
+  }).optional(),
   callback_endpoint: z.string().optional()
 });
 
 type CampaignFormValues = z.infer<typeof campaignFormSchema>;
 
 const defaultValues: Partial<CampaignFormValues> = {
+  campaign_id: generateUUID(),
   name: "",
   direction: "OUTBOUND",
   state: "TRIAL",
@@ -238,6 +248,9 @@ const defaultValues: Partial<CampaignFormValues> = {
     gender: "female",
     language: "hindi",
     voice_id: "hi-IN-AnanyaNeural"
+  },
+  stt: {
+    vendor: "deepgram"
   },
   telephonic_provider: "exotel",
   knowledge_base: {
@@ -433,7 +446,7 @@ const Campaigns = () => {
   useEffect(() => {
     const fetchCampaigns = async () => {
       try {
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
+        const response = await fetch('http://192.168.2.135:8000/api/v1/campaigns/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -460,7 +473,8 @@ const Campaigns = () => {
           telephonic_provider: campaign.telephonic_provider,
           knowledge_base: campaign.knowledge_base,
           post_call_actions: campaign.post_call_actions,
-          tts: campaign.tts
+          tts: campaign.tts,
+          llm: campaign.llm,
         }));
 
         setCampaigns(formattedCampaigns);
@@ -482,7 +496,7 @@ const Campaigns = () => {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+        const response = await fetch('http://192.168.2.135:8000/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -535,7 +549,7 @@ const Campaigns = () => {
   const handleEdit = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://192.168.2.135:8000/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -556,6 +570,7 @@ const Campaigns = () => {
       setVolume(Number(campaignData.speech_setting?.ambient_sound?.volume ?? 0.1));
       // Map campaign data to form fields with null checks
       form.reset({
+        campaign_id: campaignData.campaign_id || campaignData.id || generateUUID(),
         name: campaignData.name || '',
         direction: campaignData.direction || 'OUTBOUND',
         state: campaignData.state || 'TRIAL',
@@ -563,8 +578,10 @@ const Campaigns = () => {
         tts: {
           gender: campaignData.tts?.gender || 'female',
           language: campaignData.tts?.language || 'hindi',
-          voice_id: campaignData.tts?.voice_id || 'hi-IN-AnanyaNeural',
-          vendor: campaignData.tts?.vendor || "11labs"
+          voice_id: campaignData.tts?.voice_id || 'hi-IN-AnanyaNeural'
+        },
+        stt: {
+          vendor: campaignData.stt?.vendor || 'deepgram'
         },
         telephonic_provider: campaignData.telephonic_provider || 'exotel',
         knowledge_base: {
@@ -572,8 +589,14 @@ const Campaigns = () => {
           file: campaignData.knowledge_base?.file || null
         },
         post_call_actions: {
-          categories: campaignData.post_call_actions?.categories || {},
-          data_extracted: campaignData.post_call_actions?.data_extracted || {}
+          categories: {
+            system_prompt: campaignData.post_call_actions?.categories?.system_prompt || '',
+            fields: campaignData.post_call_actions?.categories?.fields || {}
+          },
+          data_extracted: {
+            system_prompt: campaignData.post_call_actions?.data_extracted?.system_prompt || '',
+            fields: campaignData.post_call_actions?.data_extracted?.fields || {}
+          }
         }
       });
 
@@ -592,13 +615,13 @@ const Campaigns = () => {
       setVariables(variablesArray);
 
       // Set up key-value pairs for categories and data extraction
-      const categories = Object.entries(campaignData.post_call_actions?.categories || {}).map(([key, value]) => ({
+      const categories = Object.entries(campaignData.post_call_actions?.categories?.fields || {}).map(([key, value]) => ({
         key,
         value: value as string
       }));
       setCategorization(categories);
 
-      const extractedData = Object.entries(campaignData.post_call_actions?.data_extracted || {}).map(([key, value]) => ({
+      const extractedData = Object.entries(campaignData.post_call_actions?.data_extracted?.fields || {}).map(([key, value]) => ({
         key,
         value: value as string
       }));
@@ -633,6 +656,7 @@ const Campaigns = () => {
       let requestData;
       if (editingCampaign) {
         requestData = {
+          campaign_id: data.campaign_id,
           id: editingCampaign.id,
         name: data.name,
         direction: data.direction,
@@ -668,7 +692,7 @@ const Campaigns = () => {
             vendor: data.tts.vendor || "11labs"
           },
           stt: {
-            vendor: ""
+            vendor: data.stt?.vendor || 'deepgram'
           },
           speech_setting: {
             interruption: {
@@ -683,8 +707,14 @@ const Campaigns = () => {
           retry: {},
         live_actions: [],
           post_call_actions: {
-            data_extracted: data.post_call_actions.data_extracted || {},
-            categories: data.post_call_actions.categories || {}
+            data_extracted: {
+              system_prompt: data.post_call_actions.data_extracted?.system_prompt || '',
+              fields: data.post_call_actions.data_extracted?.fields || {}
+            },
+            categories: {
+              system_prompt: data.post_call_actions.categories?.system_prompt || '',
+              fields: data.post_call_actions.categories?.fields || {}
+            }
           },
         callback_endpoint: data.callback_endpoint || "",
           timezone: "Asia/Kolkata",
@@ -695,15 +725,29 @@ const Campaigns = () => {
           org_id: data.org_id,
         };
       } else {
+        // Get user ID from localStorage
+        let createdBy = undefined;
+        try {
+          const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+          createdBy = userData.id;
+        } catch {}
         requestData = {
+          campaign_id: data.campaign_id,
+          created_by: createdBy,
           live_actions: [],
           allow_interruption: allowInterruptions,
         telephonic_provider: data.telephonic_provider,
           version: "0",
           account_id: "a43b689f-b95f-4178-a7c7-7cfd547a1f68",
           post_call_actions: {
-            data_extracted: data.post_call_actions.data_extracted || {},
-            categories: data.post_call_actions.categories || {}
+            data_extracted: {
+              system_prompt: data.post_call_actions.data_extracted?.system_prompt || '',
+              fields: data.post_call_actions.data_extracted?.fields || {}
+            },
+            categories: {
+              system_prompt: data.post_call_actions.categories?.system_prompt || '',
+              fields: data.post_call_actions.categories?.fields || {}
+            }
           },
           name: data.name,
           retry: {},
@@ -736,7 +780,7 @@ const Campaigns = () => {
             vendor: data.tts.vendor || "11labs"
           },
           stt: {
-            vendor: ""
+            vendor: data.stt?.vendor || 'deepgram'
           },
           speech_setting: {
             interruption: {
@@ -757,13 +801,11 @@ const Campaigns = () => {
         };
       }
 
-      console.log('Making API call with request data:', requestData);
-
+      // Remove FormData and Excel template logic for campaign create/edit
+      // Send JSON body instead
       const url = editingCampaign 
-        ? `https://platform.voxiflow.com/backend/api/v1/campaigns/${editingCampaign.id}`
-        : 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
-
-      console.log('API URL:', url);
+        ? `http://192.168.2.135:8000/api/v1/campaigns/${editingCampaign.id}`
+        : 'http://192.168.2.135:8000/api/v1/campaigns/';
 
       const response = await fetch(url, {
         method: editingCampaign ? 'PUT' : 'POST',
@@ -773,8 +815,6 @@ const Campaigns = () => {
         },
         body: JSON.stringify(requestData)
       });
-
-      console.log('API Response:', response);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -856,7 +896,7 @@ const Campaigns = () => {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
 
     try {
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://192.168.2.135:8000/api/v1/campaigns/${campaign.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -907,7 +947,7 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaignId}/upload`, {
+      const response = await fetch(`http://192.168.2.135:8000/api/v1/campaigns/${campaignId}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -940,18 +980,17 @@ const Campaigns = () => {
 
   const onCallSubmit = callForm.handleSubmit(async (data: CallFormData) => {
     try {
-      // Prepare the API request
-      const callRequest: CallApiRequest = {
+      // Prepare dynamic_variables from campaign variable section
+      let dynamic_variables: Record<string, string> = {};
+      if (selectedCampaignForCall?.llm?.promptJson?.promptVariables) {
+        dynamic_variables = { ...selectedCampaignForCall.llm.promptJson.promptVariables };
+      }
+      // Overwrite or add mobile number and caller name
+      dynamic_variables.mobile_number = data.mobileNumber;
+      dynamic_variables.caller_name = data.callerName;
+      const callRequest = {
         to_number: data.mobileNumber,
-        dynamic_variables: {
-          customer_name: data.callerName,
-          dealer_name: selectedCampaignForCall?.name || "",
-          vehicle_no: "",
-          callback_date: "",
-          callback_time: "",
-          alt_contact_name: "",
-          alt_contact_no: ""
-        },
+        dynamic_variables,
         metadata: {
           org_id: selectedCampaignForCall?.org_id || "",
           user_id: "user_1"
@@ -959,7 +998,7 @@ const Campaigns = () => {
         campaign_id: selectedCampaignForCall?.id || ""
       };
 
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/calls/', {
+      const response = await fetch('http://192.168.2.135:8000/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1044,7 +1083,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://192.168.2.135:8000/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -1160,6 +1199,21 @@ const Campaigns = () => {
                   <div className="space-y-6">
                     {currentStep === 1 && (
                       <div>
+                        <div className="mb-4">
+                          <FormField
+                            control={form.control}
+                            name="campaign_id"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Campaign ID</FormLabel>
+                                <Input {...field} placeholder="Campaign ID" className="h-9 text-sm" />
+                                <FormDescription className="text-xs text-gray-500 mt-1">
+                                  Unique identifier for this campaign. You can edit this value.
+                                </FormDescription>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
                         <StepLanguage form={form} organizations={organizations} />
                       </div>
                     )}
@@ -1345,9 +1399,26 @@ const Campaigns = () => {
                         const formData = form.getValues() as CampaignFormData;
                         handleSubmit(formData);
                       } else {
+                        // Collect missing/invalid fields
+                        const errors = form.formState.errors;
+                        let missingFields = Object.keys(errors).map(key => {
+                          switch (key) {
+                            case 'campaign_id': return 'Campaign ID';
+                            case 'name': return 'Campaign Name';
+                            case 'direction': return 'Direction';
+                            case 'state': return 'State';
+                            case 'org_id': return 'Organization';
+                            case 'tts': return 'Voice Settings';
+                            case 'stt': return 'STT Settings';
+                            case 'telephonic_provider': return 'Telephony Provider';
+                            case 'knowledge_base': return 'Knowledge Base';
+                            // Remove custom post_call_actions validation
+                            default: return key;
+                          }
+                        });
                         toast({
                           title: "Validation Error",
-                          description: "Please fill in all required fields correctly.",
+                          description: `Please fill in all required fields correctly: ${missingFields.join(', ')}`,
                           variant: "destructive",
                         });
                       }
@@ -1457,7 +1528,7 @@ const Campaigns = () => {
                 Export to CSV
         </Button>
               <Button 
-                onClick={() => setIsCreateDialogOpen(true)} 
+                onClick={() => navigate('/campaigns/new')} 
                 className="bg-blue-600 hover:bg-blue-700 text-white h-9"
               >
                 <Plus className="w-4 h-4 mr-2" />
@@ -1547,7 +1618,30 @@ const Campaigns = () => {
                           variant="ghost" 
                           size="icon"
                           onClick={() => {
-                            setSelectedCampaignForCall(campaign);
+                            // If this campaign is being edited, merge latest variables from form state
+                            let campaignToCall = campaign;
+                            if (editingCampaign && editingCampaign.id === campaign.id) {
+                              const latestVars = form.getValues('llm.promptJson.promptVariables' as any) || {};
+                              campaignToCall = {
+                                ...campaign,
+                                llm: {
+                                  ...campaign.llm,
+                                  promptJson: {
+                                    ...campaign.llm?.promptJson,
+                                    promptVariables: latestVars
+                                  }
+                                }
+                              };
+                            }
+                            // Prepare default values for callForm: all promptVariables except mobile_number
+                            const promptVars = campaignToCall.llm?.promptJson?.promptVariables || {};
+                            const callFormDefaults: Record<string, string> = {};
+                            Object.keys(promptVars).forEach((key) => {
+                              if (key !== 'mobile_number') callFormDefaults[key] = '';
+                            });
+                            callFormDefaults['mobileNumber'] = '';
+                            callForm.reset(callFormDefaults);
+                            setSelectedCampaignForCall(campaignToCall);
                             setIsCallDialogOpen(true);
                           }}
                           className="h-8 w-8 bg-green-50 hover:bg-green-100 text-green-600"
@@ -1576,7 +1670,7 @@ const Campaigns = () => {
                         <Button 
                           variant="ghost" 
                           size="icon"
-                          onClick={() => handleEdit(campaign)}
+                          onClick={() => navigate(`/campaigns/${campaign.id}/edit`)}
                           className="h-8 w-8 bg-amber-50 hover:bg-amber-100 text-amber-600"
                         >
                           <Edit className="h-4 w-4" />
@@ -1598,299 +1692,6 @@ const Campaigns = () => {
           </Table>
         </div>
       </div>
-
-      {/* Create Campaign Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
-        if (!open) {
-          setIsCreateDialogOpen(false);
-          setEditingCampaign(null);
-          resetForm();
-        }
-      }}>
-        <DialogContent className="sm:max-w-[800px] p-0 max-h-[90vh] flex flex-col">
-          <DialogHeader className="px-4 py-2 border-b bg-gray-50/80 flex-shrink-0">
-            <DialogTitle className="text-xl font-semibold text-gray-900">
-              {editingCampaign ? 'Edit Campaign' : 'Create New Campaign'}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto">
-            <div className="px-4 py-3">
-              <div className="space-y-4">
-                {/* Step Indicator */}
-                <div className="bg-gradient-to-r from-white to-blue-50/30 rounded-lg p-6 border shadow-sm flex-shrink-0">
-                  <div className="flex justify-between relative">
-                    {/* Progress Line */}
-                    <div className="absolute top-4 left-0 w-full h-0.5 bg-gray-200">
-                      <div 
-                        className="h-full bg-blue-500 transition-all duration-300 ease-in-out"
-                        style={{ width: `${((currentStep - 1) / 4) * 100}%` }}
-                      />
-                    </div>
-
-                    {['Name', 'Speech and Call', 'Voice', 'Flow', 'Telephony', 'Post Call Actions'].map((step, index) => (
-                      <div
-                        key={step}
-                        className={`flex flex-col items-center relative ${
-                          currentStep === index + 1 
-                            ? 'text-blue-600' 
-                            : index + 1 < currentStep 
-                              ? 'text-blue-500' 
-                              : 'text-gray-400'
-                        }`}
-                      >
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-3 transition-all duration-200 ${
-                          currentStep === index + 1 
-                            ? 'bg-blue-600 text-white ring-4 ring-blue-100 shadow-lg scale-110' 
-                            : index + 1 < currentStep 
-                              ? 'bg-blue-500 text-white'
-                              : 'bg-white border-2 border-gray-200'
-                        }`}>
-                          {index + 1 < currentStep ? (
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          ) : (
-                            <span className="text-sm font-semibold">{index + 1}</span>
-                          )}
-                        </div>
-                        <span className={`text-sm font-medium ${
-                          currentStep === index + 1 
-                            ? 'text-blue-600' 
-                            : index + 1 < currentStep 
-                              ? 'text-blue-500' 
-                              : 'text-gray-400'
-                        }`}>{step}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <Form {...form}>
-                  <form onSubmit={(e) => e.preventDefault()}>
-                    <div className="space-y-4">
-                      <div className="bg-white rounded-lg border shadow-sm">
-                        <div className="p-6">
-                          <div className="space-y-6">
-                            {currentStep === 1 && (
-                              <div>
-                                <StepLanguage form={form} organizations={organizations} />
-                              </div>
-                            )}
-
-                            {currentStep === 2 && (
-                              <div className="w-full max-w-screen-lg mx-auto px-0 md:px-0">
-                                <div className="glass-card relative rounded-lg shadow border border-white/30 p-0 flex flex-col md:flex-row gap-0 items-stretch font-inter overflow-hidden">
-                                  {/* Speech Section */}
-                                  <div className="flex-1 bg-blue-50/40 rounded-none p-6 min-w-0 border-r border-blue-100 flex flex-col justify-center" style={{paddingRight: 0}}>
-                                    <div className="flex items-center gap-2 mb-4 pl-2">
-                                      <span className="icon-animate bg-blue-100 p-1 rounded-full"><Mic className="w-5 h-5 text-blue-600" /></span>
-                                      <h4 className="font-extrabold text-lg text-blue-900 tracking-tight">Speech</h4>
-                                    </div>
-                                    <div className="flex flex-col gap-4 pl-10">
-                                      {/* Allow Interruptions */}
-                              <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <Mic className="w-4 h-4 text-blue-400" />
-                                          <span className="text-blue-700 font-medium">Allow Interruptions</span>
-                                          <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate align-middle"><Info className="w-4 h-4 text-blue-400 inline" /></span></TooltipTrigger><TooltipContent>Allow the caller to interrupt the agent's speech.</TooltipContent></Tooltip></TooltipProvider>
-                                        </div>
-                                        <div className="mt-1"><button className={`relative w-10 h-6 rounded-full transition-colors duration-200 focus:outline-none border-2 border-blue-100 shadow-sm flex items-center ${allowInterruptions ? 'bg-blue-500' : 'bg-gray-200'}`} aria-pressed={allowInterruptions} onClick={() => setAllowInterruptions(!allowInterruptions)}><span className={`absolute left-1 top-0.5 w-4 h-4 rounded-full shadow-md transition-transform duration-200 flex items-center justify-center ${allowInterruptions ? 'translate-x-4 bg-white' : 'bg-white'}`} style={{ boxShadow: allowInterruptions ? '0 0 8px 2px #3b82f6aa' : '0 1px 4px #cbd5e1' }}><Mic className={`w-3 h-3 transition-colors duration-200 ${allowInterruptions ? 'text-blue-500' : 'text-gray-400'} ${allowInterruptions ? 'scale-100' : 'scale-0'}`} /><Mic className={`w-3 h-3 absolute transition-colors duration-200 ${allowInterruptions ? 'scale-0' : 'scale-100'} text-gray-400`} /></span></button></div>
-                                      </div>
-                                      {/* Ambient Status */}
-                                      <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <Volume2 className="w-4 h-4 text-blue-400" />
-                                          <span className="text-blue-700 font-medium">Ambient Status</span>
-                                          <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate align-middle"><Info className="w-4 h-4 text-blue-400 inline" /></span></TooltipTrigger><TooltipContent>Enable or disable ambient background sound.</TooltipContent></Tooltip></TooltipProvider>
-                                        </div>
-                                        <div className="mt-1"><button className={`relative w-10 h-6 rounded-full transition-colors duration-200 focus:outline-none border-2 border-blue-100 shadow-sm flex items-center ${ambientStatus ? 'bg-blue-500' : 'bg-gray-200'}`} aria-pressed={ambientStatus} onClick={() => setAmbientStatus(!ambientStatus)}><span className={`absolute left-1 top-0.5 w-4 h-4 rounded-full shadow-md transition-transform duration-200 flex items-center justify-center ${ambientStatus ? 'translate-x-4 bg-white' : 'bg-white'}`} style={{ boxShadow: ambientStatus ? '0 0 8px 2px #3b82f6aa' : '0 1px 4px #cbd5e1' }}><Volume2 className={`w-3 h-3 transition-colors duration-200 ${ambientStatus ? 'text-blue-500' : 'text-gray-400'} ${ambientStatus ? 'scale-100' : 'scale-0'}`} /><Volume2 className={`w-3 h-3 absolute transition-colors duration-200 ${ambientStatus ? 'scale-0' : 'scale-100'} text-gray-400`} /></span></button></div>
-                                      </div>
-                                      {/* Sound */}
-                                      <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <span className="inline-block"><svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l-2 2H5a2 2 0 00-2 2v4a2 2 0 002 2h2l2 2z" /></svg></span>
-                                          <span className="text-blue-700 font-medium">Sound</span>
-                                          <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate align-middle"><Info className="w-4 h-4 text-blue-400 inline" /></span></TooltipTrigger><TooltipContent>Select the type of background sound.</TooltipContent></Tooltip></TooltipProvider>
-                                        </div>
-                                        <div className="mt-1"><select className="rounded border border-blue-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300" value={sound} onChange={e => setSound(e.target.value)} style={{ minWidth: 110 }}><option value="call-center">Call Center</option><option value="coffee-shop">Coffee Shop</option><option value="office">Office</option></select></div>
-                                      </div>
-                                      {/* Volume */}
-                                      <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <span className="inline-block"><svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3" /></svg></span>
-                                          <span className="text-blue-700 font-medium">Volume</span>
-                                          <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate align-middle"><Info className="w-4 h-4 text-blue-400 inline" /></span></TooltipTrigger><TooltipContent>Set the background sound volume (0 to 1).</TooltipContent></Tooltip></TooltipProvider>
-                                        </div>
-                                        <div className="flex items-center gap-2 mt-1"><input type="range" min={0} max={1} step={0.01} value={volume} onChange={e => setVolume(Number(e.target.value))} className="accent-blue-500 w-24" /><span className="text-xs text-gray-700 w-8 text-right">{volume}</span></div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  {/* Call Section */}
-                                  <div className="flex-1 bg-blue-50/40 rounded-none p-6 min-w-0 flex flex-col justify-center" style={{paddingLeft: 0}}>
-                                    <div className="flex items-center gap-2 mb-4 pl-2">
-                                      <span className="icon-animate bg-blue-100 p-1 rounded-full"><Clock className="w-5 h-5 text-blue-600" /></span>
-                                      <h4 className="font-extrabold text-lg text-blue-900 tracking-tight">Call</h4>
-                                    </div>
-                                    <div className="flex flex-col gap-6 pl-10">
-                                      <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <span className="text-sm font-semibold text-gray-800 flex items-center">Max idle reminder</span>
-                                          <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate"><Info className="w-4 h-4 text-blue-400" /></span></TooltipTrigger><TooltipContent>When a caller is idle, the agent repeats the last question.</TooltipContent></Tooltip></TooltipProvider>
-                                        </div>
-                                        <span className="text-xs text-gray-500 block mb-1">When a caller is idle, the agent repeats the last question.</span>
-                                        <div className="flex gap-2 mt-1 flex-nowrap overflow-x-auto pb-1">
-                                          {[3,5,7,9].map((sec) => (
-                                            <label key={sec} className="group flex items-center cursor-pointer">
-                                              <input type="radio" name="maxIdleReminder" className="sr-only" checked={maxIdleReminder === Number(sec)} onChange={() => setMaxIdleReminder(Number(sec))} />
-                                              <span className={`rounded-full border border-blue-200 px-2 py-1 text-xs font-medium transition-colors duration-200 ${maxIdleReminder === Number(sec) ? 'bg-blue-500 text-white border-blue-500 shadow' : 'bg-white text-blue-700 hover:bg-blue-100'}`}>{sec} secs</span>
-                                            </label>
-                                          ))}
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <span className="text-sm font-semibold text-gray-800 flex items-center">Max idle duration</span>
-                                          <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="icon-animate"><Hourglass className="w-4 h-4 text-blue-400" /></span></TooltipTrigger><TooltipContent>Set the total time the agent will issue idle reminders before hanging up.</TooltipContent></Tooltip></TooltipProvider>
-                                        </div>
-                                        <span className="text-xs text-gray-500 block mb-1">Set the total time the agent will issue idle reminders before hanging up</span>
-                                        <div className="flex gap-2 mt-1 flex-nowrap overflow-x-auto pb-1">
-                                          {[5,10,20,30].map((sec) => (
-                                            <label key={sec} className="group flex items-center cursor-pointer">
-                                              <input type="radio" name="maxIdleDuration" className="sr-only" checked={maxIdleDuration === Number(sec)} onChange={() => setMaxIdleDuration(Number(sec))} />
-                                              <span className={`rounded-full border border-blue-200 px-2 py-1 text-xs font-medium transition-colors duration-200 ${maxIdleDuration === Number(sec) ? 'bg-blue-500 text-white border-blue-500 shadow' : 'bg-white text-blue-700 hover:bg-blue-100'}`}>{sec} secs</span>
-                                            </label>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {currentStep === 3 && (
-                              <div>
-                                <StepVoice form={form} selectedVoiceId={form.getValues('tts.voice_id')} />
-                              </div>
-                            )}
-
-                            {currentStep === 4 && (
-                              <div>
-                                <StepFlow
-                                  form={form}
-                                  activeFlowTab={activeFlowTab}
-                                  setActiveFlowTab={setActiveFlowTab}
-                                  contextValue={contextValue}
-                                  setContextValue={setContextValue}
-                                  responses={responses}
-                                  setResponses={setResponses}
-                                  variables={variables}
-                                  setVariables={setVariables}
-                                  selectedFile={selectedFile}
-                                  setSelectedFile={setSelectedFile}
-                                  handleKeyValueChange={handleKeyValueChange}
-                                  handleAddKeyValuePair={handleAddKeyValuePair}
-                                  handleRemoveKeyValuePair={handleRemoveKeyValuePair}
-                                />
-                              </div>
-                            )}
-
-                            {currentStep === 5 && (
-                              <div>
-                                <StepTelephony form={form} />
-                              </div>
-                            )}
-
-                            {currentStep === 6 && (
-                              <div>
-                                <StepPostCall
-                                  form={form}
-                                  categorization={categorization}
-                                  setCategorization={setCategorization}
-                                  dataExtractionFields={dataExtractionFields}
-                                  setDataExtractionFields={setDataExtractionFields}
-                                  handleKeyValueChange={handleKeyValueChange}
-                                  handleAddKeyValuePair={handleAddKeyValuePair}
-                                  handleRemoveKeyValuePair={handleRemoveKeyValuePair}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex justify-between items-center pt-4 px-2 sticky bottom-0 bg-white border-t">
-                        {currentStep > 1 ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={prevStep}
-                            className="h-9 px-4 text-sm border-gray-200 hover:bg-gray-50"
-                          >
-                            <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                            </svg>
-                            Previous
-                          </Button>
-                        ) : (
-                          <div></div>
-                        )}
-                        
-                        {currentStep < 6 ? (
-                          <Button
-                            type="button"
-                            onClick={nextStep}
-                            className="h-9 px-4 text-sm bg-blue-600 hover:bg-blue-700 text-white"
-                          >
-                            Next
-                            <svg className="w-4 h-4 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            disabled={isSubmitting}
-                            className="h-9 px-4 text-sm bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
-                            onClick={async () => {
-                              const isValid = await form.trigger();
-                              if (isValid) {
-                                const formData = form.getValues() as CampaignFormData;
-                                handleSubmit(formData);
-                              } else {
-                                toast({
-                                  title: "Validation Error",
-                                  description: "Please fill in all required fields correctly.",
-                                  variant: "destructive",
-                                });
-                              }
-                            }}
-                          >
-                            {isSubmitting ? (
-                              <>
-                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                                Saving...
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Save Campaign
-                              </>
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </form>
-                </Form>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* View Campaign Dialog */}
       <Dialog open={!!viewingCampaign} onOpenChange={() => setViewingCampaign(null)}>

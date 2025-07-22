@@ -19,6 +19,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import { AppSidebar } from '@/components/AppSidebar';
 import voxiflowLogo from '../assets/voxiflow-logo.svg';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import * as XLSX from 'xlsx-js-style';
 
 interface TranscriptionMessage {
   content: string;
@@ -181,7 +182,7 @@ const CallHistory = () => {
     const insights = await Promise.all(
       calls.map(async call => {
         try {
-          const response = await fetch(`http://192.168.2.191:8000/api/v1/calls/${call.Sid}/artifacts`, {
+          const response = await fetch(`http://192.168.2.135:8000/api/v1/calls/${call.Sid}/artifacts`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -249,12 +250,12 @@ const CallHistory = () => {
       } else {
         const end = new Date();
         const start = new Date();
-        start.setDate(start.getDate() - 15);
+        start.setDate(start.getDate() - 2);
         formattedStartDate = format(start, "yyyy-MM-dd'T'HH:mm:ss'Z'");
         formattedEndDate = format(end, "yyyy-MM-dd'T'HH:mm:ss'Z'");
       }
 
-      const apiUrl = new URL(`http://192.168.2.191:8000/api/v1/calls/external/${targetCampaignId}/list`);
+      const apiUrl = new URL(`http://192.168.2.135:8000/api/v1/calls/external/${targetCampaignId}/list`);
       
       apiUrl.searchParams.append('start_date', formattedStartDate);
       apiUrl.searchParams.append('end_date', formattedEndDate);
@@ -322,15 +323,17 @@ const CallHistory = () => {
         CallerName: call.CallerName || '',
         Uri: call.Uri || '',
         RecordingUrl: call.RecordingUrl || '',
-        rating: call.rating || 0
+        rating: call.rating || 0,
+        sortTimestamp: (() => {
+          if (call.DateCreated && !isNaN(Date.parse(call.DateCreated))) return new Date(call.DateCreated).getTime();
+          if (call.StartTime && !isNaN(Date.parse(call.StartTime))) return new Date(call.StartTime).getTime();
+          if (call.EndTime && !isNaN(Date.parse(call.EndTime))) return new Date(call.EndTime).getTime();
+          return 0;
+        })(),
       }));
 
-      // Sort mappedCalls by DateCreated descending (most recent first)
-      mappedCalls.sort((a, b) => {
-        const dateA = a.DateCreated ? new Date(a.DateCreated).getTime() : 0;
-        const dateB = b.DateCreated ? new Date(b.DateCreated).getTime() : 0;
-        return dateB - dateA;
-      });
+      // Consistent sort: mappedCalls by sortTimestamp descending (most recent first)
+      mappedCalls.sort((a, b) => b.sortTimestamp - a.sortTimestamp);
 
       console.log('Mapped Calls:', mappedCalls);
 
@@ -368,7 +371,7 @@ const CallHistory = () => {
 
   const fetchCampaigns = async () => {
     try {
-      const response = await fetch('http://192.168.2.191:8000/api/v1/campaigns/', {
+      const response = await fetch('http://192.168.2.135:8000/api/v1/campaigns/', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         },
@@ -395,7 +398,7 @@ const CallHistory = () => {
         
         const end = new Date();
         const start = new Date();
-        start.setDate(start.getDate() - 15);
+        start.setDate(start.getDate() - 2);
         
         setStartDate(start);
         setEndDate(end);
@@ -419,7 +422,7 @@ const CallHistory = () => {
       
       const end = new Date();
       const start = new Date();
-      start.setDate(start.getDate() - 15);
+      start.setDate(start.getDate() - 2);
       
       setStartDate(start);
       setEndDate(end);
@@ -488,7 +491,7 @@ const CallHistory = () => {
     setIsLoadingTranscription(true);
 
     try {
-      const apiUrl = `http://192.168.2.191:8000/api/v1/calls/${callId}/artifacts`;
+      const apiUrl = `http://192.168.2.135:8000/api/v1/calls/${callId}/artifacts`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -498,7 +501,14 @@ const CallHistory = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch call artifacts');
+        if (response.status === 404) {
+          // No insights available, treat as empty data
+          setExtractedData({ summary: '', category: '', 'extracted-data': '' });
+          setSelectedCallTranscription({ transcription: { messages: [], call_id: callId } });
+          return;
+        } else {
+          throw new Error('Failed to fetch call artifacts');
+        }
       }
 
       const data = await response.json();
@@ -571,7 +581,7 @@ const CallHistory = () => {
     setIsSubmittingRating(true);
     try {
       const response = await fetch(
-        `http://192.168.2.191:8000/api/v1/calls/${selectedCallForRating.Sid}/rating`,
+        `http://192.168.2.135:8000/api/v1/calls/${selectedCallForRating.Sid}/rating`,
         {
           method: 'POST',
           headers: {
@@ -641,7 +651,7 @@ const CallHistory = () => {
       campaign_id: selectedCampaign
     });
     try {
-      const response = await fetch('http://192.168.2.191:8000/api/v1/calls/', {
+      const response = await fetch('http://192.168.2.135:8000/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -700,7 +710,7 @@ const CallHistory = () => {
       }
 
       // Updated API endpoint as per user instruction
-      const apiUrl = `http://192.168.2.191:8000/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
+      const apiUrl = `http://192.168.2.135:8000/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -739,6 +749,79 @@ const CallHistory = () => {
     } finally {
       setIsLoadingRecording(false);
     }
+  };
+
+  // Add this function to fetch all calls with pagination
+  const fetchAllCalls = async (campaignId: string, startDate: string, endDate: string) => {
+    let allCalls: Call[] = [];
+    let nextCursor: string | null = null;
+    let page = 1;
+    const pageSize = 10;
+    do {
+      let apiUrl = new URL(`http://192.168.2.135:8000/api/v1/calls/external/${campaignId}/list`);
+      apiUrl.searchParams.append('start_date', startDate);
+      apiUrl.searchParams.append('end_date', endDate);
+      apiUrl.searchParams.append('page_size', pageSize.toString());
+      if (nextCursor) apiUrl.searchParams.append('cursor', nextCursor);
+      const response = await fetch(apiUrl.toString(), {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch calls');
+      const data = await response.json();
+      if (data.items && Array.isArray(data.items)) {
+        allCalls = allCalls.concat(data.items);
+      }
+      nextCursor = data.next_cursor;
+      page++;
+    } while (nextCursor);
+    return allCalls;
+  };
+
+  // Add this function to fetch artifacts for a call
+  const fetchArtifacts = async (callId: string) => {
+    const response = await fetch(`http://192.168.2.135:8000/api/v1/calls/${callId}/artifacts`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!response.ok) return {};
+    const data = await response.json();
+    return data;
+  };
+
+  // Add this function to export the detailed report
+  const exportDetailedReport = async () => {
+    if (!selectedCampaign || !startDate || !endDate) return;
+    const startStr = `${format(startDate, 'yyyy-MM-dd')} 00:00:00`;
+    const endStr = `${format(endDate, 'yyyy-MM-dd')} 23:59:00`;
+    const calls = await fetchAllCalls(selectedCampaign, startStr, endStr);
+    const reportRows = [];
+    for (const call of calls) {
+      const artifacts = await fetchArtifacts(call.call_id || call.Sid);
+      // Merge call and artifacts, exclude transcript
+      const { transcript, ...artifactsNoTranscript } = artifacts || {};
+      reportRows.push({ ...call, ...artifactsNoTranscript });
+    }
+    // Prepare columns (all keys except transcript)
+    const allKeys = Array.from(new Set(reportRows.flatMap(row => Object.keys(row)))).filter(k => k !== 'transcript');
+    const wsData = [allKeys, ...reportRows.map(row => allKeys.map(k => row[k] ?? ''))];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Report');
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/octet-stream' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `detailed_report_${selectedCampaign}_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -920,6 +1003,14 @@ const CallHistory = () => {
                   <FileDown className="w-3.5 h-3.5" />
                   Export
                 </Button>
+                {selectedCampaign && (
+                  <Button
+                    onClick={exportDetailedReport}
+                    className="bg-blue-600 hover:bg-blue-700 text-white h-8 px-2 text-sm gap-1"
+                  >
+                    Export Detailed Report
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -1118,7 +1209,7 @@ const CallHistory = () => {
                     <Card className="border-none shadow-none bg-transparent">
                       <CardContent className="p-4 bg-white rounded-lg shadow-sm">
                         <p className="text-gray-800 whitespace-pre-wrap leading-relaxed text-base">
-                          {extractedData?.summary || 'No summary available.'}
+                          {extractedData?.summary && extractedData?.summary.trim() !== '' ? extractedData.summary : 'No summary available.'}
                         </p>
                       </CardContent>
                     </Card>
@@ -1128,11 +1219,16 @@ const CallHistory = () => {
                     <Card className="border-none shadow-none bg-transparent">
                       <CardContent className="p-4 bg-white rounded-lg shadow-sm">
                         {(() => {
+                          if (!extractedData?.category || extractedData.category.trim() === '' || extractedData.category.trim() === '{}' || extractedData.category.trim() === 'null') {
+                            return <div className="text-gray-500 text-sm">No category data available.</div>;
+                          }
                           try {
-                            console.log('Raw category data:', extractedData?.category);
                             const categoryData = JSON.parse(
-                              extractedData?.category?.replace(/```json\n|\n```/g, '') || '{}'
+                              extractedData.category.replace(/```json\n|\n```/g, '') || '{}'
                             );
+                            if (Object.keys(categoryData).length === 0) {
+                              return <div className="text-gray-500 text-sm">No category data available.</div>;
+                            }
                             return (
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {Object.entries(categoryData).map(([key, value]) => (
@@ -1143,9 +1239,8 @@ const CallHistory = () => {
                                 ))}
                               </div>
                             );
-                          } catch (e: any) {
-                            console.error('Error parsing category data:', e);
-                            return <div className="text-gray-500 text-sm">Invalid category data: {e.message}</div>;
+                          } catch (e) {
+                            return <div className="text-gray-500 text-sm">No category data available.</div>;
                           }
                         })()}
                       </CardContent>
@@ -1156,9 +1251,14 @@ const CallHistory = () => {
                     <Card className="border-none shadow-none bg-transparent">
                       <CardContent className="p-4 bg-white rounded-lg shadow-sm">
                         {(() => {
+                          if (!extractedData?.['extracted-data'] || extractedData['extracted-data'].trim() === '' || extractedData['extracted-data'].trim() === '{}' || extractedData['extracted-data'].trim() === 'null') {
+                            return <div className="text-gray-500 text-sm">No extracted data available.</div>;
+                          }
                           try {
-                            console.log('Raw extracted data:', extractedData?.['extracted-data']);
-                            const extractedDataObj = JSON.parse(extractedData?.['extracted-data'] || '{}');
+                            const extractedDataObj = JSON.parse(extractedData['extracted-data'] || '{}');
+                            if (Object.keys(extractedDataObj).length === 0) {
+                              return <div className="text-gray-500 text-sm">No extracted data available.</div>;
+                            }
                             return (
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {Object.entries(extractedDataObj).map(([key, value]) => (
@@ -1171,9 +1271,8 @@ const CallHistory = () => {
                                 ))}
                               </div>
                             );
-                          } catch (e: any) {
-                            console.error('Error parsing extracted data:', e);
-                            return <div className="text-gray-500 text-sm">Invalid extracted data: {e.message}</div>;
+                          } catch (e) {
+                            return <div className="text-gray-500 text-sm">No extracted data available.</div>;
                           }
                         })()}
                       </CardContent>

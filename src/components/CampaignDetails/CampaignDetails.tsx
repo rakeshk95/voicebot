@@ -63,7 +63,7 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
 
   // Fetch organizations for display
   useEffect(() => {
-    fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+    fetch('http://192.168.2.135:8000/api/v1/organizations', {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         'Content-Type': 'application/json'
@@ -77,7 +77,7 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
   // Fetch voices for display
   useEffect(() => {
     setLoadingVoices(true);
-    fetch('https://platform.voxiflow.com/backend/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222', {
+    fetch('http://192.168.2.135:8000/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222', {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         'accept': 'application/json',
@@ -168,15 +168,15 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
                     <div>
                       <div className="text-sm font-medium text-gray-700 mb-1">State</div>
                       <Select disabled value={campaign?.state || ''}>
-                        <SelectTrigger className="h-9 bg-white text-gray-900">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="TRIAL">Trial</SelectItem>
-                          <SelectItem value="ACTIVE">Active</SelectItem>
-                          <SelectItem value="INACTIVE">Inactive</SelectItem>
-                        </SelectContent>
-                      </Select>
+                            <SelectTrigger className="h-9 bg-white text-gray-900">
+                              <SelectValue />
+                            </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="TRIAL">Trial</SelectItem>
+                            <SelectItem value="ACTIVE">Active</SelectItem>
+                            <SelectItem value="INACTIVE">Inactive</SelectItem>
+                          </SelectContent>
+                        </Select>
                     </div>
                     <div>
                       <div className="text-sm font-medium text-gray-700 mb-1">Organization</div>
@@ -457,8 +457,14 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Categories</h3>
                     <div className="space-y-4">
-                      {campaign.post_call_actions?.categories && 
-                        Object.entries(campaign.post_call_actions.categories).map(([key, value], index) => (
+                      {campaign.post_call_actions?.categories?.system_prompt && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <Input value="system_prompt" disabled className="bg-white text-gray-900" />
+                          <Input value={campaign.post_call_actions.categories.system_prompt} disabled className="bg-white text-gray-900" />
+                        </div>
+                      )}
+                      {campaign.post_call_actions?.categories?.fields && Object.keys(campaign.post_call_actions.categories.fields).length > 0 &&
+                        Object.entries(campaign.post_call_actions.categories.fields).map(([key, value], index) => (
                           <div key={index} className="grid grid-cols-2 gap-4">
                             <Input value={key} disabled className="bg-white text-gray-900" />
                             <Input value={value as string} disabled className="bg-white text-gray-900" />
@@ -470,8 +476,14 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Data Extraction</h3>
                     <div className="space-y-4">
-                      {campaign.post_call_actions?.data_extracted && 
-                        Object.entries(campaign.post_call_actions.data_extracted).map(([key, value], index) => (
+                      {campaign.post_call_actions?.data_extracted?.system_prompt && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <Input value="system_prompt" disabled className="bg-white text-gray-900" />
+                          <Input value={campaign.post_call_actions.data_extracted.system_prompt} disabled className="bg-white text-gray-900" />
+                        </div>
+                      )}
+                      {campaign.post_call_actions?.data_extracted?.fields && Object.keys(campaign.post_call_actions.data_extracted.fields).length > 0 &&
+                        Object.entries(campaign.post_call_actions.data_extracted.fields).map(([key, value], index) => (
                           <div key={index} className="grid grid-cols-2 gap-4">
                             <Input value={key} disabled className="bg-white text-gray-900" />
                             <Input value={value as string} disabled className="bg-white text-gray-900" />

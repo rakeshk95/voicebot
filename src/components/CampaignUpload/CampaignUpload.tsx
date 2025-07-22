@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload } from 'lucide-react';
+import { Upload, FileSpreadsheet } from 'lucide-react';
 import { Campaign } from "@/types/campaign";
+import * as XLSX from 'xlsx-js-style';
 
 interface CampaignUploadProps {
   campaign: Campaign | null;
@@ -21,10 +22,52 @@ const CampaignUpload = ({
   onUpload,
   onCancel
 }: CampaignUploadProps) => {
+  const [downloading, setDownloading] = useState(false);
+
   if (!campaign) return null;
+
+  const handleDownloadTemplate = async () => {
+    setDownloading(true);
+    try {
+      // Prepare columns: Mobile Number + promptVariables
+      const promptVars = campaign?.llm?.promptJson?.promptVariables || {};
+      const variableKeys = Object.keys(promptVars).filter(k => k !== 'mobile_number');
+      const columns = ['Mobile Number', ...variableKeys.map(k => k.replace(/_/g, ' '))];
+      // Prepare worksheet data: just headers, no rows
+      const wsData = [columns];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Template');
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'bulk_upload_template.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      // Optionally show a toast or error
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="space-y-6 py-4">
+      <div className="flex justify-end mt-2 mb-4">
+        <Button
+          variant="default"
+          className="px-4 py-2 text-sm font-medium flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white shadow border-none"
+          onClick={handleDownloadTemplate}
+          disabled={downloading}
+        >
+          <FileSpreadsheet className="w-4 h-4 text-white" />
+          {downloading ? 'Downloading...' : 'Download Excel Template'}
+        </Button>
+      </div>
       <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
         <div className="flex flex-col items-center">
           <Upload className="h-12 w-12 text-gray-400" />

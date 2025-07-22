@@ -15,6 +15,7 @@ import Organizations from "./pages/Organizations";
 import RolesPermissions from "./pages/RolesPermissions";
 import NotFound from "./pages/NotFound";
 import Login from '@/pages/Login';
+import CampaignFormPage from './pages/CampaignFormPage';
 
 const queryClient = new QueryClient();
 
@@ -50,6 +51,8 @@ const App = () => {
                 <Route index element={<Dashboard />} />
                 <Route path="organizations" element={<Organizations />} />
                 <Route path="campaigns" element={<Campaigns />} />
+                <Route path="campaigns/new" element={<CampaignFormPage mode="create" />} />
+                <Route path="campaigns/:id/edit" element={<CampaignFormPage mode="edit" />} />
                 <Route path="call-history" element={<CallHistory />} />
                 <Route path="users" element={<Users />} />
                 <Route path="analytics" element={<Analytics />} />

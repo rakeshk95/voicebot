@@ -21,24 +21,24 @@ const navigationItems = [
   {
     title: 'CORE',
     items: [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+      { title: 'Dashboard', url: '/', icon: LayoutDashboard },
       { title: 'Organizations', url: '/organizations', icon: Building2 },
-  { title: 'Campaigns', url: '/campaigns', icon: BarChart },
-  { title: 'Call History', url: '/call-history', icon: History },
+      { title: 'Campaigns', url: '/campaigns', icon: BarChart },
+      { title: 'Call History', url: '/call-history', icon: History },
     ]
   },
   {
     title: 'ANALYTICS',
     items: [
-  { title: 'Users', url: '/users', icon: Users },
-  { title: 'Analytics', url: '/analytics', icon: Activity },
+      { title: 'Users', url: '/users', icon: Users },
+      // Removed Analytics (Reports) tab
     ]
   },
   {
     title: 'SYSTEM',
     items: [
       { title: 'Roles & Permissions', url: '/roles-permissions', icon: Shield },
-  { title: 'Settings', url: '/settings', icon: Settings },
+      // Removed Settings tab
     ]
   }
 ];

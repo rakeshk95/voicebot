@@ -13,6 +13,17 @@ interface CampaignCallProps {
   onCancel: () => void;
 }
 
+// Helper to convert snake_case to Human Friendly Label
+function toLabel(str: string) {
+  return str.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+// Map display label to payload key if needed
+const DISPLAY_TO_PAYLOAD_KEY: Record<string, string> = {
+  'Clinic Name': 'clinic_name',
+  // Add more mappings as needed
+};
+
 const CampaignCall = ({
   campaign,
   form,
@@ -21,67 +32,48 @@ const CampaignCall = ({
 }: CampaignCallProps) => {
   if (!campaign) return null;
 
+  // Debug: log prompt variables at render
+  console.log('Prompt Variables:', campaign?.llm?.promptJson?.promptVariables);
+
+  // Get variables from campaign prop
+  const variableKeys = Object.keys(campaign?.llm?.promptJson?.promptVariables || {}).filter(
+    key => key !== 'mobile_number' && key !== 'caller_name'
+  );
   return (
     <Form {...form}>
-      <form onSubmit={onSubmit} className="space-y-6">
-        <FormField
-          control={form.control}
-          name="callerName"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-sm font-medium">Caller Name</FormLabel>
-              <FormControl>
-                <Input
-                  {...field} 
-                  placeholder="Enter caller name"
-                  className="h-10 px-3 rounded-md border border-gray-200 focus:border-primary"
-                />
-              </FormControl>
-              <FormMessage className="text-xs text-red-500" />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="mobileNumber"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-sm font-medium">Mobile Number</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input 
-                    {...field} 
-                    type="tel"
-                    placeholder="Enter mobile number"
-                    className="h-10 pl-10 pr-3 rounded-md border border-gray-200 focus:border-primary"
-                  />
-                </div>
-              </FormControl>
-              <FormMessage className="text-xs text-red-500" />
-            </FormItem>
-          )}
-        />
-        <div className="flex justify-end space-x-3 pt-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onCancel}
-            className="px-4 py-2"
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            className="px-4 py-2 bg-primary text-white hover:bg-primary/90"
-          >
-            <Phone className="w-4 h-4 mr-2" />
-            Make Call
-          </Button>
+      <form onSubmit={form.handleSubmit(onSubmit)}>
+        <div className="space-y-4">
+          {variableKeys.map((key) => (
+            <FormField
+              key={key}
+              control={form.control}
+              name={key}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{toLabel(key)}</FormLabel>
+                  <Input {...field} placeholder={`Enter ${toLabel(key)}`} />
+                </FormItem>
+              )}
+            />
+          ))}
+          <FormField
+            control={form.control}
+            name="mobileNumber"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Mobile Number</FormLabel>
+                <Input {...field} placeholder="Enter mobile number" />
+              </FormItem>
+            )}
+          />
+        </div>
+        <div className="flex justify-end gap-2 mt-6">
+          <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
+          <Button type="submit" className="bg-blue-700 text-white">{form.formState.isSubmitting ? 'Calling...' : 'Make Call'}</Button>
         </div>
       </form>
     </Form>
   );
 };
 
-export default CampaignCall; 
+export default CampaignCall;

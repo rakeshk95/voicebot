@@ -17,9 +17,7 @@ const navigation = [
   { name: 'Campaigns', href: '/campaigns', icon: Phone },
   { name: 'Call History', href: '/call-history', icon: History },
   { name: 'Users', href: '/users', icon: Users },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Roles & Permissions', href: '/roles-permissions', icon: Shield },
-  { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
 export function Sidebar() {

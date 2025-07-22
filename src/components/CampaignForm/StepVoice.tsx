@@ -25,7 +25,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
   const [selected, setSelected] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const ELEVEN_LABS_API = 'https://platform.voxiflow.com/backend/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222';
+  const ELEVEN_LABS_API = 'http://192.168.2.135:8000/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222';
   // Use the login token from localStorage for Authorization
 
   useEffect(() => {
@@ -135,21 +135,21 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
         <Select value={language} onValueChange={setLanguage}>
           <SelectTrigger className="w-28 min-w-[90px] h-8 text-sm bg-gray-50 border-gray-300 focus:border-[${PRIMARY_COLOR}] focus:ring-2 focus:ring-[${PRIMARY_COLOR}] rounded">
             <SelectValue placeholder="Language" />
-          </SelectTrigger>
-          <SelectContent>
+                  </SelectTrigger>
+                <SelectContent>
             <SelectItem value="hi">Hindi</SelectItem>
             <SelectItem value="en">English</SelectItem>
-          </SelectContent>
-        </Select>
+                </SelectContent>
+              </Select>
         <Select value={gender} onValueChange={setGender}>
           <SelectTrigger className="w-28 min-w-[90px] h-8 text-sm bg-gray-50 border-gray-300 focus:border-[${PRIMARY_COLOR}] focus:ring-2 focus:ring-[${PRIMARY_COLOR}] rounded">
             <SelectValue placeholder="Gender" />
-          </SelectTrigger>
-          <SelectContent>
+                  </SelectTrigger>
+                <SelectContent>
             <SelectItem value="male">Male</SelectItem>
             <SelectItem value="female">Female</SelectItem>
-          </SelectContent>
-        </Select>
+                </SelectContent>
+              </Select>
         <button
           type="button"
           className="ml-2 px-3 h-8 text-sm rounded bg-gray-100 border border-gray-300 hover:bg-gray-200 transition"

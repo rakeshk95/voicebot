@@ -8,6 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { UseFormReturn } from "react-hook-form";
 import { Plus, X, Upload } from 'lucide-react';
 import { KeyValuePair } from "@/types/campaign";
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
+// @ts-ignore
+// eslint-disable-next-line
+import type {} from 'react-quill';
 
 interface StepFlowProps {
   form: UseFormReturn<any>;
@@ -44,8 +49,8 @@ const StepFlow = ({
 }: StepFlowProps) => {
   return (
     <div className="bg-white rounded-lg border shadow-sm">
-      <div className="p-4 min-h-[400px]">
-        <Tabs value={activeFlowTab} onValueChange={(value: any) => setActiveFlowTab(value)} className="w-full">
+      <div className="p-4 h-[60vh] flex flex-col">
+        <Tabs value={activeFlowTab} onValueChange={(value: any) => setActiveFlowTab(value)} className="w-full flex-1 flex flex-col">
           <TabsList className="grid w-full grid-cols-5 bg-gray-100 p-1 rounded-md">
             <TabsTrigger value="context" className="text-sm">Context</TabsTrigger>
             <TabsTrigger value="graph" className="text-sm">Graph</TabsTrigger>
@@ -54,21 +59,29 @@ const StepFlow = ({
             <TabsTrigger value="knowledgeBase" className="text-sm">Knowledge Base</TabsTrigger>
           </TabsList>
 
-          <div className="mt-4">
+          <div className="mt-4 flex-1 flex flex-col">
             <TabsContent value="context">
-              <div className="space-y-4">
-                <div className="relative">
-                  <Textarea
-                    value={contextValue}
-                    onChange={(e) => setContextValue(e.target.value)}
-                    placeholder="Enter conversation context..."
-                    className="min-h-[250px] resize-y bg-gray-50 border-2 border-blue-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl p-4 text-base shadow-sm transition-all duration-200"
-                    style={{ fontFamily: 'inherit', lineHeight: '1.6' }}
-                  />
-                  <span className="absolute bottom-2 right-4 text-xs text-gray-400 select-none">
-                    {contextValue.length} characters
-                  </span>
-                </div>
+              <div className="relative">
+                <ReactQuill
+                  value={contextValue}
+                  onChange={setContextValue}
+                  theme="snow"
+                  style={{ height: '40vh', minHeight: 200 }}
+                  placeholder="Enter conversation context..."
+                  modules={{
+                    toolbar: [
+                      [{ 'font': [] }, { 'size': [] }],
+                      ['bold', 'italic', 'underline', 'strike'],
+                      [{ 'color': [] }, { 'background': [] }],
+                      [{ 'script': 'sub'}, { 'script': 'super' }],
+                      ['blockquote', 'code-block'],
+                      [{ 'header': 1 }, { 'header': 2 }, 'link', 'image'],
+                      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                      [{ 'align': [] }],
+                      ['clean']
+                    ]
+                  }}
+                />
               </div>
             </TabsContent>
 

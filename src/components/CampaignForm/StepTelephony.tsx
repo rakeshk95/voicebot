@@ -10,7 +10,7 @@ interface StepTelephonyProps {
 const StepTelephony = ({ form }: StepTelephonyProps) => {
   return (
     <div className="bg-white rounded-lg border shadow-sm">
-      <div className="p-4 space-y-4 min-h-[400px]">
+      <div className="p-4 space-y-4">
         <FormField
           control={form.control}
           name="direction"
