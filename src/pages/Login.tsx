@@ -26,7 +26,7 @@ export default function Login() {
       formBody.append('username', formData.email);
       formBody.append('password', formData.password);
 
-      const response = await fetch('https:platform.voxiflow.com/backend/api/v1/auth/login', {
+      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',

@@ -9,7 +9,7 @@ import { Campaign } from "@/types/campaign";
 interface CampaignCallProps {
   campaign: Campaign | null;
   form: UseFormReturn<any>;
-  onSubmit: () => void;
+  onSubmit: (data: any) => void;
   onCancel: () => void;
 }
 
@@ -39,6 +39,7 @@ const CampaignCall = ({
   const variableKeys = Object.keys(campaign?.llm?.promptJson?.promptVariables || {}).filter(
     key => key !== 'mobile_number' && key !== 'caller_name'
   );
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -69,7 +70,7 @@ const CampaignCall = ({
         </div>
         <div className="flex justify-end gap-2 mt-6">
           <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
-          <Button type="submit" className="bg-blue-700 text-white">{form.formState.isSubmitting ? 'Calling...' : 'Make Call'}</Button>
+          <Button type="button" className="bg-blue-700 text-white" onClick={() => { console.log('Button clicked'); onSubmit(form.getValues()); }}>{form.formState.isSubmitting ? 'Calling...' : 'Make Call'}</Button>
         </div>
       </form>
     </Form>

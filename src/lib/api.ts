@@ -1,6 +1,6 @@
 import { toast } from '@/components/ui/use-toast';
 
-const API_BASE_URL = 'https:platform.voxiflow.com/backend/api/v1';
+const API_BASE_URL = 'https://platform.voxiflow.com/backend/api/v1';
 
 interface ApiResponse<T> extends Response {
     json(): Promise<T>;

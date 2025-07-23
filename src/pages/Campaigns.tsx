@@ -446,7 +446,7 @@ const Campaigns = () => {
   useEffect(() => {
     const fetchCampaigns = async () => {
       try {
-        const response = await fetch('https:platform.voxiflow.com/backend/api/v1/campaigns/', {
+        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -496,7 +496,7 @@ const Campaigns = () => {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await fetch('https:platform.voxiflow.com/backend/api/v1/organizations', {
+        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -549,7 +549,7 @@ const Campaigns = () => {
   const handleEdit = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https:platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -804,8 +804,8 @@ const Campaigns = () => {
       // Remove FormData and Excel template logic for campaign create/edit
       // Send JSON body instead
       const url = editingCampaign 
-        ? `https:platform.voxiflow.com/backend/api/v1/campaigns/${editingCampaign.id}`
-        : 'https:platform.voxiflow.com/backend/api/v1/campaigns/';
+        ? `https://platform.voxiflow.com/backend/api/v1/campaigns/${editingCampaign.id}`
+        : 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
 
       const response = await fetch(url, {
         method: editingCampaign ? 'PUT' : 'POST',
@@ -896,7 +896,7 @@ const Campaigns = () => {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
 
     try {
-      const response = await fetch(`https:platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -947,7 +947,7 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`https:platform.voxiflow.com/backend/api/v1/campaigns/${campaignId}/upload`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaignId}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -978,27 +978,31 @@ const Campaigns = () => {
     }
   };
 
-  const onCallSubmit = callForm.handleSubmit(async (data: CallFormData) => {
-    try {
-      // Prepare dynamic_variables from campaign variable section
-      let dynamic_variables: Record<string, string> = {};
-      if (selectedCampaignForCall?.llm?.promptJson?.promptVariables) {
-        dynamic_variables = { ...selectedCampaignForCall.llm.promptJson.promptVariables };
-      }
-      // Overwrite or add mobile number and caller name
-      dynamic_variables.mobile_number = data.mobileNumber;
-      dynamic_variables.caller_name = data.callerName;
-      const callRequest = {
-        to_number: data.mobileNumber,
-        dynamic_variables,
-        metadata: {
-          org_id: selectedCampaignForCall?.org_id || "",
-          user_id: "user_1"
-        },
-        campaign_id: selectedCampaignForCall?.id || ""
-      };
+  const onCallSubmit = async (data: any) => {
+    // Get the variable keys from the selected campaign
+    const variableKeys = Object.keys(selectedCampaignForCall?.llm?.promptJson?.promptVariables || {}).filter(
+      key => key !== 'mobile_number' && key !== 'caller_name'
+    );
+    // Build dynamic_variables from user input
+    let dynamic_variables: Record<string, string> = {};
+    variableKeys.forEach(key => {
+      dynamic_variables[key] = data[key];
+    });
+    dynamic_variables.mobile_number = data.mobileNumber;
+    if (data.callerName) dynamic_variables.caller_name = data.callerName;
 
-      const response = await fetch('https:platform.voxiflow.com/backend/api/v1/calls/', {
+    const callRequest = {
+      to_number: data.mobileNumber,
+      dynamic_variables,
+      call_metadata: {
+        org_id: selectedCampaignForCall?.org_id || "",
+        user_id: "user_1"
+      },
+      campaign_id: selectedCampaignForCall?.id || ""
+    };
+
+    try {
+      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1016,7 +1020,7 @@ const Campaigns = () => {
 
       toast({
         title: "Call Initiated",
-        description: `Calling ${data.callerName} at ${data.mobileNumber}`,
+        description: `Calling ${data.callerName || ''} at ${data.mobileNumber}`,
       });
 
       setIsCallDialogOpen(false);
@@ -1029,7 +1033,7 @@ const Campaigns = () => {
         variant: "destructive",
       });
     }
-  });
+  };
 
   const handleAddVariable = (
     list: VariableItem[],
@@ -1083,7 +1087,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https:platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -1447,6 +1451,20 @@ const Campaigns = () => {
     );
   };
 
+  // When opening the call dialog, set form default values from promptVariables
+  const handleOpenCallDialog = (campaign) => {
+    // Prepare default values for the form from promptVariables
+    const promptVars = campaign.llm?.promptJson?.promptVariables || {};
+    const callFormDefaults: Record<string, string> = {};
+    Object.keys(promptVars).forEach((key) => {
+      if (key !== 'mobile_number' && key !== 'caller_name') callFormDefaults[key] = promptVars[key];
+    });
+    callFormDefaults['mobileNumber'] = '';
+    callForm.reset(callFormDefaults);
+    setSelectedCampaignForCall(campaign);
+    setIsCallDialogOpen(true);
+  };
+
   return (
     <div className="p-1 pt-0 bg-gray-50 min-h-screen">
       <div className="mb-3">
@@ -1617,33 +1635,7 @@ const Campaigns = () => {
                         <Button 
                           variant="ghost" 
                           size="icon"
-                          onClick={() => {
-                            // If this campaign is being edited, merge latest variables from form state
-                            let campaignToCall = campaign;
-                            if (editingCampaign && editingCampaign.id === campaign.id) {
-                              const latestVars = form.getValues('llm.promptJson.promptVariables' as any) || {};
-                              campaignToCall = {
-                                ...campaign,
-                                llm: {
-                                  ...campaign.llm,
-                                  promptJson: {
-                                    ...campaign.llm?.promptJson,
-                                    promptVariables: latestVars
-                                  }
-                                }
-                              };
-                            }
-                            // Prepare default values for callForm: all promptVariables except mobile_number
-                            const promptVars = campaignToCall.llm?.promptJson?.promptVariables || {};
-                            const callFormDefaults: Record<string, string> = {};
-                            Object.keys(promptVars).forEach((key) => {
-                              if (key !== 'mobile_number') callFormDefaults[key] = '';
-                            });
-                            callFormDefaults['mobileNumber'] = '';
-                            callForm.reset(callFormDefaults);
-                            setSelectedCampaignForCall(campaignToCall);
-                            setIsCallDialogOpen(true);
-                          }}
+                          onClick={() => handleOpenCallDialog(campaign)}
                           className="h-8 w-8 bg-green-50 hover:bg-green-100 text-green-600"
                         >
                           <Phone className="h-4 w-4" />
