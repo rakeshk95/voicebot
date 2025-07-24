@@ -164,20 +164,6 @@ const CallHistory = () => {
   };
 
   const exportToCSV = async (calls: Call[], campaignName: string) => {
-    const headers = [
-      'Date Created',
-      'Campaign',
-      'From',
-      'To',
-      'Duration',
-      'Status',
-      'Caller Name',
-      'Rating',
-      'Summary',
-      'Category',
-      'Extracted Data'
-    ];
-
     // Fetch insights for all calls in parallel
     const insights = await Promise.all(
       calls.map(async call => {
@@ -193,7 +179,7 @@ const CallHistory = () => {
           return {
             summary: data.summary || '',
             category: data.category || '',
-            extracted: data['extracted-data'] || ''
+            extracted: data['extracted-data'] || data['extracted_data'] || ''
           };
         } catch {
           return {};
@@ -201,19 +187,74 @@ const CallHistory = () => {
       })
     );
 
-    const data = calls.map((call, i) => [
-      call.DateCreated ? format(new Date(call.DateCreated), "yyyy-MM-dd HH:mm:ss") : '',
-      campaignName,
-      call.From,
-      call.To,
-      formatDuration(call.Duration || 0),
-      call.Status,
-      call.CallerName || '',
-      call.rating || '',
-      insights[i].summary || '',
-      insights[i].category || '',
-      insights[i].extracted || ''
-    ]);
+    // Collect all unique keys from extracted-data
+    const allExtractedKeys = new Set<string>();
+    insights.forEach(insight => {
+      let extracted = insight.extracted;
+      try {
+        if (typeof extracted === 'string') {
+          // Remove code fences and trim
+          extracted = extracted.replace(/^```json\s*|\s*```$/g, '').trim();
+        }
+        while (typeof extracted === 'string') {
+          extracted = JSON.parse(extracted);
+        }
+        if (typeof extracted === 'object' && extracted !== null) {
+          Object.keys(extracted).forEach(key => allExtractedKeys.add(key));
+        }
+      } catch {}
+    });
+    const extractedKeys = Array.from(allExtractedKeys);
+
+    // Prepare headers (do NOT include 'Extracted Data' column)
+    const headers = [
+      'Date Created',
+      'Campaign',
+      'From',
+      'To',
+      'Duration',
+      'Status',
+      'Caller Name',
+      'Rating',
+      'Summary',
+      'Category',
+      // Do NOT add 'Extracted Data' here
+      ...extractedKeys
+    ];
+
+    // Prepare data rows (do NOT include the raw JSON string)
+    const data = calls.map((call, i) => {
+      let extractedObj: Record<string, string> = {};
+      let extracted = insights[i].extracted;
+      // Parse repeatedly until it's an object or fails
+      try {
+        if (typeof extracted === 'string') {
+          // Remove code fences and trim
+          extracted = extracted.replace(/^```json\s*|\s*```$/g, '').trim();
+        }
+        while (typeof extracted === 'string') {
+          extracted = JSON.parse(extracted);
+        }
+        if (typeof extracted === 'object' && extracted !== null) {
+          extractedObj = extracted;
+        }
+      } catch {}
+      // Only include the parsed keys, never the raw JSON string
+      return [
+        call.DateCreated ? format(new Date(call.DateCreated), "yyyy-MM-dd HH:mm:ss") : '',
+        campaignName,
+        call.From,
+        call.To,
+        formatDuration(call.Duration || 0),
+        call.Status,
+        call.CallerName || '',
+        call.rating || '',
+        insights[i].summary || '',
+        insights[i].category || '',
+        // Do NOT add insights[i].extracted here
+        ...extractedKeys.map(key => extractedObj[key] ?? '')
+      ];
+    });
 
     const csvContent = [
       headers.join(','),
@@ -455,7 +496,7 @@ const CallHistory = () => {
       ) : true;
 
       const matchesDateRange = (!startDate || new Date(call.StartTime) >= startDate) &&
-                             (!endDate || new Date(call.StartTime) <= endDate);
+                               (!endDate || new Date(call.StartTime) <= endDate);
 
       return matchesSearch && matchesDateRange;
     });
@@ -790,6 +831,11 @@ const CallHistory = () => {
     });
     if (!response.ok) return {};
     const data = await response.json();
+    // Always normalize to 'extracted-data'
+    if (data.extracted_data && !data['extracted-data']) {
+      data['extracted-data'] = data.extracted_data;
+      delete data.extracted_data;
+    }
     return data;
   };
 
@@ -800,15 +846,67 @@ const CallHistory = () => {
     const endStr = `${format(endDate, 'yyyy-MM-dd')} 23:59:00`;
     const calls = await fetchAllCalls(selectedCampaign, startStr, endStr);
     const reportRows = [];
+    const allExtractedKeys = new Set<string>();
+
     for (const call of calls) {
-      const artifacts = await fetchArtifacts(call.call_id || call.Sid);
-      // Merge call and artifacts, exclude transcript
-      const { transcript, ...artifactsNoTranscript } = artifacts || {};
-      reportRows.push({ ...call, ...artifactsNoTranscript });
+        const artifacts = await fetchArtifacts(call.call_id || call.Sid);
+        const { transcript, 'extracted-data': extractedData, ...artifactsNoTranscript } = artifacts || {};
+
+        let extractedObj = {};
+        if (extractedData) {
+            let extracted = extractedData;
+            try {
+                if (typeof extracted === 'string') {
+                    extracted = extracted.replace(/^```json\s*|\s*```$/g, '').trim();
+                }
+                while (typeof extracted === 'string') {
+                    extracted = JSON.parse(extracted);
+                }
+                if (typeof extracted === 'object' && extracted !== null) {
+                    extractedObj = extracted;
+                    Object.keys(extractedObj).forEach(key => allExtractedKeys.add(key));
+                }
+            } catch (e) {
+                console.error("Error parsing extracted data: ", e);
+            }
+        }
+
+        reportRows.push({ ...call, ...artifactsNoTranscript, ...extractedObj });
     }
-    // Prepare columns (all keys except transcript)
-    const allKeys = Array.from(new Set(reportRows.flatMap(row => Object.keys(row)))).filter(k => k !== 'transcript');
-    const wsData = [allKeys, ...reportRows.map(row => allKeys.map(k => row[k] ?? ''))];
+
+    const extractedKeys = Array.from(allExtractedKeys).sort();
+
+    // Define a standard order for base columns
+    const baseColumns = [
+        'Sid', 'ParentCallSid', 'DateCreated', 'DateUpdated', 'AccountSid', 'To', 'From',
+        'PhoneNumber', 'PhoneNumberSid', 'Status', 'StartTime', 'EndTime', 'Duration',
+        'Price', 'Direction', 'AnsweredBy', 'ForwardedFrom', 'CallerName', 'Uri',
+        'RecordingUrl', 'rating', 'summary', 'category'
+    ];
+    
+    // Get all keys present in the data to not miss any
+    const allPresentKeys = Array.from(new Set(reportRows.flatMap(row => Object.keys(row))));
+    
+    // Filter baseColumns to only include keys that are actually present
+    const finalBaseKeys = baseColumns.filter(key => allPresentKeys.includes(key));
+    
+    // Add any other non-extracted keys that might not be in the standard list
+    const otherKeys = allPresentKeys.filter(key => !finalBaseKeys.includes(key) && !extractedKeys.includes(key) && key !== 'sortTimestamp');
+    
+    const allKeys = [...finalBaseKeys, ...otherKeys, ...extractedKeys];
+
+    const wsData = [
+        allKeys,
+        ...reportRows.map(row =>
+            allKeys.map(key => {
+                const value = row[key];
+                if (value === null || value === undefined) return '';
+                if (typeof value === 'object') return JSON.stringify(value);
+                return value;
+            })
+        )
+    ];
+
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Report');
@@ -824,9 +922,10 @@ const CallHistory = () => {
     window.URL.revokeObjectURL(url);
   };
 
+
   return (
     <div className="flex h-screen bg-gray-50/50">
-   
+    
       {/* Main Content */}
       <div className="flex-1 min-w-0 pl-0">
         <div className="p-2">
@@ -834,8 +933,8 @@ const CallHistory = () => {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2 mb-2">
             <div className="flex items-center gap-4">
                           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-              Call History
-            </h1>
+                  Call History
+                </h1>
 
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600 whitespace-nowrap">Campaign</span>
@@ -1018,8 +1117,8 @@ const CallHistory = () => {
           {/* Rest of your existing table code */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200">
             <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
+            <Table>
+              <TableHeader>
                   <TableRow className="bg-gray-50/80 hover:bg-gray-50/80 border-b border-gray-200">
                     <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">S.NO</TableHead>
                     <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Time</TableHead>
@@ -1029,9 +1128,9 @@ const CallHistory = () => {
                     <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Duration</TableHead>
                     <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Status</TableHead>
                     <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm text-center">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                   {isLoading ? (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center py-6">
@@ -1083,15 +1182,15 @@ const CallHistory = () => {
                               <span className="text-gray-600">{formatDuration(call.Duration || 0)}</span>
                               <span className="text-xs text-gray-400">₹{(call.Price || 0).toFixed(2)}</span>
                             </div>
-                  </TableCell>
+                          </TableCell>
                           <TableCell className="py-2 px-4">
                             <Badge variant="outline" className={`${getStatusColor(call.Status || '')} font-medium`}>
                               {call.Status || 'N/A'}
                               {call.AnsweredBy && (
                                 <span className="ml-1 text-xs">({call.AnsweredBy})</span>
                               )}
-                    </Badge>
-                  </TableCell>
+                          </Badge>
+                        </TableCell>
                           <TableCell className="py-2 px-4">
                             <div className="flex justify-center space-x-1">
                               <Button
@@ -1130,15 +1229,15 @@ const CallHistory = () => {
                                 ) : (
                                   <Star className="h-4 w-4" />
                                 )}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
                       );
                     })
                   )}
-            </TableBody>
-          </Table>
+              </TableBody>
+            </Table>
             </div>
           </div>
 
