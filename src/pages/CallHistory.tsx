@@ -118,6 +118,7 @@ const CallHistory = () => {
   const [selectedCallForDial, setSelectedCallForDial] = useState<Call | null>(null);
   const [callerName, setCallerName] = useState('');
   const [isCallingInProgress, setIsCallingInProgress] = useState(false);
+  const [isExportingDetailed, setIsExportingDetailed] = useState(false);
 
   const datePresets = [
     { label: 'Today', getValue: () => ({ start: startOfToday(), end: endOfToday() }) },
@@ -842,84 +843,74 @@ const CallHistory = () => {
   // Add this function to export the detailed report
   const exportDetailedReport = async () => {
     if (!selectedCampaign || !startDate || !endDate) return;
-    const startStr = `${format(startDate, 'yyyy-MM-dd')} 00:00:00`;
-    const endStr = `${format(endDate, 'yyyy-MM-dd')} 23:59:00`;
-    const calls = await fetchAllCalls(selectedCampaign, startStr, endStr);
-    const reportRows = [];
-    const allExtractedKeys = new Set<string>();
-
-    for (const call of calls) {
-        const artifacts = await fetchArtifacts(call.call_id || call.Sid);
+    setIsExportingDetailed(true);
+    try {
+      const startStr = `${format(startDate, 'yyyy-MM-dd')} 00:00:00`;
+      const endStr = `${format(endDate, 'yyyy-MM-dd')} 23:59:00`;
+      const calls = await fetchAllCalls(selectedCampaign, startStr, endStr);
+      const reportRows = [];
+      const allExtractedKeys = new Set<string>();
+      for (const call of calls) {
+        const artifacts = await fetchArtifacts(call.Sid);
         const { transcript, 'extracted-data': extractedData, ...artifactsNoTranscript } = artifacts || {};
-
         let extractedObj = {};
         if (extractedData) {
-            let extracted = extractedData;
-            try {
-                if (typeof extracted === 'string') {
-                    extracted = extracted.replace(/^```json\s*|\s*```$/g, '').trim();
-                }
-                while (typeof extracted === 'string') {
-                    extracted = JSON.parse(extracted);
-                }
-                if (typeof extracted === 'object' && extracted !== null) {
-                    extractedObj = extracted;
-                    Object.keys(extractedObj).forEach(key => allExtractedKeys.add(key));
-                }
-            } catch (e) {
-                console.error("Error parsing extracted data: ", e);
+          let extracted = extractedData;
+          try {
+            if (typeof extracted === 'string') {
+              extracted = extracted.replace(/^```json\s*|\s*```$/g, '').trim();
             }
+            while (typeof extracted === 'string') {
+              extracted = JSON.parse(extracted);
+            }
+            if (typeof extracted === 'object' && extracted !== null) {
+              extractedObj = extracted;
+              Object.keys(extractedObj).forEach(key => allExtractedKeys.add(key));
+            }
+          } catch (e) {
+            console.error("Error parsing extracted data: ", e);
+          }
         }
-
         reportRows.push({ ...call, ...artifactsNoTranscript, ...extractedObj });
-    }
-
-    const extractedKeys = Array.from(allExtractedKeys).sort();
-
-    // Define a standard order for base columns
-    const baseColumns = [
+      }
+      const extractedKeys = Array.from(allExtractedKeys).sort();
+      const baseColumns = [
         'Sid', 'ParentCallSid', 'DateCreated', 'DateUpdated', 'AccountSid', 'To', 'From',
         'PhoneNumber', 'PhoneNumberSid', 'Status', 'StartTime', 'EndTime', 'Duration',
         'Price', 'Direction', 'AnsweredBy', 'ForwardedFrom', 'CallerName', 'Uri',
         'RecordingUrl', 'rating', 'summary', 'category'
-    ];
-    
-    // Get all keys present in the data to not miss any
-    const allPresentKeys = Array.from(new Set(reportRows.flatMap(row => Object.keys(row))));
-    
-    // Filter baseColumns to only include keys that are actually present
-    const finalBaseKeys = baseColumns.filter(key => allPresentKeys.includes(key));
-    
-    // Add any other non-extracted keys that might not be in the standard list
-    const otherKeys = allPresentKeys.filter(key => !finalBaseKeys.includes(key) && !extractedKeys.includes(key) && key !== 'sortTimestamp');
-    
-    const allKeys = [...finalBaseKeys, ...otherKeys, ...extractedKeys];
-
-    const wsData = [
+      ];
+      const allPresentKeys = Array.from(new Set(reportRows.flatMap(row => Object.keys(row))));
+      const finalBaseKeys = baseColumns.filter(key => allPresentKeys.includes(key));
+      const otherKeys = allPresentKeys.filter(key => !finalBaseKeys.includes(key) && !extractedKeys.includes(key) && key !== 'sortTimestamp');
+      const allKeys = [...finalBaseKeys, ...otherKeys, ...extractedKeys];
+      const wsData = [
         allKeys,
         ...reportRows.map(row =>
-            allKeys.map(key => {
-                const value = row[key];
-                if (value === null || value === undefined) return '';
-                if (typeof value === 'object') return JSON.stringify(value);
-                return value;
-            })
+          allKeys.map(key => {
+            const value = row[key];
+            if (value === null || value === undefined) return '';
+            if (typeof value === 'object') return JSON.stringify(value);
+            return value;
+          })
         )
-    ];
-
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Report');
-    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([wbout], { type: 'application/octet-stream' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `detailed_report_${selectedCampaign}_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Report');
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `detailed_report_${selectedCampaign}_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } finally {
+      setIsExportingDetailed(false);
+    }
   };
 
 
@@ -1094,20 +1085,20 @@ const CallHistory = () => {
                   </Button>
                 )}
 
-                <Button
-                  onClick={() => exportToCSV(calls, selectedCampaignName)}
-                  className="bg-green-600 hover:bg-green-700 text-white h-8 px-2 text-sm gap-1"
-                  disabled={calls.length === 0}
-                >
-                  <FileDown className="w-3.5 h-3.5" />
-                  Export
-                </Button>
                 {selectedCampaign && (
                   <Button
                     onClick={exportDetailedReport}
                     className="bg-blue-600 hover:bg-blue-700 text-white h-8 px-2 text-sm gap-1"
+                    disabled={isExportingDetailed}
                   >
-                    Export Detailed Report
+                    {isExportingDetailed ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                        Exporting...
+                      </>
+                    ) : (
+                      'Export Detailed Report'
+                    )}
                   </Button>
                 )}
               </div>

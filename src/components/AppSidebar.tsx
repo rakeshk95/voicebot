@@ -47,6 +47,27 @@ export function AppSidebar() {
   const location = useLocation();
   const currentPath = location.pathname;
 
+  // Get user role from localStorage
+  let userRole = '';
+  try {
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    userRole = userData.role || '';
+  } catch {}
+
+  // Filter navigation items based on role
+  let filteredNavigationItems = navigationItems;
+  if (userRole.toLowerCase() !== 'super admin') {
+    filteredNavigationItems = [
+      {
+        title: 'CORE',
+        items: [
+          { title: 'Campaigns', url: '/campaigns', icon: BarChart },
+          { title: 'Call History', url: '/call-history', icon: History },
+        ]
+      }
+    ];
+  }
+
   const handleLogout = () => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('userData');
@@ -68,7 +89,7 @@ export function AppSidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-4 mt-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 hover:scrollbar-thumb-gray-300">
-        {navigationItems.map((group, index) => (
+        {filteredNavigationItems.map((group, index) => (
           <div key={group.title} className={index === 0 ? "" : "mt-8"}>
             <div className="mb-2">
               <h3 className="text-xs font-medium text-sidebar-muted px-2">
