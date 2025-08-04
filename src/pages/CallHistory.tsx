@@ -128,6 +128,19 @@ const CallHistory = () => {
   ];
 
   const handleDatePreset = (preset: { start: Date; end: Date }) => {
+    // Validate date range for presets
+    const oneMonthLater = new Date(preset.start);
+    oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+    
+    if (preset.end > oneMonthLater) {
+      toast({
+        title: "Invalid Date Range",
+        description: "Date range cannot exceed one month",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setStartDate(preset.start);
     setEndDate(preset.end);
   };
@@ -137,7 +150,6 @@ const CallHistory = () => {
     setEndDate(null);
     setNextCursor(null);
     setCurrentPage(1);
-    fetchCallData(1, selectedCampaign, false);
   };
 
   const durationRanges = [
@@ -380,7 +392,7 @@ const CallHistory = () => {
       console.log('Mapped Calls:', mappedCalls);
 
       if (append) {
-        setCalls(prevCalls => [...prevCalls, ...mappedCalls]);
+        setCalls(mappedCalls);
       } else {
         setCalls(mappedCalls);
       }
@@ -474,6 +486,14 @@ const CallHistory = () => {
       fetchCampaigns();
     }
   }, [campaignId, campaignName]);
+
+  // Effect to handle date changes and trigger API calls
+  useEffect(() => {
+    if (selectedCampaign) {
+      // Trigger API call whenever dates change (including when cleared)
+      fetchCallData(1, selectedCampaign, false);
+    }
+  }, [startDate, endDate, selectedCampaign]);
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -953,10 +973,24 @@ const CallHistory = () => {
                 <DatePicker
                   selected={startDate}
                   onChange={(date: Date) => {
+                    // Validate date range when setting start date
+                    if (date && endDate) {
+                      const oneMonthLater = new Date(date);
+                      oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+                      
+                      if (endDate > oneMonthLater) {
+                        toast({
+                          title: "Invalid Date Range",
+                          description: "Date range cannot exceed one month",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                    }
+                    
                     setStartDate(date);
                     setNextCursor(null);
                     setCurrentPage(1);
-                    fetchCallData(1, selectedCampaign, false);
                   }}
                   customInput={
                     <Button variant="outline" className="w-[140px] h-8 justify-start text-left font-normal border-gray-200 text-sm">
@@ -977,10 +1011,24 @@ const CallHistory = () => {
                 <DatePicker
                   selected={endDate}
                   onChange={(date: Date) => {
+                    // Validate date range when setting end date
+                    if (date && startDate) {
+                      const oneMonthLater = new Date(startDate);
+                      oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+                      
+                      if (date > oneMonthLater) {
+                        toast({
+                          title: "Invalid Date Range",
+                          description: "Date range cannot exceed one month",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                    }
+                    
                     setEndDate(date);
                     setNextCursor(null);
                     setCurrentPage(1);
-                    fetchCallData(1, selectedCampaign, false);
                   }}
                   customInput={
                     <Button variant="outline" className="w-[140px] h-8 justify-start text-left font-normal border-gray-200 text-sm">
@@ -994,6 +1042,11 @@ const CallHistory = () => {
                   dropdownMode="select"
                   minDate={startDate || undefined}
                 />
+              </div>
+              
+              {/* Date range helper text */}
+              <div className="text-xs text-gray-500 mt-1">
+                Maximum date range: 1 month
               </div>
             </div>
           </div>

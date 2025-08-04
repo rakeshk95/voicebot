@@ -560,7 +560,7 @@ export default function Users() {
         user.role === 'superuser' ? 'Super Admin' : user.role.replace('_', ' '),
         user.status,
         user.mobile_number || 'Not Set',
-        user.organization_name || 'Not Set',
+        user.organization_id,
         formatDate(user.created_at)
       ]);
 

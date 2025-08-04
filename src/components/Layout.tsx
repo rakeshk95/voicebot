@@ -19,7 +19,7 @@ export function Layout() {
       <AppSidebar />
       
       {/* Main Content */}
-      <div className="flex-1 ml-64 flex flex-col min-h-screen">
+      <div className="flex-1 ml-64 flex flex-col min-h-screen relative">
         <Header />
         <main className="flex-1 p-8">
           <Outlet />

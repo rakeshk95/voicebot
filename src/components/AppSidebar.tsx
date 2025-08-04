@@ -56,7 +56,7 @@ export function AppSidebar() {
 
   // Filter navigation items based on role
   let filteredNavigationItems = navigationItems;
-  if (userRole.toLowerCase() !== 'super admin') {
+  if (userRole.toLowerCase() == 'super admin') {
     filteredNavigationItems = [
       {
         title: 'CORE',
