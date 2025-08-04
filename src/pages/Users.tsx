@@ -273,24 +273,28 @@ export default function Users() {
   };
   
 
-  // Optimize the fetch by removing unnecessary dependencies
+  // Fetch users only after organizations are loaded
   useEffect(() => {
-    const delayedFetch = setTimeout(() => {
-      fetchUsers();
-    }, 300); // Add a small delay to prevent too frequent API calls
+    if (organizations.length > 0) {
+      const delayedFetch = setTimeout(() => {
+        fetchUsers();
+      }, 300);
+      return () => clearTimeout(delayedFetch);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organizations, currentPage, pageSize]);
 
-    return () => clearTimeout(delayedFetch);
-  }, [currentPage, pageSize]); // Only re-fetch when page or size changes
-
-  // Separate effect for search and date filters
+  // Update the search/filter effect
   useEffect(() => {
-    const searchDelay = setTimeout(() => {
-      setCurrentPage(1); // Reset to first page when filters change
-      fetchUsers();
-    }, 500); // Longer delay for search to prevent too many API calls while typing
-
-    return () => clearTimeout(searchDelay);
-  }, [searchTerm, startDate, endDate]);
+    if (organizations.length > 0) {
+      const searchDelay = setTimeout(() => {
+        setCurrentPage(1); // Reset to first page when filters change
+        fetchUsers();
+      }, 500);
+      return () => clearTimeout(searchDelay);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, startDate, endDate, organizations]);
 
   // Pre-fetch organizations only once when component mounts
   useEffect(() => {
@@ -560,7 +564,7 @@ export default function Users() {
         user.role === 'superuser' ? 'Super Admin' : user.role.replace('_', ' '),
         user.status,
         user.mobile_number || 'Not Set',
-        user.organization_id,
+        user.organization_name,
         formatDate(user.created_at)
       ]);
 
