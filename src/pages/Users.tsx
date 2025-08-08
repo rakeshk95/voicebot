@@ -69,6 +69,17 @@ interface Organization {
   name: string;
 }
 
+interface Campaign {
+  id: string;
+  name: string;
+  direction: 'INBOUND' | 'OUTBOUND';
+  state: 'TRIAL' | 'ACTIVE' | 'INACTIVE';
+  org_id: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 interface User {
   id: string;
   email: string;
@@ -85,6 +96,7 @@ interface User {
   modified_at: string;
   organization_name: string | null;
   role_id?: string;
+  campaign_ids?: string[];
 }
 
 interface ApiResponse {
@@ -104,6 +116,7 @@ const userSchema = z.object({
   role: z.string(),
   organization_id: z.string().optional(),
   status: z.string(),
+  campaign_ids: z.array(z.string()).optional(),
 });
 
 interface UserFormData {
@@ -115,6 +128,7 @@ interface UserFormData {
   role_id: string;
   organization_id: string | null;
   status: 'active' | 'inactive';
+  campaign_ids?: string[];
 }
 
 export default function Users() {
@@ -131,6 +145,7 @@ export default function Users() {
   const [viewingUser, setViewingUser] = useState<User | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -145,7 +160,8 @@ export default function Users() {
     mobile_number: "",
     role_id: "",
     organization_id: null,
-    status: "active"
+    status: "active",
+    campaign_ids: []
   });
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
@@ -166,6 +182,7 @@ export default function Users() {
       role: "user",
       organization_id: "",
       status: "active",
+      campaign_ids: [],
     },
   });
 
@@ -227,7 +244,7 @@ export default function Users() {
         params.append("end_date", endDate.toISOString());
       }
   
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/users/?${params.toString()}`, {
+      const response = await fetch(`http://localhost:8000/api/v1/users/?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
           "Content-Type": "application/json",
@@ -273,20 +290,20 @@ export default function Users() {
   };
   
 
-  // Fetch users only after organizations are loaded
+  // Fetch users only after organizations and campaigns are loaded
   useEffect(() => {
-    if (organizations.length > 0) {
+    if (organizations.length > 0 && campaigns.length > 0) {
       const delayedFetch = setTimeout(() => {
         fetchUsers();
       }, 300);
       return () => clearTimeout(delayedFetch);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organizations, currentPage, pageSize]);
+  }, [organizations, campaigns, roles, currentPage, pageSize]);
 
   // Update the search/filter effect
   useEffect(() => {
-    if (organizations.length > 0) {
+    if (organizations.length > 0 && campaigns.length > 0 && roles.length > 0) {
       const searchDelay = setTimeout(() => {
         setCurrentPage(1); // Reset to first page when filters change
         fetchUsers();
@@ -294,13 +311,13 @@ export default function Users() {
       return () => clearTimeout(searchDelay);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, startDate, endDate, organizations]);
+  }, [searchTerm, startDate, endDate, organizations, campaigns, roles]);
 
-  // Pre-fetch organizations only once when component mounts
+  // Pre-fetch organizations, campaigns, and roles only once when component mounts
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+        const response = await fetch('http://localhost:8000/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -323,21 +340,105 @@ export default function Users() {
       }
     };
 
-    fetchOrganizations();
+    const fetchCampaignsData = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/v1/campaigns/', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+            'Content-Type': 'application/json'
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch campaigns');
+        }
+
+        const data = await response.json();
+        setCampaigns(data);
+      } catch (error) {
+        console.error('Error fetching campaigns:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load campaigns",
+          variant: "destructive",
+        });
+      }
+    };
+
+    const fetchRolesData = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/v1/roles/', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+            'Content-Type': 'application/json'
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch roles');
+        }
+
+        const data = await response.json();
+        console.log('Fetched roles:', data);
+        setRoles(data);
+      } catch (error) {
+        console.error('Error fetching roles:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load roles",
+          variant: "destructive",
+        });
+      }
+    };
+
+    // Fetch organizations, campaigns, and roles
+    Promise.all([fetchOrganizations(), fetchCampaignsData(), fetchRolesData()]);
   }, []); // Empty dependency array means this runs once on mount
+
+  // Function to fetch campaigns
+  const fetchCampaigns = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/campaigns/', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json'
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch campaigns');
+      }
+
+      const data = await response.json();
+      setCampaigns(data);
+    } catch (error) {
+      console.error('Error fetching campaigns:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load campaigns",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Function to fetch roles and organizations data
   const fetchCreateUserData = async () => {
     try {
       setIsLoadingCreateData(true);
-      const [rolesResponse, orgsResponse] = await Promise.all([
-        fetch('https://platform.voxiflow.com/backend/api/v1/roles/', {
+      const [rolesResponse, orgsResponse, campaignsResponse] = await Promise.all([
+        fetch('http://localhost:8000/api/v1/roles/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
           },
         }),
-        fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+        fetch('http://localhost:8000/api/v1/organizations', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+            'Content-Type': 'application/json'
+          },
+        }),
+        fetch('http://localhost:8000/api/v1/campaigns/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -345,17 +446,19 @@ export default function Users() {
         })
       ]);
 
-      if (!rolesResponse.ok || !orgsResponse.ok) {
+      if (!rolesResponse.ok || !orgsResponse.ok || !campaignsResponse.ok) {
         throw new Error('Failed to fetch required data');
       }
 
-      const [rolesData, orgsData] = await Promise.all([
+      const [rolesData, orgsData, campaignsData] = await Promise.all([
         rolesResponse.json(),
-        orgsResponse.json()
+        orgsResponse.json(),
+        campaignsResponse.json()
       ]);
 
       setRoles(rolesData);
       setOrganizations(orgsData);
+      setCampaigns(campaignsData);
       setIsCreateDialogOpen(true);
     } catch (error) {
       console.error('Error fetching create user data:', error);
@@ -371,7 +474,7 @@ export default function Users() {
 
   // Handle Add User button click
   const handleAddUserClick = () => {
-    if (roles.length === 0 || organizations.length === 0) {
+    if (roles.length === 0 || organizations.length === 0 || campaigns.length === 0) {
       fetchCreateUserData();
     } else {
       setIsCreateDialogOpen(true);
@@ -381,7 +484,7 @@ export default function Users() {
   const handleDeleteUser = async (user: User) => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/users/${user.id}`, {
+      const response = await fetch(`http://localhost:8000/api/v1/users/${user.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -416,6 +519,7 @@ export default function Users() {
 
   const handleEdit = (user: User) => {
     console.log('Edit clicked for user:', user);
+    console.log('Available roles:', roles);
     setEditingUser(user);
     setIsDialogOpen(true);
     form.reset({
@@ -426,6 +530,7 @@ export default function Users() {
       role: user.role_id || "",
       organization_id: user.organization_id || "",
       status: user.status || "active",
+      campaign_ids: user.campaign_ids || [],
     });
   };
 
@@ -443,7 +548,7 @@ export default function Users() {
 
       console.log('Sending update data:', updateData); // Debug log
 
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/users/${editingUser.id}`, {
+      const response = await fetch(`http://localhost:8000/api/v1/users/${editingUser.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -507,10 +612,11 @@ export default function Users() {
         mobile_number: createFormData.mobile_number,
         role_id: createFormData.role_id,
         organization_id: createFormData.organization_id,
-        status: createFormData.status
+        status: createFormData.status,
+        campaign_ids: createFormData.campaign_ids || [],
       };
 
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/users/', {
+      const response = await fetch('http://localhost:8000/api/v1/users/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -540,7 +646,8 @@ export default function Users() {
         mobile_number: "",
         role_id: "",
         organization_id: null,
-        status: "active"
+        status: "active",
+        campaign_ids: []
       });
     } catch (error: any) {
       console.error("User creation failed:", error);
@@ -557,7 +664,7 @@ export default function Users() {
   const handleExportToCSV = () => {
     try {
       // Convert users data to CSV format
-      const headers = ['Name', 'Email', 'Role', 'Status', 'Mobile', 'Organization', 'Created Date'];
+      const headers = ['Name', 'Email', 'Role', 'Status', 'Mobile', 'Organization', 'Campaigns', 'Created Date'];
       const csvData = users.map(user => [
         `${user.first_name} ${user.last_name}`.trim() || 'Not Set',
         user.email,
@@ -565,6 +672,12 @@ export default function Users() {
         user.status,
         user.mobile_number || 'Not Set',
         user.organization_name,
+        user.campaign_ids && user.campaign_ids.length > 0 
+          ? user.campaign_ids.map(campaignId => {
+              const campaign = campaigns.find(c => c.id === campaignId);
+              return campaign ? campaign.name : campaignId;
+            }).join('; ')
+          : 'Not Set',
         formatDate(user.created_at)
       ]);
 
@@ -696,6 +809,7 @@ export default function Users() {
               <TableHead className="font-medium text-gray-600">Status</TableHead>
               <TableHead className="font-medium text-gray-600">Mobile</TableHead>
               <TableHead className="font-medium text-gray-600">Organization</TableHead>
+              <TableHead className="font-medium text-gray-600">Campaigns</TableHead>
               <TableHead className="font-medium text-gray-600">Created Date</TableHead>
               <TableHead className="font-medium text-gray-600 text-right pr-4">Actions</TableHead>
             </TableRow>
@@ -703,7 +817,7 @@ export default function Users() {
           <TableBody>
             {isInitialLoading ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8">
+                <TableCell colSpan={9} className="text-center py-8">
                   <div className="flex items-center justify-center">
                     <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2" />
                     <span className="text-gray-500">Loading users...</span>
@@ -712,7 +826,7 @@ export default function Users() {
               </TableRow>
             ) : users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8">
+                <TableCell colSpan={9} className="text-center py-8">
                   <div className="flex flex-col items-center justify-center text-gray-500">
                     <UserIcon className="h-8 w-8 mb-2 text-gray-400" />
                     <p className="text-lg font-medium">No users found</p>
@@ -754,6 +868,27 @@ export default function Users() {
                   </TableCell>
                   <TableCell className="text-gray-600">{user.mobile_number || 'Not Set'}</TableCell>
                   <TableCell className="text-gray-600">{user.organization_name || 'Not Set'}</TableCell>
+                  <TableCell className="text-gray-600">
+                    {user.campaign_ids && user.campaign_ids.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {user.campaign_ids.slice(0, 2).map((campaignId) => {
+                          const campaign = campaigns.find(c => c.id === campaignId);
+                          return campaign ? (
+                            <Badge key={campaignId} variant="outline" className="text-xs">
+                              {campaign.name}
+                            </Badge>
+                          ) : null;
+                        })}
+                        {user.campaign_ids.length > 2 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{user.campaign_ids.length - 2} more
+                          </Badge>
+                        )}
+                      </div>
+                    ) : (
+                      'Not Set'
+                    )}
+                  </TableCell>
                   <TableCell className="text-gray-600">{formatDate(user.created_at)}</TableCell>
                   <TableCell className="text-right pr-4">
                     <div className="flex items-center justify-end gap-1">
@@ -949,6 +1084,58 @@ export default function Users() {
                     )}
                   />
                 )}
+
+                <FormField
+                  control={form.control}
+                  name="campaign_ids"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Campaigns</FormLabel>
+                      <Select 
+                        onValueChange={(value) => {
+                          const currentIds = field.value || [];
+                          if (currentIds.includes(value)) {
+                            field.onChange(currentIds.filter(id => id !== value));
+                          } else {
+                            field.onChange([...currentIds, value]);
+                          }
+                        }}
+                        value=""
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select campaigns" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {campaigns.map((campaign) => (
+                            <SelectItem key={campaign.id} value={campaign.id}>
+                              {campaign.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {field.value && field.value.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {field.value.map((campaignId) => {
+                            const campaign = campaigns.find(c => c.id === campaignId);
+                            return campaign ? (
+                              <Badge 
+                                key={campaignId} 
+                                variant="secondary" 
+                                className="cursor-pointer"
+                                onClick={() => field.onChange(field.value?.filter(id => id !== campaignId))}
+                              >
+                                {campaign.name} ×
+                              </Badge>
+                            ) : null;
+                          })}
+                        </div>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
@@ -1051,6 +1238,28 @@ export default function Users() {
                 <div className="space-y-2">
                   <Label className="text-sm font-medium text-muted-foreground">Organization</Label>
                   <div className="p-3 bg-muted/50 rounded-lg">{viewingUser?.organization_name || "Not Set"}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">Assigned Campaigns</Label>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    {viewingUser?.campaign_ids && viewingUser.campaign_ids.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {viewingUser.campaign_ids.map((campaignId) => {
+                          const campaign = campaigns.find(c => c.id === campaignId);
+                          return campaign ? (
+                            <Badge key={campaignId} variant="outline" className="text-sm">
+                              {campaign.name}
+                            </Badge>
+                          ) : null;
+                        })}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">No campaigns assigned</span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1271,6 +1480,61 @@ export default function Users() {
                     <SelectItem value="inactive">Inactive</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="campaigns">Campaigns</Label>
+                <Select
+                  value=""
+                  onValueChange={(value) => {
+                    const currentIds = createFormData.campaign_ids || [];
+                    if (currentIds.includes(value)) {
+                      setCreateFormData({ 
+                        ...createFormData, 
+                        campaign_ids: currentIds.filter(id => id !== value) 
+                      });
+                    } else {
+                      setCreateFormData({ 
+                        ...createFormData, 
+                        campaign_ids: [...currentIds, value] 
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select campaigns" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {campaigns.map((campaign) => (
+                      <SelectItem key={campaign.id} value={campaign.id}>
+                        {campaign.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {createFormData.campaign_ids && createFormData.campaign_ids.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {createFormData.campaign_ids.map((campaignId) => {
+                      const campaign = campaigns.find(c => c.id === campaignId);
+                      return campaign ? (
+                        <Badge 
+                          key={campaignId} 
+                          variant="secondary" 
+                          className="cursor-pointer"
+                          onClick={() => {
+                            const currentIds = createFormData.campaign_ids || [];
+                            setCreateFormData({ 
+                              ...createFormData, 
+                              campaign_ids: currentIds.filter(id => id !== campaignId) 
+                            });
+                          }}
+                        >
+                          {campaign.name} ×
+                        </Badge>
+                      ) : null;
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 

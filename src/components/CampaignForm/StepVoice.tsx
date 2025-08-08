@@ -3,6 +3,7 @@ import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/comp
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UseFormReturn } from "react-hook-form";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/use-toast";
 
 const PRIMARY_COLOR = '#2B50A1'; // Voxiflow blue
 const ACCENT_COLOR = '#F15A29';  // Voxiflow orange
@@ -23,32 +24,89 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
   const [type, setType] = useState('');
   const [provider, setProvider] = useState('elevenlabs');
   const [selected, setSelected] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  const ELEVEN_LABS_API = 'https://platform.voxiflow.com/backend/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222';
-  // Use the login token from localStorage for Authorization
-
+  const { toast } = useToast();
+  
+  // API endpoints - removed hardcoded voice IDs
+  const ELEVEN_LABS_API = 'http://localhost:8000/api/v1/voices';
+  const CARTESIA_API = 'http://localhost:8000/api/v1/voices?voice_ids=f91ab3e6-5071-4e15-b016-cde6f2bcd222';
+  
   useEffect(() => {
     if (provider === 'elevenlabs') {
       setLoading(true);
+      setError(null);
       fetch(ELEVEN_LABS_API, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'accept': 'application/json',
         },
       })
-        .then((res) => res.json())
+        .then(async (res) => {
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || `Failed to fetch Eleven Labs voices: ${res.status}`);
+          }
+          return res.json();
+        })
         .then((data) => {
           setVoices(data);
           setLoading(false);
         })
-        .catch(() => setLoading(false));
-    } else if (provider === '' || provider === 'cartesia') {
-      // Optionally clear or fetch Cartesia voices here
+        .catch((error) => {
+          console.error('Eleven Labs API error:', error);
+          setError(error.message);
+          setVoices([]);
+          setLoading(false);
+          toast({
+            title: "Error",
+            description: error.message,
+            variant: "destructive",
+          });
+        });
+  
+    } else if (provider === 'cartesia') {
+      setLoading(true);
+      setError(null);
+      
+      // Check if Cartesia token exists
+    
+      fetch(CARTESIA_API, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'accept': 'application/json',
+        },
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || `Failed to fetch Cartesia voices: ${res.status}`);
+          }
+          return res.json();
+        })
+        .then((data) => {
+          setVoices(data);
+          setLoading(false);
+        })
+        .catch((error) => {
+          console.error('Cartesia API error:', error);
+          setError(error.message);
+          setVoices([]);
+          setLoading(false);
+          toast({
+            title: "Cartesia API Error",
+            description: error.message,
+            variant: "destructive",
+          });
+        });
+  
+    } else {
+      // No provider or unsupported provider → clear voices
       setVoices([]);
+      setError(null);
     }
-  }, [provider]);
-
+  }, [provider, toast]);
+  
   useEffect(() => {
     const formVoiceId = form.getValues('tts.voice_id');
     if (selectedVoiceId && selectedVoiceId !== selected) {
@@ -93,7 +151,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
     };
   }, [audioRef.current]);
 
-  // Filtering logic
+  // Improved filtering logic with better data structure handling
   const filteredVoices = voices.filter((voice: any) => {
     if (provider === 'elevenlabs') {
       if (voice.source !== 'eleven_labs') return false;
@@ -159,17 +217,118 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
             setLanguage('');
             setGender('');
             setSelected(null);
+            setError(null);
           }}
         >
           Reset
         </button>
       </div>
 
+      {/* Error Display */}
+      {error && (
+        <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <span className="text-red-700 text-sm font-medium">{error}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Cartesia Token Configuration */}
+      {provider === 'cartesia' && !localStorage.getItem('cartesiaToken') && (
+        <div className="mb-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start">
+            <svg className="w-5 h-5 text-blue-500 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            <div className="flex-1">
+              <h4 className="text-blue-800 text-sm font-medium mb-2">Cartesia Configuration Required</h4>
+              <p className="text-blue-700 text-sm mb-3">
+                To use Cartesia voices, you need to configure your Cartesia API token. Please contact your administrator or refer to the Cartesia documentation.
+              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="password"
+                  placeholder="Enter Cartesia API Token"
+                  className="flex-1 text-sm"
+                  id="cartesia-token-input"
+                />
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                  onClick={() => {
+                    const tokenInput = document.getElementById('cartesia-token-input') as HTMLInputElement;
+                    const token = tokenInput?.value?.trim();
+                    if (token) {
+                      localStorage.setItem('cartesiaToken', token);
+                      toast({
+                        title: "Success",
+                        description: "Cartesia token configured successfully",
+                        variant: "default",
+                      });
+                      // Trigger a re-fetch of voices
+                      setProvider('elevenlabs');
+                      setTimeout(() => setProvider('cartesia'), 100);
+                    } else {
+                      toast({
+                        title: "Error",
+                        description: "Please enter a valid Cartesia API token",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                >
+                  Configure
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cartesia Token Management */}
+      {provider === 'cartesia' && localStorage.getItem('cartesiaToken') && (
+        <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              <span className="text-green-700 text-sm font-medium">Cartesia token configured</span>
+            </div>
+            <button
+              type="button"
+              className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition"
+              onClick={() => {
+                localStorage.removeItem('cartesiaToken');
+                toast({
+                  title: "Token Removed",
+                  description: "Cartesia token has been removed",
+                  variant: "default",
+                });
+                setVoices([]);
+                setError(null);
+              }}
+            >
+              Remove Token
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Voice List Table */}
       <div className="w-full overflow-x-auto md:overflow-x-visible">
         <audio ref={audioRef} style={{ display: 'none' }} />
         {loading ? (
           <div className="p-2 text-center text-gray-500">Loading voices...</div>
+        ) : filteredVoices.length === 0 && !error ? (
+          <div className="p-2 text-center text-gray-500">
+            {provider === 'cartesia' && !localStorage.getItem('cartesiaToken') 
+              ? 'Cartesia token not configured. Please set up Cartesia authentication.'
+              : 'No voices found matching your criteria.'}
+          </div>
         ) : (
           <table className="w-full min-w-[700px] max-w-full bg-white border border-gray-200 rounded shadow-sm text-sm">
             <thead>
@@ -185,12 +344,12 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
             </thead>
             <tbody>
               {filteredVoices.map((voice: any, idx: number) => {
-                // For Eleven Labs mapping
-                const country = voice.locale ? (voice.locale.split('-')[1] || '-') : '-';
+                // Improved data mapping for both providers
+                const country = voice.locale ? (voice.locale.split('-')[1] || '-') : (voice.country || '-');
                 const languageLabel = voice.language ? voice.language.toUpperCase() : '-';
-                const previewUrl = voice.lang_preview_url || voice.main_preview_url;
+                const previewUrl = voice.lang_preview_url || voice.main_preview_url || voice.preview_url;
                 return (
-                  <tr key={voice.voice_id || idx} className={
+                  <tr key={voice.voice_id || voice.id || idx} className={
                     `border-b last:border-b-0 ${idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'} hover:bg-[${PRIMARY_COLOR}]/10 transition-colors`
                   }>
                     <td className="px-2 py-2">
@@ -200,6 +359,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
                         style={{ background: ACCENT_COLOR }}
                         title="Play"
                         onClick={() => handlePlay(previewUrl)}
+                        disabled={!previewUrl}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="white" viewBox="0 0 20 20" className={`w-4 h-4 ${isPlayingId === previewUrl ? 'animate-spin' : ''}`}><path d="M6 4l10 6-10 6V4z" /></svg>
                         {isPlayingId === previewUrl && <span className="absolute -right-10 text-xs text-blue-600 font-semibold">Playing...</span>}
@@ -209,7 +369,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
                       <span className="font-bold text-gray-800">{voice.name}</span>
                     </td>
                     <td className="px-2 py-2">
-                      <span className="text-blue-500 font-medium">{voice.main_accent || '-'}</span>
+                      <span className="text-blue-500 font-medium">{voice.main_accent || voice.accent || '-'}</span>
                     </td>
                     <td className="px-2 py-2 capitalize text-gray-700">{voice.gender || '-'}</td>
                     <td className="px-2 py-2">{country}</td>
@@ -218,10 +378,11 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
                       <input
                         type="checkbox"
                         className={`accent-[${ACCENT_COLOR}] w-4 h-4`}
-                        checked={selected === voice.voice_id}
+                        checked={selected === (voice.voice_id || voice.id)}
                         onChange={() => {
-                          setSelected(voice.voice_id);
-                          form.setValue('tts.voice_id', voice.voice_id);
+                          const voiceId = voice.voice_id || voice.id;
+                          setSelected(voiceId);
+                          form.setValue('tts.voice_id', voiceId);
                           form.setValue('tts.language', voice.language || '');
                           form.setValue('tts.gender', voice.gender || '');
                           form.setValue('tts.vendor', provider === 'elevenlabs' ? '11labs' : provider);

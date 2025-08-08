@@ -181,7 +181,7 @@ const CallHistory = () => {
     const insights = await Promise.all(
       calls.map(async call => {
         try {
-          const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/calls/${call.Sid}/artifacts`, {
+          const response = await fetch(`http://localhost:8000/api/v1/calls/${call.Sid}/artifacts`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -309,7 +309,7 @@ const CallHistory = () => {
         formattedEndDate = format(end, "yyyy-MM-dd'T'HH:mm:ss'Z'");
       }
 
-      const apiUrl = new URL(`https://platform.voxiflow.com/backend/api/v1/calls/external/${targetCampaignId}/list`);
+      const apiUrl = new URL(`http://localhost:8000/api/v1/calls/external/${targetCampaignId}/list`);
       
       apiUrl.searchParams.append('start_date', formattedStartDate);
       apiUrl.searchParams.append('end_date', formattedEndDate);
@@ -425,7 +425,7 @@ const CallHistory = () => {
 
   const fetchCampaigns = async () => {
     try {
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
+      const response = await fetch('http://localhost:8000/api/v1/campaigns/', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         },
@@ -553,7 +553,7 @@ const CallHistory = () => {
     setIsLoadingTranscription(true);
 
     try {
-      const apiUrl = `https://platform.voxiflow.com/backend/api/v1/calls/${callId}/artifacts`;
+      const apiUrl = `http://localhost:8000/api/v1/calls/${callId}/artifacts`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -643,7 +643,7 @@ const CallHistory = () => {
     setIsSubmittingRating(true);
     try {
       const response = await fetch(
-        `https://platform.voxiflow.com/backend/api/v1/calls/${selectedCallForRating.Sid}/rating`,
+        `http://localhost:8000/api/v1/calls/${selectedCallForRating.Sid}/rating`,
         {
           method: 'POST',
           headers: {
@@ -713,7 +713,7 @@ const CallHistory = () => {
       campaign_id: selectedCampaign
     });
     try {
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/calls/', {
+      const response = await fetch('http://localhost:8000/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -772,7 +772,7 @@ const CallHistory = () => {
       }
 
       // Updated API endpoint as per user instruction
-      const apiUrl = `https://platform.voxiflow.com/backend/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
+      const apiUrl = `http://localhost:8000/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -820,7 +820,7 @@ const CallHistory = () => {
     let page = 1;
     const pageSize = 10;
     do {
-      let apiUrl = new URL(`https://platform.voxiflow.com/backend/api/v1/calls/external/${campaignId}/list`);
+      let apiUrl = new URL(`http://localhost:8000/api/v1/calls/external/${campaignId}/list`);
       apiUrl.searchParams.append('start_date', startDate);
       apiUrl.searchParams.append('end_date', endDate);
       apiUrl.searchParams.append('page_size', pageSize.toString());
@@ -844,7 +844,7 @@ const CallHistory = () => {
 
   // Add this function to fetch artifacts for a call
   const fetchArtifacts = async (callId: string) => {
-    const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/calls/${callId}/artifacts`, {
+    const response = await fetch(`http://localhost:8000/api/v1/calls/${callId}/artifacts`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         'Content-Type': 'application/json',

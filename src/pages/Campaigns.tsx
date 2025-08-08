@@ -351,6 +351,7 @@ const Campaigns = () => {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [selectedOrgFilter, setSelectedOrgFilter] = useState<string>('all');
   const [currentStep, setCurrentStep] = useState(1);
   const [activeFlowTab, setActiveFlowTab] = useState<'context' | 'graph' | 'responses' | 'variables' | 'knowledgeBase'>('context');
   const [responses, setResponses] = useState<ResponseItem[]>([]);
@@ -446,7 +447,7 @@ const Campaigns = () => {
   useEffect(() => {
     const fetchCampaigns = async () => {
       try {
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
+        const response = await fetch('http://localhost:8000/api/v1/campaigns/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -458,24 +459,31 @@ const Campaigns = () => {
         }
 
         const data = await response.json();
-        const formattedCampaigns = data.map((campaign: any) => ({
-          id: campaign.id,
-          name: campaign.name,
-          direction: campaign.direction,
-          state: campaign.state,
-          status: campaign.is_active ? 'Active' : 'Inactive',
-          type: campaign.direction === 'INBOUND' ? 'Inbound' : 'Outbound',
-          language: campaign.tts?.language || 'N/A',
-          voice_id: campaign.tts?.voice_id || 'N/A',
-          created_at: campaign.created_at,
-          updated_at: campaign.updated_at,
-          org_id: campaign.org_id,
-          telephonic_provider: campaign.telephonic_provider,
-          knowledge_base: campaign.knowledge_base,
-          post_call_actions: campaign.post_call_actions,
-          tts: campaign.tts,
-          llm: campaign.llm,
-        }));
+        const formattedCampaigns = data.map((campaign: any) => {
+          // Find organization name by org_id
+          const organization = organizations.find(org => org.id === campaign.org_id);
+          const orgName = organization ? organization.name : 'Unknown Organization';
+          
+          return {
+            id: campaign.id,
+            name: campaign.name,
+            direction: campaign.direction,
+            state: campaign.state,
+            status: campaign.is_active ? 'Active' : 'Inactive',
+            type: campaign.direction === 'INBOUND' ? 'Inbound' : 'Outbound',
+            language: campaign.tts?.language || 'N/A',
+            voice_id: campaign.tts?.voice_id || 'N/A',
+            created_at: campaign.created_at,
+            updated_at: campaign.updated_at,
+            org_id: campaign.org_id,
+            org_name: orgName,
+            telephonic_provider: campaign.telephonic_provider,
+            knowledge_base: campaign.knowledge_base,
+            post_call_actions: campaign.post_call_actions,
+            tts: campaign.tts,
+            llm: campaign.llm,
+          };
+        });
 
         setCampaigns(formattedCampaigns);
       } catch (error) {
@@ -490,13 +498,16 @@ const Campaigns = () => {
       }
     };
 
-    fetchCampaigns();
-  }, []);
+    // Only fetch campaigns if organizations are loaded
+    if (organizations.length > 0) {
+      fetchCampaigns();
+    }
+  }, [organizations]);
 
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+        const response = await fetch('http://localhost:8000/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -528,12 +539,15 @@ const Campaigns = () => {
     const matchesSearch = 
       campaign.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       campaign.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      campaign.type?.toLowerCase().includes(searchTerm.toLowerCase());
+      campaign.type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      campaign.org_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesDateRange = (!startDate || new Date(campaign.created_at) >= startDate) &&
                            (!endDate || new Date(campaign.created_at) <= endDate);
 
-    return matchesSearch && matchesDateRange;
+          const matchesOrgFilter = selectedOrgFilter === 'all' || campaign.org_id === selectedOrgFilter;
+
+    return matchesSearch && matchesDateRange && matchesOrgFilter;
   }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); // Sort by created_at in descending order
 
   const getStatusColor = (status: string) => {
@@ -549,7 +563,7 @@ const Campaigns = () => {
   const handleEdit = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -804,8 +818,8 @@ const Campaigns = () => {
       // Remove FormData and Excel template logic for campaign create/edit
       // Send JSON body instead
       const url = editingCampaign 
-        ? `https://platform.voxiflow.com/backend/api/v1/campaigns/${editingCampaign.id}`
-        : 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
+        ? `http://localhost:8000/api/v1/campaigns/${editingCampaign.id}`
+        : 'http://localhost:8000/api/v1/campaigns/';
 
       const response = await fetch(url, {
         method: editingCampaign ? 'PUT' : 'POST',
@@ -896,7 +910,7 @@ const Campaigns = () => {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
 
     try {
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -947,7 +961,7 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaignId}/upload`, {
+      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaignId}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1002,7 +1016,7 @@ const Campaigns = () => {
     };
 
     try {
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/calls/', {
+      const response = await fetch('http://localhost:8000/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1087,7 +1101,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -1113,9 +1127,10 @@ const Campaigns = () => {
 
   const handleExportToCSV = () => {
     // Convert campaigns data to CSV format
-    const headers = ['Campaign Name', 'Direction', 'Language', 'Voice ID', 'Provider', 'Created At', 'Updated At', 'Status'];
+    const headers = ['Campaign Name', 'Organization', 'Direction', 'Language', 'Voice ID', 'Provider', 'Created At', 'Updated At', 'Status'];
     const csvData = filteredCampaigns.map(campaign => [
       campaign.name,
+      campaign.org_name,
       campaign.direction,
       campaign.language,
       campaign.voice_id,
@@ -1536,6 +1551,26 @@ const Campaigns = () => {
             </div>
       </div>
 
+            {/* Organization Filter */}
+            <div className="flex items-center gap-2">
+              <Label htmlFor="org-filter" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                Organization:
+              </Label>
+              <Select value={selectedOrgFilter} onValueChange={setSelectedOrgFilter}>
+                <SelectTrigger className="w-[200px] h-9 border-gray-200">
+                  <SelectValue placeholder="All Organizations" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Organizations</SelectItem>
+                  {organizations.map((org) => (
+                    <SelectItem key={org.id} value={org.id}>
+                      {org.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex items-center gap-2">
               <Button 
                 variant="outline" 
@@ -1563,6 +1598,7 @@ const Campaigns = () => {
             <TableHeader>
               <TableRow className="bg-gray-50/80 hover:bg-gray-50/80 border-b border-gray-200">
                 <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Campaign Name</TableHead>
+                <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Organization</TableHead>
                 <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Direction</TableHead>
                 <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Language</TableHead>
                 <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Voice ID</TableHead>
@@ -1575,7 +1611,7 @@ const Campaigns = () => {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-6">
+                  <TableCell colSpan={9} className="text-center py-6">
                     <div className="flex items-center justify-center">
                       <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2" />
                       Loading campaigns...
@@ -1584,7 +1620,7 @@ const Campaigns = () => {
                 </TableRow>
               ) : filteredCampaigns.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-6 text-gray-500">
+                  <TableCell colSpan={9} className="text-center py-6 text-gray-500">
                     No campaigns found
                   </TableCell>
                 </TableRow>
@@ -1592,6 +1628,11 @@ const Campaigns = () => {
                 filteredCampaigns.map((campaign) => (
                   <TableRow key={campaign.id} className="hover:bg-gray-50/50 border-t border-gray-100">
                     <TableCell className="font-medium text-gray-900 py-2 px-4">{campaign.name}</TableCell>
+                    <TableCell className="py-2 px-4">
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                        {campaign.org_name}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="py-2 px-4">
                       <Badge variant={campaign.direction === 'INBOUND' ? 'default' : 'secondary'} className="font-medium">
                         {campaign.direction}
