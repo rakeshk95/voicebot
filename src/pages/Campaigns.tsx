@@ -27,6 +27,7 @@ import {
   X,
   History,
   FileText,
+  FileSpreadsheet,
   MessageSquare,
   Variable,
   Database,
@@ -68,6 +69,7 @@ import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import * as XLSX from 'xlsx-js-style';
+import { cachedFetch } from '@/lib/api';
 
 // Interfaces
 interface Organization {
@@ -352,6 +354,7 @@ const Campaigns = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrgFilter, setSelectedOrgFilter] = useState<string>('all');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [currentStep, setCurrentStep] = useState(1);
   const [activeFlowTab, setActiveFlowTab] = useState<'context' | 'graph' | 'responses' | 'variables' | 'knowledgeBase'>('context');
   const [responses, setResponses] = useState<ResponseItem[]>([]);
@@ -369,12 +372,20 @@ const Campaigns = () => {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedCampaignForUpload, setSelectedCampaignForUpload] = useState<Campaign | null>(null);
+  const [isBulkCallDialogOpen, setIsBulkCallDialogOpen] = useState(false);
+  const [selectedCampaignForBulkCall, setSelectedCampaignForBulkCall] = useState<Campaign | null>(null);
+  const [bulkCallFile, setBulkCallFile] = useState<File | null>(null);
+  const [isBulkCalling, setIsBulkCalling] = useState(false);
   const [allowInterruptions, setAllowInterruptions] = useState(false);
   const [ambientStatus, setAmbientStatus] = useState(false);
   const [sound, setSound] = useState('office');
   const [volume, setVolume] = useState(0.1);
   const [maxIdleReminder, setMaxIdleReminder] = useState(3);
   const [maxIdleDuration, setMaxIdleDuration] = useState(5);
+  
+  // Add missing state variables for StepPostCall
+  const [dataExtractionSystemPrompt, setDataExtractionSystemPrompt] = useState('');
+  const [categoriesSystemPrompt, setCategoriesSystemPrompt] = useState('');
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
@@ -502,24 +513,19 @@ const Campaigns = () => {
     if (organizations.length > 0) {
       fetchCampaigns();
     }
-  }, [organizations]);
+  }, [organizations.length]); // Only depend on organizations length, not the entire array
 
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/v1/organizations', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json'
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch organizations');
+        // Use cached fetch to prevent duplicate API calls
+        const data = await cachedFetch<Organization[]>('/organizations');
+        if (Array.isArray(data)) {
+          setOrganizations(data);
+        } else {
+          console.error('Invalid organizations data format:', data);
+          setOrganizations([]);
         }
-
-        const data = await response.json();
-        setOrganizations(data);
       } catch (error) {
         console.error('Error fetching organizations:', error);
         toast({
@@ -527,11 +533,17 @@ const Campaigns = () => {
           description: "Failed to load organizations",
           variant: "destructive",
         });
+        setOrganizations([]);
       }
     };
 
     fetchOrganizations();
   }, []);
+
+  // Reset status filter when campaigns change
+  useEffect(() => {
+    setSelectedStatusFilter('all');
+  }, [campaigns]);
 
   const filteredCampaigns = campaigns.filter(campaign => {
     if (!campaign) return false; // Add null check
@@ -546,8 +558,9 @@ const Campaigns = () => {
                            (!endDate || new Date(campaign.created_at) <= endDate);
 
           const matchesOrgFilter = selectedOrgFilter === 'all' || campaign.org_id === selectedOrgFilter;
+          const matchesStatusFilter = selectedStatusFilter === 'all' || campaign.state === selectedStatusFilter;
 
-    return matchesSearch && matchesDateRange && matchesOrgFilter;
+    return matchesSearch && matchesDateRange && matchesOrgFilter && matchesStatusFilter;
   }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); // Sort by created_at in descending order
 
   const getStatusColor = (status: string) => {
@@ -992,6 +1005,72 @@ const Campaigns = () => {
     }
   };
 
+  const handleBulkCallSubmit = async () => {
+    if (!bulkCallFile || !selectedCampaignForBulkCall) {
+      toast({
+        title: "Error",
+        description: "Please select a file and campaign for bulk calling",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsBulkCalling(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', bulkCallFile);
+      formData.append('campaign_id', selectedCampaignForBulkCall.id);
+      formData.append('org_id', selectedCampaignForBulkCall.org_id);
+      formData.append('user_id', 'user_1');
+      formData.append('external_username', 'admin@example.com');
+      formData.append('external_password', 'password1234');
+
+      console.log('CallHistory: Initiating bulk calls with FormData:', {
+        campaign_id: selectedCampaignForBulkCall.id,
+        org_id: selectedCampaignForBulkCall.org_id,
+        user_id: 'user_1',
+        external_username: 'admin@example.com',
+        external_password: 'password1234',
+        file: bulkCallFile.name
+      });
+
+      const response = await fetch('http://localhost:8000/api/v1/bulk-calls/bulk-calls', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to initiate bulk calls');
+      }
+
+      const result = await response.json();
+      console.log('Bulk calls initiated:', result);
+
+      toast({
+        title: "Success",
+        description: "Bulk calls initiated successfully",
+      });
+
+      // Reset form and close dialog
+      setIsBulkCallDialogOpen(false);
+      setSelectedCampaignForBulkCall(null);
+      setBulkCallFile(null);
+    } catch (error) {
+      console.error('Error initiating bulk calls:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to initiate bulk calls",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBulkCalling(false);
+    }
+  };
+
   const onCallSubmit = async (data: any) => {
     // Get the variable keys from the selected campaign
     const variableKeys = Object.keys(selectedCampaignForCall?.llm?.promptJson?.promptVariables || {}).filter(
@@ -1098,6 +1177,33 @@ const Campaigns = () => {
     form.setValue(formPath, formValue);
   };
 
+  // Download Excel template for bulk calling
+  const downloadTemplate = () => {
+    // Create sample data for the template
+    const templateData = [
+      { 'Mobile Number': '1234567890', 'Name': 'John Doe', 'Location': 'New York' },
+      { 'Mobile Number': '0987654321', 'Name': 'Jane Smith', 'Location': 'Los Angeles' },
+      { 'Mobile Number': '5555555555', 'Name': 'Bob Johnson', 'Location': 'Chicago' }
+    ];
+
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(templateData);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 15 }, // Mobile Number
+      { wch: 20 }, // Name
+      { wch: 20 }  // Location
+    ];
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, 'Bulk Call Template');
+
+    // Generate and download the file
+    XLSX.writeFile(wb, 'bulk_call_template.xlsx');
+  };
+
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
@@ -1127,17 +1233,17 @@ const Campaigns = () => {
 
   const handleExportToCSV = () => {
     // Convert campaigns data to CSV format
-    const headers = ['Campaign Name', 'Organization', 'Direction', 'Language', 'Voice ID', 'Provider', 'Created At', 'Updated At', 'Status'];
+    const headers = ['Campaign Name', 'Organization', 'Direction', 'Status', 'Language', 'Voice ID', 'Provider', 'Created At', 'Updated At'];
     const csvData = filteredCampaigns.map(campaign => [
       campaign.name,
       campaign.org_name,
       campaign.direction,
+      campaign.state,
       campaign.language,
       campaign.voice_id,
       campaign.telephonic_provider,
       new Date(campaign.created_at).toLocaleString(),
-      new Date(campaign.updated_at).toLocaleString(),
-      campaign.status
+      new Date(campaign.updated_at).toLocaleString()
     ]);
 
     // Create CSV content
@@ -1372,6 +1478,10 @@ const Campaigns = () => {
                           handleKeyValueChange={handleKeyValueChange}
                           handleAddKeyValuePair={handleAddKeyValuePair}
                           handleRemoveKeyValuePair={handleRemoveKeyValuePair}
+                          dataExtractionSystemPrompt={dataExtractionSystemPrompt}
+                          setDataExtractionSystemPrompt={setDataExtractionSystemPrompt}
+                          categoriesSystemPrompt={categoriesSystemPrompt}
+                          setCategoriesSystemPrompt={setCategoriesSystemPrompt}
                         />
                       </div>
                     )}
@@ -1571,6 +1681,24 @@ const Campaigns = () => {
               </Select>
             </div>
 
+            {/* Status Filter */}
+            <div className="flex items-center gap-2">
+              <Label htmlFor="status-filter" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                Status:
+              </Label>
+              <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
+                <SelectTrigger className="w-[150px] h-9 border-gray-200">
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="TRIAL">TRIAL</SelectItem>
+                  <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                  <SelectItem value="INACTIVE">INACTIVE</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex items-center gap-2">
               <Button 
                 variant="outline" 
@@ -1593,59 +1721,72 @@ const Campaigns = () => {
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="overflow-x-auto">
+        <div className="w-full">
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50/80 hover:bg-gray-50/80 border-b border-gray-200">
-                <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Campaign Name</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Organization</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Direction</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Language</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Voice ID</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Provider</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Created At</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Updated At</TableHead>
-                <TableHead className="text-right font-semibold text-gray-700 py-2 px-4 text-sm">Actions</TableHead>
+                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-32">Campaign Name</TableHead>
+                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-28">Organization</TableHead>
+                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-20">Direction</TableHead>
+                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-20">Status</TableHead>
+                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-20">Language</TableHead>
+                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-24">Voice ID</TableHead>
+                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-20">Provider</TableHead>
+                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-24">Created At</TableHead>
+                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-24">Updated At</TableHead>
+                <TableHead className="text-right font-semibold text-gray-700 py-2 px-2 text-xs w-40">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-6">
+                  <TableCell colSpan={10} className="text-center py-6">
                     <div className="flex items-center justify-center">
                       <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2" />
-                      Loading campaigns...
+                      <span className="text-sm">Loading campaigns...</span>
                     </div>
                   </TableCell>
                 </TableRow>
               ) : filteredCampaigns.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-6 text-gray-500">
+                  <TableCell colSpan={10} className="text-center py-6 text-gray-500 text-sm">
                     No campaigns found
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredCampaigns.map((campaign) => (
                   <TableRow key={campaign.id} className="hover:bg-gray-50/50 border-t border-gray-100">
-                    <TableCell className="font-medium text-gray-900 py-2 px-4">{campaign.name}</TableCell>
-                    <TableCell className="py-2 px-4">
-                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                    <TableCell className="font-medium text-gray-900 py-2 px-2 max-w-32 truncate text-xs" title={campaign.name}>{campaign.name}</TableCell>
+                    <TableCell className="py-2 px-2">
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
                         {campaign.org_name}
                       </Badge>
                     </TableCell>
-                    <TableCell className="py-2 px-4">
-                      <Badge variant={campaign.direction === 'INBOUND' ? 'default' : 'secondary'} className="font-medium">
+                    <TableCell className="py-2 px-2">
+                      <Badge variant={campaign.direction === 'INBOUND' ? 'default' : 'secondary'} className="font-medium text-xs">
                         {campaign.direction}
                     </Badge>
                   </TableCell>
-                    <TableCell className="capitalize py-2 px-4">{campaign.language}</TableCell>
-                    <TableCell className="font-mono text-sm py-2 px-4 text-gray-600">{campaign.voice_id}</TableCell>
-                    <TableCell className="py-2 px-4">
-                      <Badge variant="outline" className="bg-gray-50/80 text-gray-700 border-gray-200">
+                    <TableCell className="py-2 px-2">
+                      <Badge 
+                        variant="outline" 
+                        className={`font-medium text-xs ${
+                          campaign.state === 'ACTIVE' ? 'bg-green-50 text-green-700 border-green-200' :
+                          campaign.state === 'TRIAL' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                          'bg-gray-50 text-gray-700 border-gray-200'
+                        }`}
+                      >
+                        {campaign.state}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="capitalize py-2 px-2 text-xs">{campaign.language}</TableCell>
+                    <TableCell className="font-mono text-xs py-2 px-2 text-gray-600 max-w-24 truncate" title={campaign.voice_id}>{campaign.voice_id}</TableCell>
+                    <TableCell className="py-2 px-2">
+                      <Badge variant="outline" className="bg-gray-50/80 text-gray-700 border-gray-200 text-xs">
                         {campaign.telephonic_provider}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-gray-600 text-sm py-2 px-4">
+                    <TableCell className="text-gray-600 text-xs py-2 px-2">
                       {new Date(campaign.created_at).toLocaleString('en-US', {
                         year: 'numeric',
                         month: 'short',
@@ -1654,7 +1795,7 @@ const Campaigns = () => {
                         minute: '2-digit'
                       })}
                     </TableCell>
-                    <TableCell className="text-gray-600 text-sm py-2 px-4">
+                    <TableCell className="text-gray-600 text-xs py-2 px-2">
                       {new Date(campaign.updated_at).toLocaleString('en-US', {
                         year: 'numeric',
                         month: 'short',
@@ -1663,59 +1804,119 @@ const Campaigns = () => {
                         minute: '2-digit'
                       })}
                     </TableCell>
-                    <TableCell className="py-2 px-4">
-                      <div className="flex justify-end space-x-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          onClick={() => handleView(campaign)}
-                          className="h-8 w-8 bg-blue-50 hover:bg-blue-100 text-blue-600"
-                        >
-                          <Eye className="h-4 w-4" />
-                      </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          onClick={() => handleOpenCallDialog(campaign)}
-                          className="h-8 w-8 bg-green-50 hover:bg-green-100 text-green-600"
-                        >
-                          <Phone className="h-4 w-4" />
-                      </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          onClick={() => navigate(`/call-history?campaignId=${campaign.id}&campaignName=${encodeURIComponent(campaign.name)}`)}
-                          className="h-8 w-8 bg-purple-50 hover:bg-purple-100 text-purple-600"
-                        >
-                          <History className="h-4 w-4" />
-                      </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          onClick={() => {
-                            setSelectedCampaignForUpload(campaign);
-                            setIsUploadDialogOpen(true);
-                          }}
-                          className="h-8 w-8 bg-indigo-50 hover:bg-indigo-100 text-indigo-600"
-                        >
-                          <Upload className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          onClick={() => navigate(`/campaigns/${campaign.id}/edit`)}
-                          className="h-8 w-8 bg-amber-50 hover:bg-amber-100 text-amber-600"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(campaign)}
-                          className="h-8 w-8 bg-red-50 hover:bg-red-100 text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                      </Button>
+                    <TableCell className="py-2 px-2">
+                      <div className="flex justify-end space-x-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => handleView(campaign)}
+                              className="h-7 w-7 bg-blue-50 hover:bg-blue-100 text-blue-600"
+                            >
+                              <Eye className="h-3 w-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>View Campaign Details</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => handleOpenCallDialog(campaign)}
+                              className="h-7 w-7 bg-green-50 hover:bg-green-100 text-green-600"
+                            >
+                              <Phone className="h-3 w-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Make a Call</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => navigate(`/call-history?campaignId=${campaign.id}&campaignName=${encodeURIComponent(campaign.name)}`)}
+                              className="h-7 w-7 bg-purple-50 hover:bg-purple-100 text-purple-600"
+                            >
+                              <History className="h-3 w-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>View Call History</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => {
+                                setSelectedCampaignForUpload(campaign);
+                                setIsUploadDialogOpen(true);
+                              }}
+                              className="h-7 w-7 bg-indigo-50 hover:bg-indigo-100 text-indigo-600"
+                            >
+                              <Upload className="h-3 w-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Upload Files</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => {
+                                setSelectedCampaignForBulkCall(campaign);
+                                setIsBulkCallDialogOpen(true);
+                              }}
+                              className="h-7 w-7 bg-orange-50 hover:bg-orange-100 text-orange-600"
+                            >
+                              <FileSpreadsheet className="h-3 w-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Bulk Call - Upload Excel file</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => navigate(`/campaigns/${campaign.id}/edit`)}
+                              className="h-7 w-7 bg-amber-50 hover:bg-amber-100 text-amber-600"
+                            >
+                              <Edit className="h-3 w-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Edit Campaign</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(campaign)}
+                              className="h-7 w-7 bg-red-50 hover:bg-red-100 text-red-600"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Delete Campaign</p>
+                          </TooltipContent>
+                        </Tooltip>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -1795,6 +1996,110 @@ const Campaigns = () => {
             onUpload={() => handleFileUploadSubmit(selectedCampaignForUpload?.id || '')}
             onCancel={() => setIsUploadDialogOpen(false)}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Call Dialog */}
+      <Dialog open={isBulkCallDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setIsBulkCallDialogOpen(false);
+          setSelectedCampaignForBulkCall(null);
+          setBulkCallFile(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl w-full mx-4">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-primary flex items-center gap-2">
+              <FileSpreadsheet className="w-6 h-6 text-orange-600" />
+              Bulk Call - {selectedCampaignForBulkCall?.name}
+            </DialogTitle>
+            <DialogDescription className="text-base">
+              Upload an Excel file (.xlsx) containing voter information for bulk calling
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            <div className="space-y-3">
+              <Label htmlFor="bulk-call-file" className="text-base font-semibold flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-orange-500" />
+                Excel File (.xlsx)
+              </Label>
+              
+              {/* Download Template Section */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-blue-800 flex items-center gap-2">
+                    <Download className="w-4 h-4" />
+                    Download Template
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadTemplate()}
+                    className="text-blue-700 border-blue-300 hover:bg-blue-100"
+                  >
+                    <FileDown className="w-4 h-4 mr-2" />
+                    Download Template
+                  </Button>
+                </div>
+                <p className="text-xs text-blue-700">
+                  Download our Excel template with the correct column structure. The first column should be "Mobile Number" followed by other relevant voter information.
+                </p>
+              </div>
+              
+              <div className="relative">
+                <Input
+                  id="bulk-call-file"
+                  type="file"
+                  accept=".xlsx"
+                  onChange={(e) => setBulkCallFile(e.target.files?.[0] || null)}
+                  className="cursor-pointer h-12 text-base border-2 border-dashed border-orange-200 hover:border-orange-300 focus:border-orange-500 transition-colors"
+                />
+                {bulkCallFile && (
+                  <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span className="font-medium">{bulkCallFile.name}</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Upload an Excel file with voter information. The file should contain columns for phone numbers and other relevant data.
+              </p>
+            </div>
+
+
+          </div>
+
+          <DialogFooter className="mt-8 pt-4 border-t border-gray-200">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsBulkCallDialogOpen(false);
+                setSelectedCampaignForBulkCall(null);
+                setBulkCallFile(null);
+              }}
+              className="h-11 px-6 text-base"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkCallSubmit}
+              disabled={!bulkCallFile || isBulkCalling}
+              className="bg-orange-600 hover:bg-orange-700 h-11 px-6 text-base"
+            >
+              {isBulkCalling ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Initiating Bulk Calls...
+                </>
+              ) : (
+                <>
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Start Bulk Calls
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

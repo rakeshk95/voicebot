@@ -3,6 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { PermissionProvider } from "@/contexts/PermissionContext";
 import { Layout } from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Campaigns from "./pages/Campaigns";
@@ -34,40 +35,42 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Router>
-          <div className="min-h-screen">
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              
-              {/* Protected Routes */}
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <Layout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route index element={<Dashboard />} />
-                <Route path="organizations" element={<Organizations />} />
-                <Route path="campaigns" element={<Campaigns />} />
-                <Route path="campaigns/new" element={<CampaignFormPage mode="create" />} />
-                <Route path="campaigns/:id/edit" element={<CampaignFormPage mode="edit" />} />
-                <Route path="call-history" element={<CallHistory />} />
-                <Route path="users" element={<Users />} />
-                <Route path="analytics" element={<Analytics />} />
-                <Route path="roles-permissions" element={<RolesPermissions />} />
-                <Route path="settings" element={<Settings />} />
-                <Route path="profile" element={<Profile />} />
-              </Route>
+        <PermissionProvider>
+          <Router>
+            <div className="min-h-screen">
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                
+                {/* Protected Routes */}
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute>
+                      <Layout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route index element={<Dashboard />} />
+                  <Route path="organizations" element={<Organizations />} />
+                  <Route path="campaigns" element={<Campaigns />} />
+                  <Route path="campaigns/new" element={<CampaignFormPage mode="create" />} />
+                  <Route path="campaigns/:id/edit" element={<CampaignFormPage mode="edit" />} />
+                  <Route path="call-history" element={<CallHistory />} />
+                  <Route path="users" element={<Users />} />
+                  <Route path="analytics" element={<Analytics />} />
+                  <Route path="roles-permissions" element={<RolesPermissions />} />
+                  <Route path="settings" element={<Settings />} />
+                  <Route path="profile" element={<Profile />} />
+                </Route>
 
-              {/* Catch all route */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </div>
-          <Toaster />
-          <Sonner />
-        </Router>
+                {/* Catch all route */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </div>
+            <Toaster />
+            <Sonner />
+          </Router>
+        </PermissionProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

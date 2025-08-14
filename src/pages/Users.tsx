@@ -58,6 +58,8 @@ import { DateRange } from "react-day-picker";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { usePermissions } from "@/contexts/PermissionContext";
 
 interface Role {
   id: string;
@@ -113,7 +115,7 @@ const userSchema = z.object({
   last_name: z.string().min(1, "Last name is required"),
   email: z.string().email("Invalid email address"),
   mobile_number: z.string().optional(),
-  role: z.string(),
+  role_id: z.string(),
   organization_id: z.string().optional(),
   status: z.string(),
   campaign_ids: z.array(z.string()).optional(),
@@ -132,6 +134,7 @@ interface UserFormData {
 }
 
 export default function Users() {
+  const { hasPermission, userPermissions } = usePermissions();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
@@ -172,6 +175,28 @@ export default function Users() {
   const [isCreateSubmitting, setIsCreateSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Check permissions for users management
+  const canReadUsers = hasPermission('read', 'users');
+  const canWriteUsers = hasPermission('write', 'users');
+  const canDeleteUsers = hasPermission('delete', 'users');
+  const isAdmin = userPermissions?.admin;
+
+  // If user can't read users, show access denied
+  if (!canReadUsers && !isAdmin) {
+    return (
+      <div className="container mx-auto py-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-red-600">Access Denied</CardTitle>
+            <CardDescription>
+              You don't have permission to view users.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
   const form = useForm<z.infer<typeof userSchema>>({
     resolver: zodResolver(userSchema),
     defaultValues: {
@@ -179,7 +204,7 @@ export default function Users() {
       last_name: "",
       email: "",
       mobile_number: "",
-      role: "user",
+      role_id: "",
       organization_id: "",
       status: "active",
       campaign_ids: [],
@@ -527,8 +552,8 @@ export default function Users() {
       last_name: user.last_name || "",
       email: user.email || "",
       mobile_number: user.mobile_number || "",
-      role: user.role_id || "",
-      organization_id: user.organization_id || "",
+      role_id: user.role_id || "",
+      organization_id: user.organization_id || "",  
       status: user.status || "active",
       campaign_ids: user.campaign_ids || [],
     });
@@ -542,7 +567,6 @@ export default function Users() {
       // No need to find role, we already have the role_id
       const updateData = {
         ...data,
-        role_id: data.role, // data.role is already the role_id
         organization_id: data.organization_id === 'none' ? null : data.organization_id
       };
 
@@ -789,13 +813,15 @@ export default function Users() {
             <FileDown className="w-4 h-4 mr-2" />
             Export
           </Button>
-          <Button 
-            onClick={handleAddUserClick} 
-            className="bg-blue-600 hover:bg-blue-700 text-white h-9"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add User
-          </Button>
+          {canWriteUsers && (
+            <Button 
+              onClick={handleAddUserClick} 
+              className="bg-blue-600 hover:bg-blue-700 text-white h-9"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add User
+            </Button>
+          )}
         </div>
       </div>
 
@@ -900,22 +926,26 @@ export default function Users() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => handleEdit(user)}
-                        className="h-8 w-8 p-0 text-gray-600 hover:text-amber-600 hover:bg-amber-50"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeletingUser(user)}
-                        className="h-8 w-8 p-0 text-gray-600 hover:text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {canWriteUsers && (
+                        <>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleEdit(user)}
+                            className="h-8 w-8 p-0 text-gray-600 hover:text-amber-600 hover:bg-amber-50"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeletingUser(user)}
+                            className="h-8 w-8 p-0 text-gray-600 hover:text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -1009,7 +1039,7 @@ export default function Users() {
 
                 <FormField
                   control={form.control}
-                  name="role"
+                  name="role_id"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Role</FormLabel>
@@ -1040,7 +1070,12 @@ export default function Users() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Organization</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select 
+                        onValueChange={(value) => {
+                          field.onChange(value === 'none' ? null : value);
+                        }} 
+                        value={field.value || 'none'}
+                      >
                         <FormControl>
                           <SelectTrigger className="pl-9">
                             <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
@@ -1068,7 +1103,10 @@ export default function Users() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Status</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select 
+                          onValueChange={field.onChange} 
+                          value={field.value}
+                        >
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select status" />
@@ -1117,14 +1155,17 @@ export default function Users() {
                       </Select>
                       {field.value && field.value.length > 0 && (
                         <div className="flex flex-wrap gap-2 mt-2">
-                          {field.value.map((campaignId) => {
+                          {field.value.map((campaignId: string) => {
                             const campaign = campaigns.find(c => c.id === campaignId);
                             return campaign ? (
                               <Badge 
                                 key={campaignId} 
                                 variant="secondary" 
                                 className="cursor-pointer"
-                                onClick={() => field.onChange(field.value?.filter(id => id !== campaignId))}
+                                onClick={() => {
+                                  const newValue = field.value?.filter(id => id !== campaignId) || [];
+                                  field.onChange(newValue);
+                                }}
                               >
                                 {campaign.name} ×
                               </Badge>

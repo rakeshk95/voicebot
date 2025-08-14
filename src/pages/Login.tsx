@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import logoImage from "@/assets/voxiflow-logo.png";
+import { triggerAuthChange } from '@/contexts/PermissionContext';
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -40,8 +41,123 @@ export default function Login() {
       }
 
       const data = await response.json();
-      localStorage.setItem('authToken', data.access_token);
-      localStorage.setItem('userData', JSON.stringify(data.user));
+      console.log('Login response:', data);
+      
+      // Extract user data and token
+      const userData = data.user || data;
+      const accessToken = data.access_token;
+      const userId = userData?.id || userData?.user_id;
+      
+      console.log('Extracted user data:', userData);
+      console.log('User ID:', userId);
+      console.log('Access token:', accessToken);
+
+      if (!userId || !accessToken) {
+        throw new Error('Invalid response: missing user ID or access token');
+      }
+
+      // Store auth data
+      localStorage.setItem('authToken', accessToken);
+      localStorage.setItem('userData', JSON.stringify(userData));
+
+      // Fetch user permissions immediately after login
+      try {
+        console.log('Fetching user permissions for user ID:', userId);
+        const permissionsResponse = await fetch(`http://localhost:8000/api/v1/roles/user/${userId}`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (permissionsResponse.ok) {
+          const userRoles = await permissionsResponse.json();
+          console.log('User roles fetched successfully:', userRoles);
+          
+          // Store user role information with proper structure
+          if (userRoles && userRoles.length > 0) {
+            const primaryRole = userRoles[0];
+            
+            // Generate sidebar and navigation items based on permissions
+            const generateUIItems = (permissions: any) => {
+              const sidebarItems: string[] = [];
+              const navigationItems: string[] = [];
+
+              // Always include dashboard
+              sidebarItems.push('dashboard');
+              navigationItems.push('home');
+
+              // Add items based on permissions
+              if (permissions.admin || (permissions.read && permissions.read.includes('users'))) {
+                sidebarItems.push('users');
+                navigationItems.push('users');
+              }
+
+              if (permissions.admin || (permissions.read && permissions.read.includes('campaigns'))) {
+                sidebarItems.push('campaigns');
+                navigationItems.push('campaigns');
+              }
+
+              if (permissions.admin || (permissions.read && permissions.read.includes('organizations'))) {
+                sidebarItems.push('organizations');
+                navigationItems.push('organizations');
+              }
+
+              if (permissions.admin || (permissions.read && permissions.read.includes('roles'))) {
+                sidebarItems.push('roles-permissions');
+                navigationItems.push('roles');
+              }
+
+              // Always include call-history for now (for testing)
+              sidebarItems.push('call-history');
+              navigationItems.push('call-history');
+              
+              // Original permission check (commented out for debugging)
+              // if (permissions.admin || (permissions.read && permissions.read.includes('call_history'))) {
+              //   sidebarItems.push('call-history');
+              //   navigationItems.push('call-history');
+              // }
+
+              return { sidebarItems, navigationItems };
+            };
+
+            // Parse permissions and generate UI items
+            let parsedPermissions = primaryRole.role_permissions;
+            if (typeof parsedPermissions === 'string') {
+              try {
+                parsedPermissions = JSON.parse(parsedPermissions);
+              } catch (e) {
+                console.warn('Failed to parse permissions JSON:', e);
+                parsedPermissions = primaryRole.role_permissions;
+              }
+            }
+
+            const { sidebarItems, navigationItems } = generateUIItems(parsedPermissions);
+            
+            console.log('Login: Raw permissions:', primaryRole.role_permissions);
+            console.log('Login: Parsed permissions:', parsedPermissions);
+            console.log('Login: Generated sidebar items:', sidebarItems);
+            console.log('Login: Generated navigation items:', navigationItems);
+
+            // Store complete role data with proper structure
+            const roleData = {
+              id: primaryRole.role_id || primaryRole.id,
+              name: primaryRole.role_name || primaryRole.name,
+              description: primaryRole.role_description || primaryRole.description,
+              permissions: parsedPermissions,
+              sidebar_items: sidebarItems,
+              navigation_items: navigationItems
+            };
+
+            localStorage.setItem('userRole', JSON.stringify(roleData));
+            console.log('Stored role data:', roleData);
+          }
+        } else {
+          console.warn('Failed to fetch user permissions:', permissionsResponse.status);
+        }
+      } catch (permissionError) {
+        console.warn('Error fetching user permissions:', permissionError);
+      }
 
       toast({
         title: "Success",
@@ -49,7 +165,13 @@ export default function Login() {
         variant: "default",
       });
 
+      // Navigate to dashboard
       navigate('/');
+      
+      // Trigger auth change event to refresh permissions in PermissionContext
+      console.log('Triggering auth change event');
+      triggerAuthChange();
+      
     } catch (error: any) {
       console.error("Login failed:", error);
       toast({

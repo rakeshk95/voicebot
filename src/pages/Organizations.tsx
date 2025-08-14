@@ -28,6 +28,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/components/ui/use-toast";
+import { usePermissions } from "@/contexts/PermissionContext";
 import { Building2, Plus, Pencil, Trash2, Search, Eye, Filter, X, Calendar, Download, FileDown, Edit } from 'lucide-react';
 import * as z from "zod";
 import { useForm } from "react-hook-form";
@@ -58,6 +59,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { cachedFetch, clearApiCache } from "@/lib/api";
 
 // Form schema
 const organizationSchema = z.object({
@@ -90,6 +92,7 @@ interface FilterOptions {
 }
 
 const Organizations = () => {
+  const { hasPermission, userPermissions } = usePermissions();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -105,6 +108,30 @@ const Organizations = () => {
     endDate: null
   });
   const { toast } = useToast();
+
+  // Check permissions for organizations management
+  const canReadOrganizations = hasPermission('read', 'organizations');
+  const canWriteOrganizations = hasPermission('write', 'organizations');
+  const canDeleteOrganizations = hasPermission('delete', 'organizations');
+  const isAdmin = userPermissions?.admin;
+
+  // If user can't read organizations, show access denied
+  if (!canReadOrganizations && !isAdmin) {
+    return (
+      <div className="container mx-auto py-6">
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-red-600 mb-2">Access Denied</h2>
+              <p className="text-muted-foreground">
+                You don't have permission to view organizations.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const form = useForm<z.infer<typeof organizationSchema>>({
     resolver: zodResolver(organizationSchema),
@@ -140,62 +167,49 @@ const Organizations = () => {
     });
   };
 
-  // Fix fetchOrganizations implementation
-  const fetchOrganizations = async (showLoading = true) => {
-    const controller = new AbortController();
-
-    if (showLoading) {
-      setIsInitialLoading(true);
-    }
-
+  // Simple refresh function to reload organizations data
+  const refreshOrganizations = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/organizations', {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
-        signal: controller.signal
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch organizations');
-      }
-
-      const data = await response.json();
-      
-      // Map the data to ensure proper date handling
-      const mappedData = Array.isArray(data) ? data.map(org => ({
-        ...org,
-        created_date: org.created_date || org.created_at || null,
-        modified_date: org.modified_date || org.updated_at || null
-      })) : [];
-      
-      setOrganizations(mappedData);
+      // Clear cache for organizations to get fresh data
+      clearApiCache('/organizations');
+      const data = await cachedFetch<Organization[]>('/organizations');
+      setOrganizations(Array.isArray(data) ? data : []);
     } catch (error) {
-      if (error.name === 'AbortError') return;
-      
-      console.error('Error fetching organizations:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch organizations",
-        variant: "destructive",
-      });
-    } finally {
-      if (showLoading) {
-        setIsInitialLoading(false);
-      }
+      console.error('Error refreshing organizations:', error);
     }
-
-    return controller;
   };
 
-  // Fix useEffect implementation
+  // Fix: Properly implement useEffect with AbortController
   useEffect(() => {
-    const controller = fetchOrganizations(true);
+    const controller = new AbortController();
+    
+    const fetchData = async () => {
+      try {
+        setIsInitialLoading(true);
+        
+        // Use cached fetch to prevent duplicate API calls
+        const data = await cachedFetch<Organization[]>('/organizations');
+        
+        // Set organizations directly since the interface already has the correct properties
+        setOrganizations(Array.isArray(data) ? data : []);
+      } catch (error) {
+        if (error.name === 'AbortError') return;
+        
+        console.error('Error fetching organizations:', error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch organizations",
+          variant: "destructive",
+        });
+      } finally {
+        setIsInitialLoading(false);
+      }
+    };
+
+    fetchData();
     
     return () => {
-      // Cleanup function to abort the fetch when component unmounts
-      controller.then(ctrl => ctrl.abort());
+      controller.abort();
     };
   }, []);
 
@@ -224,7 +238,8 @@ const Organizations = () => {
         throw new Error(errorData.detail || 'Failed to create organization');
       }
       
-      await fetchOrganizations(false);
+      // Refresh organizations data
+      await refreshOrganizations();
       
       toast({
         title: "Success",
@@ -262,8 +277,8 @@ const Organizations = () => {
       
       if (!response.ok) throw new Error('Failed to update organization');
       
-      // Fetch fresh data without showing loading state
-      await fetchOrganizations(false);
+      // Refresh organizations data
+      await refreshOrganizations();
       
       toast({
         title: "Success",
@@ -299,8 +314,8 @@ const Organizations = () => {
       
       if (!response.ok) throw new Error('Failed to delete organization');
       
-      // Fetch fresh data without showing loading state
-      await fetchOrganizations(false);
+      // Refresh organizations data
+      await refreshOrganizations();
       
       toast({
         title: "Success",
@@ -465,8 +480,18 @@ const Organizations = () => {
           <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium">
             {filteredOrganizations.length} Total
           </Badge>
+          {!canWriteOrganizations && !isAdmin && (
+            <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-200">
+              Read-only Mode
+            </Badge>
+          )}
         </div>
-        <p className="text-sm text-gray-500">Manage your organizations and their settings</p>
+        <p className="text-sm text-gray-500">
+          Manage your organizations and their settings
+          {!canWriteOrganizations && !isAdmin && (
+            <span className="text-amber-600 ml-2">(View only - no modifications allowed)</span>
+          )}
+        </p>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-3 p-2">
@@ -535,6 +560,7 @@ const Organizations = () => {
                 <FileDown className="w-4 h-4 mr-2 text-gray-500" />
                 Export to CSV
               </Button>
+              {canWriteOrganizations && (
               <Button 
                 onClick={() => setIsDialogOpen(true)} 
                 className="bg-blue-600 hover:bg-blue-700 text-white h-9"
@@ -542,6 +568,7 @@ const Organizations = () => {
                 <Plus className="w-4 h-4 mr-2" />
                 New Organization
               </Button>
+              )}
             </div>
           </div>
         </div>
@@ -613,6 +640,8 @@ const Organizations = () => {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
+                        {canWriteOrganizations && (
+                          <>
                         <Button 
                           variant="ghost" 
                           size="icon"
@@ -629,6 +658,8 @@ const Organizations = () => {
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

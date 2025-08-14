@@ -20,6 +20,9 @@ import { AppSidebar } from '@/components/AppSidebar';
 import voxiflowLogo from '../assets/voxiflow-logo.svg';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import * as XLSX from 'xlsx-js-style';
+import { cachedFetch } from '@/lib/api';
+
+
 
 interface TranscriptionMessage {
   content: string;
@@ -79,6 +82,8 @@ interface Campaign {
 }
 
 const CallHistory = () => {
+  console.log('CallHistory: Component mounted');
+  
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [calls, setCalls] = useState<Call[]>([]);
@@ -86,6 +91,8 @@ const CallHistory = () => {
   const [searchParams] = useSearchParams();
   const campaignId = searchParams.get('campaignId');
   const campaignName = searchParams.get('campaignName');
+  
+  console.log('CallHistory: Initial state:', { campaignId, campaignName });
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [durationFilter, setDurationFilter] = useState<string>("all");
@@ -119,6 +126,7 @@ const CallHistory = () => {
   const [callerName, setCallerName] = useState('');
   const [isCallingInProgress, setIsCallingInProgress] = useState(false);
   const [isExportingDetailed, setIsExportingDetailed] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const datePresets = [
     { label: 'Today', getValue: () => ({ start: startOfToday(), end: endOfToday() }) },
@@ -285,7 +293,10 @@ const CallHistory = () => {
   };
 
   const fetchCallData = async (pageToFetch: number, targetCampaignId = selectedCampaign, append: boolean = false) => {
+    console.log('CallHistory: fetchCallData called with:', { pageToFetch, targetCampaignId, append, selectedCampaign });
+    
     if (!targetCampaignId) {
+      console.log('CallHistory: No targetCampaignId provided');
       toast({
         title: "Error",
         description: "Please select a campaign",
@@ -293,6 +304,10 @@ const CallHistory = () => {
       });
       return;
     }
+
+
+
+
 
     setIsLoading(true);
     try {
@@ -336,7 +351,7 @@ const CallHistory = () => {
         apiUrl.searchParams.append('status', statusFilter);
       }
 
-      console.log('Fetching calls with URL:', apiUrl.toString());
+      console.log('CallHistory: Fetching calls with URL:', apiUrl.toString());
 
       const response = await fetch(apiUrl.toString(), {
         headers: {
@@ -425,18 +440,18 @@ const CallHistory = () => {
 
   const fetchCampaigns = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/campaigns/', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch campaigns');
+      console.log('CallHistory: Fetching campaigns...');
+      const data = await cachedFetch<Campaign[]>('/campaigns/');
+      console.log('CallHistory: Campaigns data received:', data);
+      
+      if (Array.isArray(data)) {
+        setAllCampaigns(data);
+        console.log('CallHistory: Set all campaigns, count:', data.length);
+      } else {
+        console.error('Invalid campaigns data format:', data);
+        setAllCampaigns([]);
+        return;
       }
-
-      const data = await response.json();
-      setAllCampaigns(data);
 
       if (campaignId && !campaignName) {
         const campaign = data.find(c => c.id === campaignId);
@@ -446,6 +461,7 @@ const CallHistory = () => {
       }
 
       if (!campaignId && data.length > 0) {
+        console.log('CallHistory: Setting first campaign as default:', data[0]);
         const firstCampaign = data[0];
         setSelectedCampaign(firstCampaign.id);
         setSelectedCampaignName(firstCampaign.name);
@@ -457,7 +473,10 @@ const CallHistory = () => {
         setStartDate(start);
         setEndDate(end);
 
+        console.log('CallHistory: Calling fetchCallData for first campaign');
         fetchCallData(1, firstCampaign.id);
+      } else {
+        console.log('CallHistory: No campaigns available or campaignId already set');
       }
     } catch (error) {
       console.error('Error fetching campaigns:', error);
@@ -469,31 +488,64 @@ const CallHistory = () => {
     }
   };
 
+  // Main useEffect to initialize data when component mounts
   useEffect(() => {
-    if (campaignId && campaignName) {
-      setSelectedCampaign(campaignId);
-      setSelectedCampaignName(decodeURIComponent(campaignName));
+    let isMounted = true;
+    
+    const initializeData = async () => {
+      if (!isMounted) return;
       
+      console.log('CallHistory: Initializing data with campaignId:', campaignId, 'campaignName:', campaignName);
+      
+      if (campaignId && campaignName) {
+        console.log('CallHistory: Using URL params for campaign');
+        // If we have campaign ID and name from URL params, use them directly
+        setSelectedCampaign(campaignId);
+        setSelectedCampaignName(decodeURIComponent(campaignName));
+        
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - 2);
+        
+        setStartDate(start);
+        setEndDate(end);
+        
+        // Fetch call data for the specific campaign
+        await fetchCallData(1, campaignId);
+      } else {
+        console.log('CallHistory: No URL params, fetching campaigns');
+        // Fetch campaigns first, then set up default campaign and fetch its data
+        await fetchCampaigns();
+      }
+    };
+
+    initializeData();
+    
+    // Cleanup function to prevent state updates on unmounted component
+    return () => {
+      isMounted = false;
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []); // Empty dependency array - only run once on mount
+
+  // Effect to handle campaign selection and date changes
+  useEffect(() => {
+    console.log('CallHistory: Campaign/date effect triggered:', { selectedCampaign, startDate, endDate });
+    
+    if (selectedCampaign && startDate && endDate) {
+      console.log('CallHistory: Campaign and dates are set, fetching call data for campaign:', selectedCampaign);
+      fetchCallData(1, selectedCampaign, false);
+    } else if (selectedCampaign && (startDate === null || endDate === null)) {
+      console.log('CallHistory: Campaign selected but dates not set, setting default dates');
       const end = new Date();
       const start = new Date();
       start.setDate(start.getDate() - 2);
-      
       setStartDate(start);
       setEndDate(end);
-      
-      fetchCallData(1, campaignId);
-    } else {
-      fetchCampaigns();
     }
-  }, [campaignId, campaignName]);
-
-  // Effect to handle date changes and trigger API calls
-  useEffect(() => {
-    if (selectedCampaign) {
-      // Trigger API call whenever dates change (including when cleared)
-      fetchCallData(1, selectedCampaign, false);
-    }
-  }, [startDate, endDate, selectedCampaign]);
+  }, [selectedCampaign, startDate, endDate]); // Only depend on campaign and dates, not fetching state
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -606,10 +658,15 @@ const CallHistory = () => {
     setSearchTerm(e.target.value);
     setNextCursor(null);
     setCurrentPage(1);
-    const timeoutId = setTimeout(() => {
+    
+    // Clear any existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    searchTimeoutRef.current = setTimeout(() => {
       fetchCallData(1, selectedCampaign, false);
     }, 500);
-    return () => clearTimeout(timeoutId);
   };
 
   const handlePageChange = (page: number) => {
@@ -943,9 +1000,33 @@ const CallHistory = () => {
           {/* Header Card */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2 mb-2">
             <div className="flex items-center gap-4">
-                          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                  Call History
-                </h1>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+                Call History
+              </h1>
+              
+              {/* Test Button for Debugging */}
+              <Button 
+                onClick={() => {
+                  console.log('CallHistory: Test button clicked');
+                  console.log('CallHistory: Current state:', { 
+                    selectedCampaign, 
+                    startDate, 
+                    endDate, 
+                    allCampaigns: allCampaigns.length 
+                  });
+                  if (selectedCampaign) {
+                    fetchCallData(1, selectedCampaign, false);
+                  } else {
+                    console.log('CallHistory: No campaign selected, fetching campaigns first');
+                    fetchCampaigns();
+                  }
+                }}
+                variant="outline"
+                size="sm"
+                className="ml-2"
+              >
+                Test API Call
+              </Button>
 
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600 whitespace-nowrap">Campaign</span>

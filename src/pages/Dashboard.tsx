@@ -1,159 +1,1337 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Phone, Clock, BarChart3, Users, TrendingUp, Activity, Brain, Target, Zap } from 'lucide-react';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { 
+  Phone, 
+  Clock, 
+  BarChart3, 
+  Users, 
+  TrendingUp, 
+  Activity, 
+  Brain, 
+  Target, 
+  Zap, 
+  AlertCircle,
+  RefreshCw,
+  Building2,
+  Target as Campaign,
+  Play,
+  Info
+} from 'lucide-react';
+import { 
+  LineChart, 
+  Line, 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  PieChart, 
+  Pie, 
+  Cell 
+} from 'recharts';
+import { usePermissions } from '@/contexts/PermissionContext';
+import { getUserData } from '@/utils/localStorage';
+import { authorizedFetch } from '@/lib/api';
+import { toast } from '@/components/ui/use-toast';
+
+// Utility function to safely render values
+const safeRender = (value: any, defaultValue: any = 'N/A') => {
+  if (value === null || value === undefined || value === '') {
+    return defaultValue;
+  }
+  // Check for special NULL objects from API (e.g., { "NULL": true })
+  if (typeof value === 'object' && value !== null && value.NULL === true) {
+    return defaultValue;
+  }
+  // Additional check to ensure we don't render objects directly
+  if (typeof value === 'object' && value !== null) {
+    console.warn('Attempting to render object directly:', value);
+    return defaultValue;
+  }
+  return value;
+};
+
+// Utility function to calculate missing metrics from available data
+const calculateMetrics = (metrics: DashboardMetrics | null) => {
+  if (!metrics?.core_performance_metrics) return {};
+  
+  const core = metrics.core_performance_metrics;
+  
+  // Helper function to handle NULL objects from API
+  const safeValue = (value: any, defaultValue: any = 0) => {
+    if (value === null || value === undefined || value === '') {
+      return defaultValue;
+    }
+    if (typeof value === 'object' && value !== null && value.NULL === true) {
+      return defaultValue;
+    }
+    return value;
+  };
+  
+  const totalCalls = safeValue(core.total_calls, 0) as number;
+  const successfulCalls = safeValue(core.successful_calls, 0) as number;
+  const successPercentage = safeValue(core.success_percentage, 0) as number;
+  
+  return {
+    // Calculate drop off rate from success percentage
+    dropOffRate: totalCalls > 0 ? (100 - successPercentage).toFixed(1) : '0.0',
+    
+    // Use available fields or calculate from others
+    transferredToHuman: safeValue(core.transferred_to_human, successfulCalls),
+    callBackRequests: safeValue(core.call_back_requests, 0),
+    totalCallsMade: safeValue(core.total_calls_made, totalCalls),
+    callPickupRate: safeValue(core.call_pickup_rate, safeValue(core.pickup_percentage, 0)),
+    successRate: safeValue(core.success_rate, successPercentage),
+    
+    // Calculate failure count
+    failedCalls: totalCalls - successfulCalls,
+    
+    // Estimated breakdown if not provided
+    estimatedNoAnswer: Math.round(totalCalls * 0.1),
+    estimatedBusy: Math.round(totalCalls * 0.05),
+    estimatedUnknown: Math.round(totalCalls * 0.02)
+  };
+};
+
+// Updated Dashboard API response types based on the new comprehensive documentation
+interface DashboardMetrics {
+  dashboard_period: string;
+  organization_id: string | null;
+  campaign_id: string | null;
+  generated_at: string;
+  core_performance_metrics: {
+    total_calls: number | { NULL: true };
+    successful_calls: number | { NULL: true };
+    avg_handle_time_minutes: number | { NULL: true };
+    total_minutes_consumed: number | { NULL: true };
+    success_percentage: number | { NULL: true };
+    pickup_percentage: number | { NULL: true };
+    total_calls_made: number | { NULL: true };
+    call_pickup_rate: number | { NULL: true };
+    aht_average_handle_time: number | { NULL: true };
+    drop_off_rate: number | { NULL: true };
+    call_completion_rate: number | { NULL: true };
+    call_status_breakdown: {
+      completed: number | { NULL: true };
+      'no-answer': number | { NULL: true };
+      failed: number | { NULL: true };
+      busy: number | { NULL: true };
+      unknown: number | { NULL: true };
+    };
+    transferred_to_human: number | { NULL: true };
+    call_back_requests: number | { NULL: true };
+    success_rate: number | { NULL: true };
+    pickup_rate: number | { NULL: true };
+    avg_handle_time_formatted: string | { NULL: true };
+    total_minutes_formatted: string | { NULL: true };
+  };
+  user_interaction_metrics: {
+    intent_recognition_accuracy: number | { NULL: true };
+    fallback_or_error_triggers: number | { NULL: true };
+    first_response_time_seconds: number | { NULL: true };
+    average_bot_response_time_seconds: number | { NULL: true };
+    average_user_talk_time_seconds: number | { NULL: true };
+    first_attempt_responses: number | { NULL: true };
+    multi_attempt_responses: number | { NULL: true };
+    total_interactions: number | { NULL: true };
+  };
+  outcome_based_metrics: {
+    conversion_rate: number;
+    lead_qualification_rate: number;
+    feedback_rating_score: number;
+    sentiment_score: number;
+    call_activity: {
+      hourly: Record<string, number>;
+      daily: Record<string, number>;
+      monthly: Record<string, number>;
+    };
+  };
+  failure_analysis: {
+    failure_reasons: {
+      STT: number;
+      TTS: number;
+      LLM: number;
+      APIs: number;
+      Caller: number;
+      Network: number;
+      Other: number;
+    };
+    total_failures: number;
+    failure_rate: number;
+  };
+  call_details?: {
+    success: boolean;
+    data: {
+      calls: Array<{
+        call_id: string;
+        campaign_id: string;
+        org_id: string;
+        status: string;
+        status_color: string;
+        duration_formatted: string;
+        // All Original DynamoDB Columns
+        Status: string;
+        EndTime: string;
+        DateUpdated: string;
+        ParentCallSid: string;
+        StartTime: string;
+        DateCreated: string;
+        RecordingUrl: string;
+        Duration: string;
+        From: string;
+        is_dnd: string;
+        Direction: string;
+        Uri: string;
+        AccountSid: string;
+        PhoneNumberSid: string;
+        Price: string;
+        To: string;
+        ForwardedFrom: string;
+        CallerName: string;
+        AnsweredBy: string;
+        // Calculated Fields
+        duration_minutes: number;
+        duration_seconds: number;
+      }>;
+      summary: {
+        total_calls: number;
+        completed_calls: number;
+        failed_calls: number;
+        in_progress_calls: number;
+        success_rate: number;
+        total_duration_minutes: number;
+        avg_duration_minutes: number;
+      };
+      filters?: {
+        org_id: string;
+        campaign_id: string;
+        days: number;
+        limit: number;
+      };
+    };
+  };
+}
+
+// Interface for the new call details with org endpoint
+interface CallDetailsResponse {
+  success: boolean;
+  data: {
+    calls: Array<{
+      call_id: string;
+      campaign_id: string;
+      org_id: string;
+      status: string;
+      status_color: string;
+      duration_formatted: string;
+      // All Original DynamoDB Columns
+      Status: string;
+      EndTime: string;
+      DateUpdated: string;
+      ParentCallSid: string;
+      StartTime: string;
+      DateCreated: string;
+      RecordingUrl: string;
+      Duration: string;
+      From: string;
+      is_dnd: string;
+      Direction: string;
+      Uri: string;
+      AccountSid: string;
+      PhoneNumberSid: string;
+      Price: string;
+      To: string;
+      ForwardedFrom: string;
+      CallerName: string;
+      AnsweredBy: string;
+      // Calculated Fields
+      duration_minutes: number;
+      duration_seconds: number;
+    }>;
+    summary: {
+      total_calls: number;
+      completed_calls: number;
+      failed_calls: number;
+      in_progress_calls: number;
+      success_rate: number;
+      total_duration_minutes: number;
+      avg_duration_minutes: number;
+    };
+    filters: {
+      org_id: string;
+      campaign_id: string;
+      days: number;
+      limit: number;
+    };
+    note: string;
+  };
+}
+
+interface Organization {
+  id: string;
+  name: string;
+}
+
+interface Campaign {
+  id: string;
+  name: string;
+  org_id: string;
+}
 
 const Dashboard = () => {
-  const stats = [
-    {
-      title: "Total Calls",
-      value: "2,345",
-      icon: Phone,
-      description: "Last 30 days",
-      trend: "+12.5%",
-      color: "from-blue-600 to-blue-400",
-    },
-    {
-      title: "Active Users",
-      value: "85",
-      icon: Users,
-      description: "Currently online",
-      trend: "+5.2%",
-      color: "from-green-600 to-green-400",
-    },
-    {
-      title: "Success Rate",
-      value: "92%",
-      icon: Target,
-      description: "Call completion rate",
-      trend: "+2.3%",
-      color: "from-purple-600 to-purple-400",
-    },
-    {
-      title: "Avg. Duration",
-      value: "4m 32s",
-      icon: Clock,
-      description: "Per call",
-      trend: "-0.5%",
-      color: "from-orange-600 to-orange-400",
-    },
-  ];
+  const { userPermissions, userRole, hasPermission } = usePermissions();
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [filters, setFilters] = useState({
+    org_id: 'all',
+    campaign_id: 'all',
+    days: 30
+  });
+  const [refreshing, setRefreshing] = useState(false);
+  const [hasInitialized, setHasInitialized] = useState(false);
+  const [isFilterDataLoaded, setIsFilterDataLoaded] = useState(false);
+  const [userOrgId, setUserOrgId] = useState<string | null>(null);
+  const [callDetails, setCallDetails] = useState<CallDetailsResponse | null>(null);
+  const [callDetailsLoading, setCallDetailsLoading] = useState(false);
+  const [filterDataLoading, setFilterDataLoading] = useState(false);
+  
+  // Store all data for reference (keeping for potential future use)
+  const [allCallDetails, setAllCallDetails] = useState<CallDetailsResponse | null>(null);
+  const [allMetrics, setAllMetrics] = useState<DashboardMetrics | null>(null);
 
-  const activityData = [
-    { time: '00:00', calls: 30, success: 25 },
-    { time: '03:00', calls: 20, success: 18 },
-    { time: '06:00', calls: 15, success: 12 },
-    { time: '09:00', calls: 40, success: 35 },
-    { time: '12:00', calls: 65, success: 58 },
-    { time: '15:00', calls: 55, success: 48 },
-    { time: '18:00', calls: 45, success: 40 },
-    { time: '21:00', calls: 35, success: 30 },
-  ];
+  const userData = getUserData();
+  const isSuperAdmin = userPermissions?.admin;
+  
+  // Fetch organizations and campaigns for filters
+  const fetchFilterData = async () => {
+    try {
+      setFilterDataLoading(true);
+      console.log('Dashboard: Fetching filter data...', { isSuperAdmin, userData: userData?.org_id });
+      
+      // Fetch organizations
+      if (isSuperAdmin) {
+        console.log('Dashboard: Fetching all organizations for super admin');
+        const orgResponse = await authorizedFetch('/organizations/');
+        if (orgResponse.ok) {
+          const orgData = await orgResponse.json() as Organization[];
+          console.log('Dashboard: Organizations fetched:', orgData);
+          setOrganizations(orgData);
+        } else {
+          console.error('Dashboard: Failed to fetch organizations:', orgResponse.status);
+          // Set empty array to prevent infinite loading
+          setOrganizations([]);
+        }
+      } else if (userData?.org_id) {
+        // Regular user - only show their organization
+        console.log('Dashboard: Setting user organization:', userData.org_id);
+        setOrganizations([{ id: userData.org_id, name: userData.user_name || userData.org_name || 'My Organization' }]);
+      } else {
+        console.log('Dashboard: No user data or org_id available');
+        setOrganizations([]);
+      }
 
-  const performanceData = [
-    { month: 'Jan', success: 85, failed: 15 },
-    { month: 'Feb', success: 88, failed: 12 },
-    { month: 'Mar', success: 92, failed: 8 },
-    { month: 'Apr', success: 90, failed: 10 },
-    { month: 'May', success: 95, failed: 5 },
-    { month: 'Jun', success: 93, failed: 7 },
-  ];
+      // Fetch campaigns
+      console.log('Dashboard: Fetching campaigns...');
+      const campaignResponse = await authorizedFetch('/campaigns/');
+      if (campaignResponse.ok) {
+        const campaignData = await campaignResponse.json() as Campaign[];
+        console.log('Dashboard: Campaigns fetched:', campaignData);
+        
+        // Filter campaigns based on user permissions
+        if (isSuperAdmin) {
+          setCampaigns(campaignData);
+        } else if (userData?.org_id) {
+          const userCampaigns = campaignData.filter((campaign: Campaign) => 
+            campaign.org_id === userData.org_id
+          );
+          console.log('Dashboard: Filtered campaigns for user:', userCampaigns);
+          setCampaigns(userCampaigns);
+        } else {
+          setCampaigns([]);
+        }
+      } else {
+        console.error('Dashboard: Failed to fetch campaigns:', campaignResponse.status);
+        setCampaigns([]);
+      }
+      
+      // Mark filter data as loaded AFTER all data is fetched
+      console.log('Dashboard: Filter data loaded successfully');
+      setIsFilterDataLoaded(true);
+    } catch (error) {
+      console.error('Dashboard: Error fetching filter data:', error);
+      // Set empty arrays on error to prevent infinite loading
+      setOrganizations([]);
+      setCampaigns([]);
+      // Even on error, mark as loaded to prevent infinite loops
+      setIsFilterDataLoaded(true);
+    } finally {
+      setFilterDataLoading(false);
+    }
+  };
+  
+  // Debug user data and permissions (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Dashboard: User data:', userData);
+    console.log('Dashboard: User permissions:', userPermissions);
+    console.log('Dashboard: Is super admin:', isSuperAdmin);
+    console.log('Dashboard: Organizations state:', organizations);
+    console.log('Dashboard: Campaigns state:', campaigns);
+    console.log('Dashboard: isFilterDataLoaded:', isFilterDataLoaded);
+  }
 
-  const aiMetrics = [
-    { name: 'Accuracy', value: 92 },
-    { name: 'Response', value: 85 },
-    { name: 'Engagement', value: 78 },
-    { name: 'Resolution', value: 88 },
-  ];
+  // Auto-detect user's organization on component mount
+  useEffect(() => {
+    if (userData?.org_id && !isSuperAdmin) {
+      setUserOrgId(userData.org_id);
+      setFilters(prev => ({ ...prev, org_id: userData.org_id }));
+      console.log('Dashboard: Auto-detected user organization:', userData.org_id);
+    }
+  }, [userData, isSuperAdmin]);
 
-  const COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b'];
+  // Initialize filter data when user data is available
+  useEffect(() => {
+    if (userData && !isFilterDataLoaded && !filterDataLoading) {
+      console.log('Dashboard: User data available, initializing filters...');
+      // Small delay to ensure permissions are loaded
+      setTimeout(() => {
+        if (!isFilterDataLoaded) {
+          fetchFilterData();
+        }
+      }, 500);
+    }
+  }, [userData, isFilterDataLoaded, filterDataLoading]);
+
+  // Auto-apply filters when data becomes available (removed for server-side filtering)
+  // useEffect(() => {
+  //   if (allMetrics && allCallDetails && hasInitialized) {
+  //     console.log('Dashboard: Data available, auto-applying current filters');
+  //     applyFiltersLocally();
+  //   }
+  // }, [allMetrics, allCallDetails, hasInitialized]);
+
+  // Apply filters when they change (removed for server-side filtering)
+  // useEffect(() => {
+  //   if (allMetrics && allCallDetails && hasInitialized) {
+  //     console.log('Dashboard: Filters changed, applying locally');
+  //     applyFiltersLocally();
+  //   }
+  // }, [filters.org_id, filters.campaign_id]);
+
+  // Fetch organizations and campaigns for filters - ONLY ONCE
+  useEffect(() => {
+    // Prevent multiple executions
+    if (isFilterDataLoaded) {
+      return;
+    }
+    
+    let isMounted = true;
+    
+    // Only fetch if we have the necessary data
+    if (userData && (isSuperAdmin !== undefined)) {
+      console.log('Dashboard: Starting filter data fetch...');
+      fetchFilterData();
+    } else {
+      console.log('Dashboard: Waiting for user data or permissions...', { userData, isSuperAdmin });
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [userData, isSuperAdmin, isFilterDataLoaded]); // Add proper dependencies
+
+  // Fetch dashboard metrics using the new comprehensive endpoint
+  const fetchDashboard = async () => {
+    // Prevent multiple simultaneous API calls
+    if (loading) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const params = new URLSearchParams();
+      
+      // Automatically include org_id if user has one and is not super admin
+      if (userOrgId && !isSuperAdmin) {
+        params.append('org_id', userOrgId);
+      } else if (filters.org_id && filters.org_id !== 'all') {
+        params.append('org_id', filters.org_id);
+      }
+      
+      if (filters.campaign_id && filters.campaign_id !== 'all') {
+        params.append('campaign_id', filters.campaign_id);
+      }
+      params.append('days', filters.days.toString());
+
+      // Use the new comprehensive dashboard endpoint
+      const apiUrl = `/dashboard/comprehensive?${params}`;
+      console.log('Dashboard: Fetching from API:', apiUrl);
+      console.log('Dashboard: API parameters:', params.toString());
+      
+      const response = await authorizedFetch(apiUrl);
+      
+      if (!response.ok) {
+        const errorData = await response.json() as { detail?: string };
+        console.error('Dashboard: API error response:', errorData);
+        throw new Error(errorData.detail || 'Failed to fetch dashboard data');
+      }
+
+      const data = await response.json() as DashboardMetrics;
+      console.log('Dashboard: Received data:', data);
+      console.log('Dashboard: Raw API response:', JSON.stringify(data, null, 2));
+      
+      // Debug specific fields that are showing 0
+      if (data?.core_performance_metrics) {
+        console.log('Dashboard: API Response - Core metrics:', {
+          total_minutes_consumed: data.core_performance_metrics.total_minutes_consumed,
+          total_minutes_formatted: data.core_performance_metrics.total_minutes_formatted,
+          avg_handle_time_minutes: data.core_performance_metrics.avg_handle_time_minutes,
+          avg_handle_time_formatted: data.core_performance_metrics.avg_handle_time_formatted,
+          transferred_to_human: data.core_performance_metrics.transferred_to_human,
+          call_back_requests: data.core_performance_metrics.call_back_requests
+        });
+      } else {
+        console.log('Dashboard: API Response - No core_performance_metrics found');
+      }
+      
+      // Helper function to handle NULL objects from API
+      const safeValue = (value: any, defaultValue: any = 0) => {
+        if (value === null || value === undefined || value === '') {
+          return defaultValue;
+        }
+        if (typeof value === 'object' && value !== null && value.NULL === true) {
+          return defaultValue;
+        }
+        return value;
+      };
+      
+      // Store all data for reference
+      setAllMetrics(data);
+      setMetrics(data);
+      
+      // Debug state update
+      console.log('Dashboard: State updated with data:', {
+        total_minutes_consumed: data?.core_performance_metrics?.total_minutes_consumed,
+        total_minutes_formatted: data?.core_performance_metrics?.total_minutes_formatted
+      });
+      
+      // Debug state after setting
+      setTimeout(() => {
+        console.log('Dashboard: State after setting - allMetrics:', allMetrics);
+        console.log('Dashboard: State after setting - metrics:', metrics);
+      }, 100);
+      
+      // Also fetch call details using the new recommended endpoint
+      if (userOrgId || (filters.org_id && filters.org_id !== 'all')) {
+        fetchCallDetails();
+      }
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch dashboard data';
+      console.error('Dashboard: Fetch error:', error);
+      setError(errorMessage);
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Refresh dashboard data
+  const handleRefresh = async () => {
+    if (refreshing || loading) {
+      console.log('Dashboard: Refresh already in progress, skipping...');
+      return;
+    }
+    
+    setRefreshing(true);
+    await fetchDashboard();
+    
+    // Also refresh call details if we have an org_id
+    if (userOrgId || (filters.org_id && filters.org_id !== 'all')) {
+      await fetchCallDetails();
+    }
+    
+    setRefreshing(false);
+  };
+
+  // Initial dashboard fetch - IMMEDIATE
+  useEffect(() => {
+    // Fetch dashboard immediately with a small delay to ensure component is ready
+    setTimeout(() => {
+      fetchDashboard();
+      setHasInitialized(true);
+    }, 100);
+  }, []); // Only run once on mount
+  
+  // Debug logging for state changes (only in development)
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Dashboard: State changed - isFilterDataLoaded:', isFilterDataLoaded, 'hasInitialized:', hasInitialized);
+    }
+  }, [isFilterDataLoaded, hasInitialized]);
+  
+  // Debug when metrics state changes
+  useEffect(() => {
+    if (metrics?.core_performance_metrics) {
+      console.log('Dashboard: Metrics state changed - Core metrics:', {
+        total_minutes_consumed: metrics.core_performance_metrics.total_minutes_consumed,
+        total_minutes_formatted: metrics.core_performance_metrics.total_minutes_formatted,
+        avg_handle_time_minutes: metrics.core_performance_metrics.avg_handle_time_minutes,
+        avg_handle_time_formatted: metrics.core_performance_metrics.avg_handle_time_formatted
+      });
+    } else {
+      console.log('Dashboard: Metrics state changed - metrics is null or missing core_performance_metrics');
+    }
+  }, [metrics]);
+
+  // Transform data for charts
+  const transformChartData = () => {
+    if (!metrics) return { hourlyData: [], dailyData: [], failureReasons: [] };
+
+    try {
+      // Additional safety check for nested properties
+      if (!metrics?.core_performance_metrics || !metrics?.outcome_based_metrics || !metrics?.failure_analysis) {
+        return { hourlyData: [], dailyData: [], failureReasons: [] };
+      }
+
+      // Transform hourly data
+      const hourlyData = Object.entries(metrics?.outcome_based_metrics?.call_activity?.hourly || {})
+        .map(([hour, calls]) => ({
+          hour: `${hour}:00`,
+          calls,
+          success: Math.round(calls * ((safeValue(metrics?.core_performance_metrics?.success_percentage, 0)) / 100))
+        }))
+        .sort((a, b) => parseInt(a.hour) - parseInt(b.hour));
+
+      // Transform daily data
+      const dailyData = Object.entries(metrics?.outcome_based_metrics?.call_activity?.daily || {})
+        .map(([date, calls]) => ({
+          date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          calls,
+          success: Math.round(calls * ((safeValue(metrics?.core_performance_metrics?.success_percentage, 0)) / 100))
+        }))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Transform failure reasons for pie chart
+      const failureReasons = Object.entries(metrics?.failure_analysis?.failure_reasons || {})
+        .filter(([_, count]) => count > 0)
+        .map(([reason, count]) => ({
+          name: reason,
+          value: count
+        }));
+
+      return { hourlyData, dailyData, failureReasons };
+    } catch (error) {
+      console.error('Error transforming chart data:', error);
+      return { hourlyData: [], dailyData: [], failureReasons: [] };
+    }
+  };
+
+  // Fetch call details using the new recommended endpoint
+  const fetchCallDetails = async () => {
+    if (callDetailsLoading) return;
+    
+    try {
+      setCallDetailsLoading(true);
+      
+      const params = new URLSearchParams();
+      
+      // Always include org_id for the new endpoint
+      if (userOrgId && !isSuperAdmin) {
+        params.append('org_id', userOrgId);
+      } else if (filters.org_id && filters.org_id !== 'all') {
+        params.append('org_id', filters.org_id);
+      } else {
+        // If no org_id is available, skip fetching call details
+        console.log('Dashboard: No org_id available, skipping call details fetch');
+        return;
+      }
+      
+      if (filters.campaign_id && filters.campaign_id !== 'all') {
+        params.append('campaign_id', filters.campaign_id);
+      }
+      
+      params.append('days', filters.days.toString());
+      params.append('limit', '50'); // Limit to 50 calls for performance
+      
+      const apiUrl = `/dashboard/call-details-with-org?${params}`;
+      console.log('Dashboard: Fetching call details from:', apiUrl);
+      
+      const response = await authorizedFetch(apiUrl);
+      
+      if (!response.ok) {
+        const errorData = await response.json() as { detail?: string };
+        console.error('Dashboard: Call details API error:', errorData);
+        throw new Error(errorData.detail || 'Failed to fetch call details');
+      }
+      
+      const data = await response.json() as CallDetailsResponse;
+      console.log('Dashboard: Received call details:', data);
+      
+      // Store all call details for reference
+      setAllCallDetails(data);
+      setCallDetails(data);
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch call details';
+      console.error('Dashboard: Call details fetch error:', error);
+      toast({
+        title: "Warning",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setCallDetailsLoading(false);
+    }
+  };
+
+  // Loading skeleton
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-10 w-32" />
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-6">
+                <Skeleton className="h-20 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {[...Array(2)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-6 w-32" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-[300px] w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Failed to Load Dashboard</h2>
+        <p className="text-gray-600 mb-4">{error}</p>
+        <Button onClick={fetchDashboard} variant="outline">
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Try Again
+        </Button>
+      </div>
+    );
+  }
+
+  // Don't render anything if metrics is not available
+  if (!metrics) {
+    console.log('Dashboard: metrics is null/undefined');
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <AlertCircle className="h-16 w-16 text-gray-400 mb-4" />
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">No Data Available</h2>
+        <p className="text-gray-600">Dashboard data is not available at the moment.</p>
+      </div>
+    );
+  }
+
+  // Final safety check - ensure metrics is a valid object
+  if (typeof metrics !== 'object' || metrics === null) {
+    console.error('Dashboard: metrics is not a valid object:', metrics);
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Invalid Data Format</h2>
+        <p className="text-gray-600">Dashboard data format is invalid. Please try refreshing.</p>
+        <Button onClick={handleRefresh} variant="outline" className="mt-4">
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Refresh
+        </Button>
+      </div>
+    );
+  }
+
+        // Debug log to see what metrics contains
+      console.log('Dashboard: metrics data:', metrics);
+      console.log('Dashboard: metrics structure check:', {
+        hasMetrics: !!metrics,
+        hasCoreMetrics: !!metrics?.core_performance_metrics,
+        hasUserMetrics: !!metrics?.user_interaction_metrics,
+        hasOutcomeMetrics: !!metrics?.outcome_based_metrics,
+        hasFailureAnalysis: !!metrics?.failure_analysis,
+        hasCallDetails: !!metrics?.call_details,
+        organizationId: metrics?.organization_id,
+        campaignId: metrics?.campaign_id
+      });
+      
+      // Debug specific fields that might be showing 0
+      if (metrics?.core_performance_metrics) {
+        console.log('Dashboard: Core metrics debug:', {
+          total_minutes_consumed: metrics.core_performance_metrics.total_minutes_consumed,
+          total_minutes_formatted: metrics.core_performance_metrics.total_minutes_formatted,
+          avg_handle_time_minutes: metrics.core_performance_metrics.avg_handle_time_minutes,
+          avg_handle_time_formatted: metrics.core_performance_metrics.avg_handle_time_formatted,
+          transferred_to_human: metrics.core_performance_metrics.transferred_to_human,
+          call_back_requests: metrics.core_performance_metrics.call_back_requests
+        });
+      }
+      
+          // Debug calculated metrics
+  const calculatedMetrics = calculateMetrics(metrics);
+  console.log('Dashboard: Calculated metrics debug:', calculatedMetrics);
+  
+  // Helper function to handle NULL objects from API (available in render scope)
+  const safeValue = (value: any, defaultValue: any = 0) => {
+    if (value === null || value === undefined || value === '') {
+      return defaultValue;
+    }
+    if (typeof value === 'object' && value !== null && value.NULL === true) {
+      return defaultValue;
+    }
+    return value;
+  };
+
+  // Additional safety check for required nested properties
+  if (!metrics?.core_performance_metrics || !metrics?.user_interaction_metrics || !metrics?.outcome_based_metrics || !metrics?.failure_analysis) {
+    console.log('Dashboard: metrics has incomplete structure:', {
+      hasCoreMetrics: !!metrics?.core_performance_metrics,
+      hasUserMetrics: !!metrics?.user_interaction_metrics,
+      hasOutcomeMetrics: !!metrics?.outcome_based_metrics,
+      hasFailureAnalysis: !!metrics?.failure_analysis
+    });
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <AlertCircle className="h-16 w-16 text-yellow-500 mb-4" />
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Incomplete Data</h2>
+        <p className="text-gray-600">Dashboard data is incomplete. Please try refreshing.</p>
+        <Button onClick={handleRefresh} variant="outline" className="mt-4">
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Refresh
+        </Button>
+      </div>
+    );
+  }
+
+  // Transform data for charts only when metrics is available
+  const { hourlyData, dailyData, failureReasons } = transformChartData();
+
+  // Reset filters and fetch all data from API
+  const resetFilters = () => {
+    console.log('Dashboard: Resetting filters to show all data');
+    
+    setFilters({
+      org_id: 'all',
+      campaign_id: 'all',
+      days: filters.days // Keep the same time period
+    });
+    
+    // Fetch all data from API
+    console.log('Dashboard: Fetching all data from API after reset...');
+    setTimeout(() => {
+      fetchDashboard();
+    }, 100);
+  };
+
+  // Debug function to check data structure (REMOVED - no longer needed)
+  // const debugDataStructure = () => {
+  //   // Function removed - no longer needed
+  // };
+
+  // Apply filters locally to existing data without making API calls (REMOVED - now using server-side filtering)
+  // const applyFiltersLocally = () => {
+  //   // Function removed - now making API calls when filters change
+  // };
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat) => (
-          <Card key={stat.title} className="hover:shadow-lg transition-shadow duration-200">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className={`p-3 rounded-lg bg-gradient-to-br ${stat.color}`}>
-                  <stat.icon className="h-5 w-5 text-white" />
-                </div>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  stat.trend.startsWith('+') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                }`}>
-                  {stat.trend}
-                </span>
-              </div>
-              <div className="mt-4">
-                <h3 className="text-sm font-medium text-muted-foreground">{stat.title}</h3>
-                <p className="text-3xl font-bold mt-2">{stat.value}</p>
-                <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      {/* Header with filters */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Call Center Dashboard</h1>
+          <p className="text-gray-600 mt-1">
+            {safeRender(metrics?.dashboard_period, 'Loading...')} • 
+            {filters.org_id !== 'all' ? ` Organization: ${safeRender(organizations.find(org => org.id === filters.org_id)?.name, filters.org_id)}` : ' All Organizations'} • 
+            {filters.campaign_id !== 'all' ? ` Campaign: ${safeRender(campaigns.find(camp => camp.id === filters.campaign_id)?.name, filters.campaign_id)}` : ' All Campaigns'}
+            {userOrgId && !isSuperAdmin && (
+              <span className="text-blue-600 font-medium"> • Auto-detected: {safeRender(organizations.find(org => org.id === userOrgId)?.name, userOrgId)}</span>
+            )}
+            {metrics?.generated_at && (
+              <span className="text-gray-500"> • Generated: {new Date(metrics.generated_at).toLocaleString()}</span>
+            )}
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => {
+              setRefreshing(true);
+              fetchDashboard();
+            }}
+            disabled={loading || refreshing}
+            className="h-10"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
+      {/* Filters */}
+      <Card className="p-4">
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Organization Filter */}
+          <div className="flex-1">
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Organization</label>
+            {filterDataLoading ? (
+              <div className="h-10 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-500 flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                Loading organizations...
+              </div>
+            ) : organizations.length > 0 ? (
+              <Select
+                value={filters.org_id}
+                onValueChange={(value) => {
+                  console.log('Dashboard: Organization filter changed to:', value);
+                  console.log('Dashboard: Current filters before change:', filters);
+                  
+                  setFilters(prev => {
+                    const newFilters = { ...prev, org_id: value, campaign_id: 'all' };
+                    console.log('Dashboard: New filters after change:', newFilters);
+                    return newFilters;
+                  });
+                  
+                  // Make API call to fetch filtered data
+                  console.log('Dashboard: Organization filter changed, fetching new data from API...');
+                  // Small delay to ensure state is updated
+                  setTimeout(() => {
+                    fetchDashboard();
+                  }, 100);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Organizations">
+                    {filters.org_id === 'all' ? 'All Organizations' : organizations.find(org => org.id === filters.org_id)?.name || 'Select Organization'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {isSuperAdmin && (
+                    <SelectItem value="all">All Organizations</SelectItem>
+                  )}
+                  {organizations.map((org) => (
+                    <SelectItem key={org.id} value={org.id}>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4" />
+                        {org.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="h-10 px-3 py-2 text-sm border border-red-300 rounded-md bg-red-50 text-red-600">
+                No organizations available
+              </div>
+            )}
+          </div>
+
+          {/* Campaign Filter */}
+          <div className="flex-1">
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Campaign</label>
+            {filterDataLoading ? (
+              <div className="h-10 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-500 flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                Loading campaigns...
+              </div>
+            ) : campaigns.length > 0 ? (
+              <Select
+                value={filters.campaign_id}
+                onValueChange={(value) => {
+                  console.log('Dashboard: Campaign filter changed to:', value);
+                  console.log('Dashboard: Current filters before change:', filters);
+                  
+                  setFilters(prev => {
+                    const newFilters = { ...prev, campaign_id: value };
+                    console.log('Dashboard: New filters after change:', newFilters);
+                    return newFilters;
+                  });
+                  
+                  // Make API call to fetch filtered data
+                  console.log('Dashboard: Campaign filter changed, fetching new data from API...');
+                  // Small delay to ensure state is updated
+                  setTimeout(() => {
+                    fetchDashboard();
+                  }, 100);
+                }}
+                disabled={filters.org_id === 'all' && !isSuperAdmin}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Campaigns">
+                    {filters.campaign_id === 'all' ? 'All Campaigns' : campaigns.find(camp => camp.id === filters.campaign_id)?.name || 'Select Campaign'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Campaigns</SelectItem>
+                  {campaigns
+                    .filter(campaign => filters.org_id === 'all' || campaign.org_id === filters.org_id)
+                    .map((campaign) => (
+                      <SelectItem key={campaign.id} value={campaign.id}>
+                        <div className="flex items-center gap-2">
+                          <Campaign className="h-4 w-4" />
+                          {campaign.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="h-10 px-3 py-2 text-sm border border-red-300 rounded-md bg-red-50 text-red-600">
+                No campaigns available
+              </div>
+            )}
+          </div>
+
+          {/* Time Period Filter */}
+          <div className="flex-1">
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Time Period</label>
+            <Select
+              value={filters.days.toString()}
+              onValueChange={(value) => {
+                console.log('Dashboard: Time period changed to:', value, 'days - making API call for new data');
+                
+                setFilters(prev => ({ ...prev, days: parseInt(value) }));
+                
+                // Time period changes require new API calls since we need data for different time ranges
+                if (isFilterDataLoaded && hasInitialized) {
+                  fetchDashboard();
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue>
+                  {filters.days === 7 ? 'Last 7 days' : 
+                   filters.days === 30 ? 'Last 30 days' : 
+                   filters.days === 90 ? 'Last 90 days' : 
+                   filters.days === 365 ? 'Last year' : 'Select Period'}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">Last 7 days</SelectItem>
+                <SelectItem value="30">Last 30 days</SelectItem>
+                <SelectItem value="90">Last 90 days</SelectItem>
+                <SelectItem value="365">Last year</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Filter Refresh Button */}
+          <div className="flex items-end gap-2">
+            <Button
+              onClick={() => {
+                setIsFilterDataLoaded(false);
+                setFilterDataLoading(true);
+                // Force refresh of filter data
+                setTimeout(() => {
+                  fetchFilterData();
+                }, 100);
+              }}
+              variant="outline"
+              size="sm"
+              disabled={filterDataLoading}
+              className="h-10"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${filterDataLoading ? 'animate-spin' : ''}`} />
+              Refresh Filters
+            </Button>
+            
+            <Button
+              onClick={resetFilters}
+              variant="outline"
+              size="sm"
+              className="h-10"
+              title="Reset filters to show all data"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Reset Filters
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+     
+      {/* Core Performance Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card className="hover:shadow-lg transition-shadow duration-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="p-3 rounded-lg bg-gradient-to-br from-blue-600 to-blue-400">
+                <Phone className="h-5 w-5 text-white" />
+              </div>
+              <Badge variant="secondary" className="text-xs">
+                {safeValue(metrics?.core_performance_metrics?.success_percentage, 0)}% Success
+              </Badge>
+            </div>
+            <div className="mt-4">
+              <h3 className="text-sm font-medium text-muted-foreground">Total Calls</h3>
+              <p className="text-3xl font-bold mt-2">{safeValue(metrics?.core_performance_metrics?.total_calls, 0).toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground mt-1">{safeRender(metrics?.dashboard_period, 'Loading...')}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow duration-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="p-3 rounded-lg bg-gradient-to-br from-green-600 to-green-400">
+                <Target className="h-5 w-5 text-white" />
+              </div>
+              <Badge variant="secondary" className="text-xs">
+                {safeValue(metrics?.core_performance_metrics?.pickup_percentage, 0)}% Pickup
+              </Badge>
+            </div>
+            <div className="mt-4">
+              <h3 className="text-sm font-medium text-muted-foreground">Successful Calls</h3>
+              <p className="text-3xl font-bold mt-2">{safeValue(metrics?.core_performance_metrics?.successful_calls, 0).toLocaleString()}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                  {safeValue(metrics?.core_performance_metrics?.success_percentage, 0)}% of total
+                </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow duration-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="p-3 rounded-lg bg-gradient-to-br from-purple-600 to-purple-400">
+                <Clock className="h-5 w-5 text-white" />
+              </div>
+              <Badge variant="secondary" className="text-xs">
+                {safeValue(metrics?.core_performance_metrics?.avg_handle_time_formatted, '0 min')}
+              </Badge>
+            </div>
+            <div className="mt-4">
+              <h3 className="text-sm font-medium text-muted-foreground">Avg Handle Time</h3>
+              <p className="text-3xl font-bold mt-2">
+                {(() => {
+                  const formatted = metrics?.core_performance_metrics?.avg_handle_time_formatted;
+                  const minutes = metrics?.core_performance_metrics?.avg_handle_time_minutes;
+                  console.log('Dashboard: Rendering Avg Handle Time - formatted:', formatted, 'minutes:', minutes);
+                  
+                  // Handle special NULL objects from API
+                  if (formatted && typeof formatted === 'object' && formatted.NULL === true) {
+                    return '0 min';
+                  }
+                  if (minutes && typeof minutes === 'object' && minutes.NULL === true) {
+                    return '0 min';
+                  }
+                  
+                                          return safeValue(formatted, '0 min') || (minutes ? `${safeValue(minutes, 0).toFixed(1)} min` : '0 min');
+                })()}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">minutes per call</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow duration-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="p-3 rounded-lg bg-gradient-to-br from-orange-600 to-orange-400">
+                <BarChart3 className="h-5 w-5 text-white" />
+              </div>
+              <Badge variant="secondary" className="text-xs">
+                {safeValue(metrics?.core_performance_metrics?.call_completion_rate, 0)}% Complete
+              </Badge>
+            </div>
+            <div className="mt-4">
+              <h3 className="text-sm font-medium text-muted-foreground">Total Minutes</h3>
+              <p className="text-3xl font-bold mt-2">
+                {(() => {
+                  const formatted = metrics?.core_performance_metrics?.total_minutes_formatted;
+                  const consumed = metrics?.core_performance_metrics?.total_minutes_consumed;
+                  console.log('Dashboard: Rendering Total Minutes - formatted:', formatted, 'consumed:', consumed);
+                  
+                  // Handle special NULL objects from API
+                  if (formatted && typeof formatted === 'object' && formatted.NULL === true) {
+                    return '0 min';
+                  }
+                  if (consumed && typeof consumed === 'object' && consumed.NULL === true) {
+                    return '0 min';
+                  }
+                  
+                                          return safeValue(formatted, '0 min') || (consumed ? `${safeValue(consumed, 0).toFixed(1)} min` : '0 min');
+                })()}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">consumed</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Call Status Breakdown */}
+      {metrics?.core_performance_metrics?.call_status_breakdown && (
+        <Card className="hover:shadow-lg transition-shadow duration-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-blue-500" />
+              Call Status Breakdown
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  {(() => {
+                    const completed = safeValue(metrics.core_performance_metrics.call_status_breakdown?.completed, 0);
+                    const successful = safeValue(metrics.core_performance_metrics.successful_calls, 0);
+                    return completed || successful || 0;
+                  })()}
+                </div>
+                <div className="text-sm text-gray-600">Completed</div>
+                <Badge variant="outline" className="mt-1">Success</Badge>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-yellow-600">
+                  {(() => {
+                    const noAnswer = safeValue(metrics.core_performance_metrics.call_status_breakdown?.['no-answer'], 0);
+                    return noAnswer || calculatedMetrics.estimatedNoAnswer;
+                  })()}
+                </div>
+                <div className="text-sm text-gray-600">No Answer</div>
+                <Badge variant="outline" className="mt-1">Warning</Badge>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-600">
+                  {(() => {
+                    const failed = safeValue(metrics.core_performance_metrics.call_status_breakdown?.failed, 0);
+                    return failed || calculatedMetrics.failedCalls;
+                  })()}
+                </div>
+                <div className="text-sm text-gray-600">Failed</div>
+                <Badge variant="destructive" className="mt-1">Failed</Badge>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-600">
+                  {(() => {
+                    const busy = safeValue(metrics.core_performance_metrics.call_status_breakdown?.busy, 0);
+                    return busy || calculatedMetrics.estimatedBusy;
+                  })()}
+                </div>
+                <div className="text-sm text-gray-600">Busy</div>
+                <Badge variant="destructive" className="mt-1">Failed</Badge>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-600">
+                  {(() => {
+                    const unknown = safeValue(metrics.core_performance_metrics.call_status_breakdown?.unknown, 0);
+                    return unknown || calculatedMetrics.estimatedUnknown;
+                  })()}
+                </div>
+                <div className="text-sm text-gray-600">Unknown</div>
+                <Badge variant="secondary" className="mt-1">Unknown</Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Call Activity Chart */}
         <Card className="hover:shadow-lg transition-shadow duration-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Activity className="h-5 w-5 text-blue-500" />
-              Call Activity
+              Call Activity ({filters.days === 7 ? 'Hourly' : 'Daily'})
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={activityData}>
-                  <defs>
-                    <linearGradient id="colorCalls" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorSuccess" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="time" />
-                  <YAxis />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'white',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '6px',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                    }}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="calls" 
-                    stroke="#3b82f6" 
-                    fillOpacity={1} 
-                    fill="url(#colorCalls)" 
-                    name="Total Calls"
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="success" 
-                    stroke="#10b981" 
-                    fillOpacity={1} 
-                    fill="url(#colorSuccess)" 
-                    name="Successful Calls"
-                  />
+                <AreaChart data={filters.days === 7 ? hourlyData : dailyData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                  {(filters.days === 7 ? hourlyData : dailyData).length === 0 ? (
+                    <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" fill="#666">
+                      No data available for selected period
+                    </text>
+                  ) : (
+                    <>
+                      <defs>
+                        <linearGradient id="colorCalls" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorSuccess" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey={filters.days === 7 ? "hour" : "date"} />
+                      <YAxis />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'white',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '6px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="calls" 
+                        stroke="#3b82f6" 
+                        fillOpacity={1} 
+                        fill="url(#colorCalls)" 
+                        name="Total Calls"
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="success" 
+                        stroke="#10b981" 
+                        fillOpacity={1} 
+                        fill="url(#colorSuccess)" 
+                        name="Successful Calls"
+                      />
+                    </>
+                  )}
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
 
+        {/* AI Performance Metrics */}
         <Card className="hover:shadow-lg transition-shadow duration-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Brain className="h-5 w-5 text-purple-500" />
-              Performance Metrics
+              AI Performance
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -161,7 +1339,11 @@ const Dashboard = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={aiMetrics}
+                    data={[
+                      { name: 'Intent Accuracy', value: safeValue(metrics.user_interaction_metrics?.intent_recognition_accuracy, 0) },
+                      { name: 'First Response', value: Math.round(100 - safeValue(metrics.user_interaction_metrics?.first_response_time_seconds, 0)) },
+                      { name: 'Fallback Rate', value: Math.round(((safeValue(metrics.user_interaction_metrics?.fallback_or_error_triggers, 0)) / (safeValue(metrics.user_interaction_metrics?.total_interactions, 1))) * 100) }
+                    ]}
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
@@ -171,8 +1353,8 @@ const Dashboard = () => {
                     dataKey="value"
                     label={({ name, value }) => `${name}: ${value}%`}
                   >
-                    {aiMetrics.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    {['#3b82f6', '#10b981', '#ef4444'].map((color, index) => (
+                      <Cell key={`cell-${index}`} fill={color} />
                     ))}
                   </Pie>
                   <Tooltip 
@@ -188,76 +1370,304 @@ const Dashboard = () => {
             </div>
           </CardContent>
         </Card>
+      </div>
 
-        <Card className="hover:shadow-lg transition-shadow duration-200 lg:col-span-2">
+      {/* Additional Metrics Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* User Interaction Metrics */}
+        <Card className="hover:shadow-lg transition-shadow duration-200">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-green-500" />
-              Monthly Performance
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Users className="h-5 w-5 text-green-500" />
+              User Interaction
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={performanceData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'white',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '6px',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                    }}
-                  />
-                  <Bar 
-                    dataKey="success" 
-                    fill="#10b981" 
-                    name="Successful" 
-                    radius={[4, 4, 0, 0]}
-                  >
-                    {performanceData.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`}
-                        fill={`url(#successGradient-${index})`}
-                      />
-                    ))}
-                  </Bar>
-                  <Bar 
-                    dataKey="failed" 
-                    fill="#ef4444" 
-                    name="Failed" 
-                    radius={[4, 4, 0, 0]}
-                  >
-                    {performanceData.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`}
-                        fill={`url(#failedGradient-${index})`}
-                      />
-                    ))}
-                  </Bar>
-                  <defs>
-                    {performanceData.map((_, index) => (
-                      <React.Fragment key={index}>
-                        <linearGradient id={`successGradient-${index}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#10b981" stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0.4}/>
-                        </linearGradient>
-                        <linearGradient id={`failedGradient-${index}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#ef4444" stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0.4}/>
-                        </linearGradient>
-                      </React.Fragment>
-                    ))}
-                  </defs>
-                </BarChart>
-              </ResponsiveContainer>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Intent Recognition</span>
+              <Badge variant="outline">{safeValue(metrics?.user_interaction_metrics?.intent_recognition_accuracy, 0)}%</Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">First Response Time</span>
+              <Badge variant="outline">{safeValue(metrics?.user_interaction_metrics?.first_response_time_seconds, 0)}s</Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Fallback Triggers</span>
+              <Badge variant="outline">{safeValue(metrics?.user_interaction_metrics?.fallback_or_error_triggers, 0)}</Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Total Interactions</span>
+              <Badge variant="outline">{safeValue(metrics?.user_interaction_metrics?.total_interactions, 0)}</Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Business Outcomes */}
+        <Card className="hover:shadow-lg transition-shadow duration-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              Business Outcomes
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Conversion Rate</span>
+              <Badge variant="outline">{metrics?.outcome_based_metrics?.conversion_rate || 0}%</Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Lead Qualification</span>
+              <Badge variant="outline">{metrics?.outcome_based_metrics?.lead_qualification_rate || 0}%</Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Feedback Score</span>
+              <Badge variant="outline">{metrics?.outcome_based_metrics?.feedback_rating_score || 0}/5</Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Sentiment Score</span>
+              <Badge variant="outline">{metrics?.outcome_based_metrics?.sentiment_score || 0}</Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Failure Analysis */}
+        <Card className="hover:shadow-lg transition-shadow duration-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              Failure Analysis
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Total Failures</span>
+              <Badge variant="destructive">{metrics?.failure_analysis?.total_failures || 0}</Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Failure Rate</span>
+              <Badge variant="destructive">{metrics?.failure_analysis?.failure_rate || 0}%</Badge>
+            </div>
+            <div className="space-y-2">
+              <span className="text-sm text-gray-600">Top Failure Reasons:</span>
+              {Object.entries(metrics?.failure_analysis?.failure_reasons || {})
+                .filter(([_, count]) => count > 0)
+                .sort(([_, a], [__, b]) => b - a)
+                .slice(0, 3)
+                .map(([reason, count]) => (
+                  <div key={reason} className="flex justify-between items-center text-xs">
+                    <span className="text-gray-500">{reason}</span>
+                    <span className="font-medium">{count}</span>
+                  </div>
+                ))}
             </div>
           </CardContent>
         </Card>
       </div>
-    </div>
+
+      {/* Additional Performance Metrics */}
+      {metrics?.core_performance_metrics && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Call Transfer & Human Handoff */}
+          <Card className="hover:shadow-lg transition-shadow duration-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Users className="h-5 w-5 text-green-500" />
+                Call Transfers
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Transferred to Human</span>
+                <Badge variant="outline">
+                  {calculatedMetrics.transferredToHuman}
+                </Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Call Back Requests</span>
+                <Badge variant="outline">
+                  {calculatedMetrics.callBackRequests}
+                </Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Drop Off Rate</span>
+                <Badge variant="destructive">
+                  {calculatedMetrics.dropOffRate}%
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Call Volume & Performance */}
+          <Card className="hover:shadow-lg transition-shadow duration-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <BarChart3 className="h-5 w-5 text-blue-500" />
+                Call Volume
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Total Calls Made</span>
+                <Badge variant="outline">
+                  {calculatedMetrics.totalCallsMade}
+                </Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Call Pickup Rate</span>
+                <Badge variant="outline">
+                  {calculatedMetrics.callPickupRate}%
+                </Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Success Rate</span>
+                <Badge variant="outline">
+                  {calculatedMetrics.successRate}%
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* User Interaction Details */}
+          <Card className="hover:shadow-lg transition-shadow duration-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Brain className="h-5 w-5 text-purple-500" />
+                AI Performance
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">First Attempt Responses</span>
+                <Badge variant="outline">{safeValue(metrics.user_interaction_metrics?.first_attempt_responses, 0)}</Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Multi Attempt Responses</span>
+                <Badge variant="outline">{safeValue(metrics.user_interaction_metrics?.multi_attempt_responses, 0)}</Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Total Interactions</span>
+                <Badge variant="outline">{safeValue(metrics.user_interaction_metrics?.total_interactions, 0)}</Badge>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Call Details Table - Enhanced with new API data */}
+      {((callDetails?.success && callDetails?.data?.calls && callDetails?.data?.calls.length > 0) || 
+        (metrics?.call_details?.success && metrics?.call_details?.data?.calls && metrics?.call_details?.data?.calls.length > 0)) && (
+        <Card className="hover:shadow-lg transition-shadow duration-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Phone className="h-5 w-5 text-blue-500" />
+              Recent Call Details
+              {callDetails?.data?.note && (
+                <Badge variant="outline" className="text-xs">
+                  {callDetails.data.note}
+                </Badge>
+              )}
+              {callDetailsLoading && (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  Loading...
+                </div>
+              )}
+            </CardTitle>
+            <div className="text-sm text-gray-600">
+              Showing {Math.min((callDetails?.data?.calls?.length || metrics?.call_details?.data?.calls?.length || 0), 50)} recent calls
+            </div>
+          </CardHeader>
+          <CardContent>
+            {callDetailsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="flex items-center gap-2 text-gray-600">
+                  <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  Loading call details...
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2">Call ID</th>
+                        <th className="text-left py-2">Status</th>
+                        <th className="text-left py-2">Duration</th>
+                        <th className="text-left py-2">From</th>
+                        <th className="text-left py-2">To</th>
+                        <th className="text-left py-2">Price</th>
+                        <th className="text-left py-2">Start Time</th>
+                        <th className="text-left py-2">Answered By</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(callDetails?.data?.calls || metrics?.call_details?.data?.calls || []).slice(0, 50).map((call) => (
+                        <tr key={call.call_id || `call-${Math.random()}`} className="border-b hover:bg-gray-50">
+                          <td className="py-2 font-mono text-xs">{safeRender(call.call_id, 'N/A')}</td>
+                          <td className="py-2">
+                            <Badge 
+                              variant={call.status_color === 'success' ? 'default' : 
+                                      call.status_color === 'danger' ? 'destructive' : 
+                                      call.status_color === 'warning' ? 'secondary' : 'outline'}
+                            >
+                              {safeRender(call.status, 'Unknown')}
+                            </Badge>
+                          </td>
+                          <td className="py-2">{safeRender(call.duration_formatted, '0 min')}</td>
+                          <td className="py-2 font-mono text-xs">{safeRender(call.From, 'N/A')}</td>
+                          <td className="py-2 font-mono text-xs">{safeRender(call.To, 'N/A')}</td>
+                          <td className="py-2">${safeRender(call.Price, '0.00')}</td>
+                          <td className="py-2 text-xs">{safeRender(call.StartTime, 'N/A')}</td>
+                          <td className="py-2">
+                            <Badge variant="outline" className="text-xs">
+                              {safeRender(call.AnsweredBy, 'Unknown')}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Call Summary */}
+                {(callDetails?.data?.summary || metrics?.call_details?.data?.summary) && (
+                  <div className="mt-6 pt-4 border-t">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Call Summary</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-blue-600">
+                          {callDetails?.data?.summary?.total_calls || metrics?.call_details?.data?.summary?.total_calls || 0}
+                        </div>
+                        <div className="text-xs text-gray-600">Total Calls</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-green-600">
+                          {callDetails?.data?.summary?.completed_calls || metrics?.call_details?.data?.summary?.completed_calls || 0}
+                        </div>
+                        <div className="text-xs text-gray-600">Completed</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-red-600">
+                          {callDetails?.data?.summary?.failed_calls || metrics?.call_details?.data?.summary?.failed_calls || 0}
+                        </div>
+                        <div className="text-xs text-gray-600">Failed</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-yellow-600">
+                          {callDetails?.data?.summary?.in_progress_calls || metrics?.call_details?.data?.summary?.in_progress_calls || 0}
+                        </div>
+                        <div className="text-xs text-gray-600">In Progress</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+     </div>
   );
 };
 
