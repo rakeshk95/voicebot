@@ -1851,24 +1851,7 @@ const Campaigns = () => {
                             <p>View Call History</p>
                           </TooltipContent>
                         </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
-                              onClick={() => {
-                                setSelectedCampaignForUpload(campaign);
-                                setIsUploadDialogOpen(true);
-                              }}
-                              className="h-7 w-7 bg-indigo-50 hover:bg-indigo-100 text-indigo-600"
-                            >
-                              <Upload className="h-3 w-3" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Upload Files</p>
-                          </TooltipContent>
-                        </Tooltip>
+
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button 

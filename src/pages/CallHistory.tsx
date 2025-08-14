@@ -1004,29 +1004,6 @@ const CallHistory = () => {
                 Call History
               </h1>
               
-              {/* Test Button for Debugging */}
-              <Button 
-                onClick={() => {
-                  console.log('CallHistory: Test button clicked');
-                  console.log('CallHistory: Current state:', { 
-                    selectedCampaign, 
-                    startDate, 
-                    endDate, 
-                    allCampaigns: allCampaigns.length 
-                  });
-                  if (selectedCampaign) {
-                    fetchCallData(1, selectedCampaign, false);
-                  } else {
-                    console.log('CallHistory: No campaign selected, fetching campaigns first');
-                    fetchCampaigns();
-                  }
-                }}
-                variant="outline"
-                size="sm"
-                className="ml-2"
-              >
-                Test API Call
-              </Button>
 
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600 whitespace-nowrap">Campaign</span>
