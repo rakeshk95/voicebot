@@ -17,6 +17,7 @@ import RolesPermissions from "./pages/RolesPermissions";
 import NotFound from "./pages/NotFound";
 import Login from '@/pages/Login';
 import CampaignFormPage from './pages/CampaignFormPage';
+import BatchCallingPage from './pages/BatchCalling';
 
 const queryClient = new QueryClient();
 
@@ -56,6 +57,7 @@ const App = () => {
                   <Route path="campaigns/new" element={<CampaignFormPage mode="create" />} />
                   <Route path="campaigns/:id/edit" element={<CampaignFormPage mode="edit" />} />
                   <Route path="call-history" element={<CallHistory />} />
+                  <Route path="batch-calling" element={<BatchCallingPage />} />
                   <Route path="users" element={<Users />} />
                   <Route path="analytics" element={<Analytics />} />
                   <Route path="roles-permissions" element={<RolesPermissions />} />

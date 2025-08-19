@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -387,6 +387,10 @@ const Campaigns = () => {
   const [dataExtractionSystemPrompt, setDataExtractionSystemPrompt] = useState('');
   const [categoriesSystemPrompt, setCategoriesSystemPrompt] = useState('');
 
+  // Add refs to prevent unnecessary API calls
+  const hasFetchedOrganizations = useRef(false);
+  const hasFetchedCampaigns = useRef(false);
+
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
     defaultValues: {
@@ -458,7 +462,7 @@ const Campaigns = () => {
   useEffect(() => {
     const fetchCampaigns = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/v1/campaigns/', {
+        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -509,11 +513,11 @@ const Campaigns = () => {
       }
     };
 
-    // Only fetch campaigns if organizations are loaded
-    if (organizations.length > 0) {
+    // Only fetch campaigns if organizations are loaded and we haven't already fetched
+    if (organizations.length > 0 && campaigns.length === 0 && !isLoading) {
       fetchCampaigns();
     }
-  }, [organizations.length]); // Only depend on organizations length, not the entire array
+  }, [organizations.length, campaigns.length, isLoading]); // Add proper dependencies
 
   useEffect(() => {
     const fetchOrganizations = async () => {
@@ -522,6 +526,7 @@ const Campaigns = () => {
         const data = await cachedFetch<Organization[]>('/organizations');
         if (Array.isArray(data)) {
           setOrganizations(data);
+          hasFetchedOrganizations.current = true;
         } else {
           console.error('Invalid organizations data format:', data);
           setOrganizations([]);
@@ -537,13 +542,18 @@ const Campaigns = () => {
       }
     };
 
-    fetchOrganizations();
-  }, []);
+    // Only fetch organizations if we haven't already loaded them
+    if (!hasFetchedOrganizations.current) {
+      fetchOrganizations();
+    }
+  }, []); // Empty dependency array since we use ref to track
 
-  // Reset status filter when campaigns change
+  // Reset status filter when campaigns change - but only if it's not already 'all'
   useEffect(() => {
-    setSelectedStatusFilter('all');
-  }, [campaigns]);
+    if (selectedStatusFilter !== 'all') {
+      setSelectedStatusFilter('all');
+    }
+  }, [campaigns, selectedStatusFilter]);
 
   const filteredCampaigns = campaigns.filter(campaign => {
     if (!campaign) return false; // Add null check
@@ -576,7 +586,7 @@ const Campaigns = () => {
   const handleEdit = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -827,12 +837,11 @@ const Campaigns = () => {
           org_id: data.org_id,
         };
       }
-
       // Remove FormData and Excel template logic for campaign create/edit
       // Send JSON body instead
       const url = editingCampaign 
-        ? `http://localhost:8000/api/v1/campaigns/${editingCampaign.id}`
-        : 'http://localhost:8000/api/v1/campaigns/';
+        ? `https://platform.voxiflow.com/backend/api/v1/campaigns/${editingCampaign.id}`
+        : 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
 
       const response = await fetch(url, {
         method: editingCampaign ? 'PUT' : 'POST',
@@ -923,7 +932,7 @@ const Campaigns = () => {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
 
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -974,7 +983,7 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaignId}/upload`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaignId}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1034,7 +1043,7 @@ const Campaigns = () => {
         file: bulkCallFile.name
       });
 
-      const response = await fetch('http://localhost:8000/api/v1/bulk-calls/bulk-calls', {
+      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/bulk-calls/bulk-calls', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1095,7 +1104,7 @@ const Campaigns = () => {
     };
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/calls/', {
+      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1207,7 +1216,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'

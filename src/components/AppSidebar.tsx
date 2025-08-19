@@ -13,7 +13,8 @@ import {
   LogOut,
   ChevronRight,
   User,
-  Cog
+  Cog,
+  PhoneCall
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
@@ -69,7 +70,8 @@ export function AppSidebar() {
         { key: 'dashboard', title: 'Dashboard', icon: LayoutDashboard, url: '/' },
         { key: 'organizations', title: 'Organizations', icon: Building2, url: '/organizations' },
         { key: 'campaigns', title: 'Campaigns', icon: BarChart, url: '/campaigns' },
-        { key: 'call-history', title: 'Call History', icon: History, url: '/call-history' }
+        { key: 'call-history', title: 'Call History', icon: History, url: '/call-history' },
+        { key: 'batch-calling', title: 'Batch Calling', icon: PhoneCall, url: '/batch-calling' }
       ],
       ANALYTICS: [
         { key: 'users', title: 'Users', icon: Users, url: '/users' }

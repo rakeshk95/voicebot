@@ -269,7 +269,7 @@ export default function Users() {
         params.append("end_date", endDate.toISOString());
       }
   
-      const response = await fetch(`http://localhost:8000/api/v1/users/?${params.toString()}`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/users/?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
           "Content-Type": "application/json",
@@ -342,7 +342,7 @@ export default function Users() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/v1/organizations', {
+        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -367,7 +367,7 @@ export default function Users() {
 
     const fetchCampaignsData = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/v1/campaigns/', {
+        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -392,7 +392,7 @@ export default function Users() {
 
     const fetchRolesData = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/v1/roles/', {
+        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/roles/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -423,7 +423,7 @@ export default function Users() {
   // Function to fetch campaigns
   const fetchCampaigns = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/campaigns/', {
+      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -451,19 +451,19 @@ export default function Users() {
     try {
       setIsLoadingCreateData(true);
       const [rolesResponse, orgsResponse, campaignsResponse] = await Promise.all([
-        fetch('http://localhost:8000/api/v1/roles/', {
+        fetch('https://platform.voxiflow.com/backend/api/v1/roles/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
           },
         }),
-        fetch('http://localhost:8000/api/v1/organizations', {
+        fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
           },
         }),
-        fetch('http://localhost:8000/api/v1/campaigns/', {
+        fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -509,7 +509,7 @@ export default function Users() {
   const handleDeleteUser = async (user: User) => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/users/${user.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/users/${user.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -572,7 +572,7 @@ export default function Users() {
 
       console.log('Sending update data:', updateData); // Debug log
 
-      const response = await fetch(`http://localhost:8000/api/v1/users/${editingUser.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/users/${editingUser.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -640,7 +640,7 @@ export default function Users() {
         campaign_ids: createFormData.campaign_ids || [],
       };
 
-      const response = await fetch('http://localhost:8000/api/v1/users/', {
+      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/users/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

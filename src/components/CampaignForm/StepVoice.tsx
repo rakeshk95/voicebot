@@ -29,8 +29,8 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
   const { toast } = useToast();
   
   // API endpoints - removed hardcoded voice IDs
-  const ELEVEN_LABS_API = 'http://localhost:8000/api/v1/voices';
-  const CARTESIA_API = 'http://localhost:8000/api/v1/voices?voice_ids=f91ab3e6-5071-4e15-b016-cde6f2bcd222';
+  const ELEVEN_LABS_API = 'https://platform.voxiflow.com/backend/api/v1/voices';
+  const CARTESIA_API = 'https://platform.voxiflow.com/backend/api/v1/voices?voice_ids=f91ab3e6-5071-4e15-b016-cde6f2bcd222';
   
   useEffect(() => {
     if (provider === 'elevenlabs') {

@@ -59,22 +59,22 @@ const safeRender = (value: any, defaultValue: any = 'N/A') => {
   return value;
 };
 
+// Utility function to safely get numeric values, handling NULL objects from API
+const safeValue = (value: any, defaultValue: any = 0) => {
+  if (value === null || value === undefined || value === '') {
+    return defaultValue;
+  }
+  if (typeof value === 'object' && value !== null && value.NULL === true) {
+    return defaultValue;
+  }
+  return value;
+};
+
 // Utility function to calculate missing metrics from available data
 const calculateMetrics = (metrics: DashboardMetrics | null) => {
   if (!metrics?.core_performance_metrics) return {};
   
   const core = metrics.core_performance_metrics;
-  
-  // Helper function to handle NULL objects from API
-  const safeValue = (value: any, defaultValue: any = 0) => {
-    if (value === null || value === undefined || value === '') {
-      return defaultValue;
-    }
-    if (typeof value === 'object' && value !== null && value.NULL === true) {
-      return defaultValue;
-    }
-    return value;
-  };
   
   const totalCalls = safeValue(core.total_calls, 0) as number;
   const successfulCalls = safeValue(core.successful_calls, 0) as number;
@@ -308,7 +308,13 @@ const Dashboard = () => {
   // Store all data for reference (keeping for potential future use)
   const [allCallDetails, setAllCallDetails] = useState<CallDetailsResponse | null>(null);
   const [allMetrics, setAllMetrics] = useState<DashboardMetrics | null>(null);
-
+  
+  // Flag to prevent multiple API calls
+  const [isApiCallInProgress, setIsApiCallInProgress] = useState(false);
+  
+  // Debounce timer for filter changes
+  const [filterDebounceTimer, setFilterDebounceTimer] = useState<NodeJS.Timeout | null>(null);
+  
   const userData = getUserData();
   const isSuperAdmin = userPermissions?.admin;
   
@@ -398,34 +404,38 @@ const Dashboard = () => {
     }
   }, [userData, isSuperAdmin]);
 
+  // Refresh dashboard when user organization changes
+  useEffect(() => {
+    let isMounted = true;
+    
+    if (userOrgId && hasInitialized && !loading && !refreshing && isMounted) {
+      console.log('Dashboard: User organization changed, refreshing dashboard...');
+      fetchDashboard();
+    }
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [userOrgId, hasInitialized]); // Remove loading and refreshing dependencies to prevent loops
+
   // Initialize filter data when user data is available
   useEffect(() => {
-    if (userData && !isFilterDataLoaded && !filterDataLoading) {
+    let isMounted = true;
+    
+    if (userData && !isFilterDataLoaded && !filterDataLoading && isMounted) {
       console.log('Dashboard: User data available, initializing filters...');
       // Small delay to ensure permissions are loaded
       setTimeout(() => {
-        if (!isFilterDataLoaded) {
+        if (!isFilterDataLoaded && isMounted) {
           fetchFilterData();
         }
       }, 500);
     }
+    
+    return () => {
+      isMounted = false;
+    };
   }, [userData, isFilterDataLoaded, filterDataLoading]);
-
-  // Auto-apply filters when data becomes available (removed for server-side filtering)
-  // useEffect(() => {
-  //   if (allMetrics && allCallDetails && hasInitialized) {
-  //     console.log('Dashboard: Data available, auto-applying current filters');
-  //     applyFiltersLocally();
-  //   }
-  // }, [allMetrics, allCallDetails, hasInitialized]);
-
-  // Apply filters when they change (removed for server-side filtering)
-  // useEffect(() => {
-  //   if (allMetrics && allCallDetails && hasInitialized) {
-  //     console.log('Dashboard: Filters changed, applying locally');
-  //     applyFiltersLocally();
-  //   }
-  // }, [filters.org_id, filters.campaign_id]);
 
   // Fetch organizations and campaigns for filters - ONLY ONCE
   useEffect(() => {
@@ -437,7 +447,7 @@ const Dashboard = () => {
     let isMounted = true;
     
     // Only fetch if we have the necessary data
-    if (userData && (isSuperAdmin !== undefined)) {
+    if (userData && (isSuperAdmin !== undefined) && isMounted) {
       console.log('Dashboard: Starting filter data fetch...');
       fetchFilterData();
     } else {
@@ -449,36 +459,87 @@ const Dashboard = () => {
     };
   }, [userData, isSuperAdmin, isFilterDataLoaded]); // Add proper dependencies
 
-  // Fetch dashboard metrics using the new comprehensive endpoint
-  const fetchDashboard = async () => {
+  // Debounced function to fetch dashboard data
+  const debouncedFetchDashboard = (newOrgId?: string, delay: number = 300) => {
+    // Clear existing timer
+    if (filterDebounceTimer) {
+      clearTimeout(filterDebounceTimer);
+    }
+    
+    // Set new timer
+    const timer = setTimeout(() => {
+      // Create a temporary filter state for the API call
+      const tempFilters = {
+        ...filters,
+        org_id: newOrgId || filters.org_id
+      };
+      
+      // Call fetchDashboard with the updated filter state
+      fetchDashboardWithFilters(tempFilters);
+    }, delay);
+    
+    setFilterDebounceTimer(timer);
+  };
+  
+  // Function to fetch dashboard with specific filters
+  const fetchDashboardWithFilters = (filterState: typeof filters) => {
     // Prevent multiple simultaneous API calls
-    if (loading) {
+    if (loading || isApiCallInProgress) {
       return;
     }
     
     try {
       setLoading(true);
+      setIsApiCallInProgress(true);
       setError(null);
       
       const params = new URLSearchParams();
       
-      // Automatically include org_id if user has one and is not super admin
-      if (userOrgId && !isSuperAdmin) {
-        params.append('org_id', userOrgId);
-      } else if (filters.org_id && filters.org_id !== 'all') {
-        params.append('org_id', filters.org_id);
+      // Simplified organization filter logic using passed filter state
+      let orgIdToUse = null;
+      
+      if (filterState.org_id && filterState.org_id !== 'all') {
+        // User has selected a specific organization from dropdown
+        orgIdToUse = filterState.org_id;
+        console.log('Dashboard: Using selected organization:', orgIdToUse);
+      } else if (userOrgId && !isSuperAdmin) {
+        // Regular user (non-super admin) - use their organization
+        orgIdToUse = userOrgId;
+        console.log('Dashboard: Using user organization ID:', userOrgId);
+      } else if (isSuperAdmin && filterState.org_id === 'all') {
+        // Super admin viewing all organizations - don't include org_id
+        console.log('Dashboard: Super admin viewing all organizations - no org_id filter');
       }
       
-      if (filters.campaign_id && filters.campaign_id !== 'all') {
-        params.append('campaign_id', filters.campaign_id);
+      if (orgIdToUse) {
+        params.append('org_id', orgIdToUse);
+        console.log('Dashboard: Added org_id parameter:', orgIdToUse);
+      } else {
+        console.log('Dashboard: No org_id parameter added - will fetch all organizations data');
       }
-      params.append('days', filters.days.toString());
+      
+      if (filterState.campaign_id && filterState.campaign_id !== 'all') {
+        params.append('campaign_id', filterState.campaign_id);
+      }
+      params.append('days', filterState.days.toString());
 
       // Use the new comprehensive dashboard endpoint
       const apiUrl = `/dashboard/comprehensive?${params}`;
-      console.log('Dashboard: Fetching from API:', apiUrl);
-      console.log('Dashboard: API parameters:', params.toString());
+      console.log('Dashboard: API call:', `${process.env.NODE_ENV === 'development' ? 'https://platform.voxiflow.com/backend/api/v1' : ''}${apiUrl}`);
       
+      // Call the original fetchDashboard with the constructed URL
+      fetchDashboardWithUrl(apiUrl);
+      
+    } catch (error) {
+      console.error('Dashboard: Error in fetchDashboardWithFilters:', error);
+      setLoading(false);
+      setIsApiCallInProgress(false);
+    }
+  };
+  
+  // Function to fetch dashboard with a specific URL
+  const fetchDashboardWithUrl = async (apiUrl: string) => {
+    try {
       const response = await authorizedFetch(apiUrl);
       
       if (!response.ok) {
@@ -488,49 +549,11 @@ const Dashboard = () => {
       }
 
       const data = await response.json() as DashboardMetrics;
-      console.log('Dashboard: Received data:', data);
-      console.log('Dashboard: Raw API response:', JSON.stringify(data, null, 2));
-      
-      // Debug specific fields that are showing 0
-      if (data?.core_performance_metrics) {
-        console.log('Dashboard: API Response - Core metrics:', {
-          total_minutes_consumed: data.core_performance_metrics.total_minutes_consumed,
-          total_minutes_formatted: data.core_performance_metrics.total_minutes_formatted,
-          avg_handle_time_minutes: data.core_performance_metrics.avg_handle_time_minutes,
-          avg_handle_time_formatted: data.core_performance_metrics.avg_handle_time_formatted,
-          transferred_to_human: data.core_performance_metrics.transferred_to_human,
-          call_back_requests: data.core_performance_metrics.call_back_requests
-        });
-      } else {
-        console.log('Dashboard: API Response - No core_performance_metrics found');
-      }
-      
-      // Helper function to handle NULL objects from API
-      const safeValue = (value: any, defaultValue: any = 0) => {
-        if (value === null || value === undefined || value === '') {
-          return defaultValue;
-        }
-        if (typeof value === 'object' && value !== null && value.NULL === true) {
-          return defaultValue;
-        }
-        return value;
-      };
+      console.log('Dashboard: Data received successfully');
       
       // Store all data for reference
       setAllMetrics(data);
       setMetrics(data);
-      
-      // Debug state update
-      console.log('Dashboard: State updated with data:', {
-        total_minutes_consumed: data?.core_performance_metrics?.total_minutes_consumed,
-        total_minutes_formatted: data?.core_performance_metrics?.total_minutes_formatted
-      });
-      
-      // Debug state after setting
-      setTimeout(() => {
-        console.log('Dashboard: State after setting - allMetrics:', allMetrics);
-        console.log('Dashboard: State after setting - metrics:', metrics);
-      }, 100);
       
       // Also fetch call details using the new recommended endpoint
       if (userOrgId || (filters.org_id && filters.org_id !== 'all')) {
@@ -548,6 +571,112 @@ const Dashboard = () => {
       });
     } finally {
       setLoading(false);
+      setIsApiCallInProgress(false);
+    }
+  };
+  
+  // Cleanup function for debounce timer
+  useEffect(() => {
+    return () => {
+      if (filterDebounceTimer) {
+        clearTimeout(filterDebounceTimer);
+      }
+    };
+  }, [filterDebounceTimer]);
+  
+  // Main component cleanup
+  useEffect(() => {
+    return () => {
+      // Clear any pending timers or API calls
+      if (filterDebounceTimer) {
+        clearTimeout(filterDebounceTimer);
+      }
+      setIsApiCallInProgress(false);
+      setLoading(false);
+      setCallDetailsLoading(false);
+      setFilterDataLoading(false);
+    };
+  }, [filterDebounceTimer]);
+
+  // Fetch dashboard metrics using the new comprehensive endpoint
+  const fetchDashboard = async () => {
+    // Prevent multiple simultaneous API calls
+    if (loading || isApiCallInProgress) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setIsApiCallInProgress(true);
+      setError(null);
+      
+      const params = new URLSearchParams();
+      
+      // Simplified organization filter logic
+      let orgIdToUse = null;
+      
+      if (filters.org_id && filters.org_id !== 'all') {
+        // User has selected a specific organization from dropdown
+        orgIdToUse = filters.org_id;
+        console.log('Dashboard: Using selected organization:', orgIdToUse);
+      } else if (userOrgId && !isSuperAdmin) {
+        // Regular user (non-super admin) - use their organization
+        orgIdToUse = userOrgId;
+        console.log('Dashboard: Using user organization ID:', userOrgId);
+      } else if (isSuperAdmin && filters.org_id === 'all') {
+        // Super admin viewing all organizations - don't include org_id
+        console.log('Dashboard: Super admin viewing all organizations - no org_id filter');
+      }
+      
+      if (orgIdToUse) {
+        params.append('org_id', orgIdToUse);
+        console.log('Dashboard: Added org_id parameter:', orgIdToUse);
+      } else {
+        console.log('Dashboard: No org_id parameter added - will fetch all organizations data');
+      }
+      
+      if (filters.campaign_id && filters.campaign_id !== 'all') {
+        params.append('campaign_id', filters.campaign_id);
+      }
+      params.append('days', filters.days.toString());
+
+      // Use the new comprehensive dashboard endpoint
+      const apiUrl = `/dashboard/comprehensive?${params}`;
+      console.log('Dashboard: API call:', `${process.env.NODE_ENV === 'development' ? 'https://platform.voxiflow.com/backend/api/v1' : ''}${apiUrl}`);
+      
+      const response = await authorizedFetch(apiUrl);
+      
+      if (!response.ok) {
+        const errorData = await response.json() as { detail?: string };
+        console.error('Dashboard: API error response:', errorData);
+        throw new Error(errorData.detail || 'Failed to fetch dashboard data');
+      }
+
+      const data = await response.json() as DashboardMetrics;
+      console.log('Dashboard: Data received successfully');
+      
+      // Store all data for reference
+      setAllMetrics(data);
+      setMetrics(data);
+      
+      // Also fetch call details using the new recommended endpoint
+      if (userOrgId || (filters.org_id && filters.org_id !== 'all')) {
+        fetchCallDetails();
+      }
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch dashboard data';
+      console.error('Dashboard: Fetch error:', error);
+      setError(errorMessage);
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+      setIsApiCallInProgress(false);
+      console.log('Dashboard: fetchDashboard finished (loading set to false)');
     }
   };
 
@@ -569,14 +698,27 @@ const Dashboard = () => {
     setRefreshing(false);
   };
 
-  // Initial dashboard fetch - IMMEDIATE
+  // Initial dashboard fetch - wait for user data and filters to be loaded
   useEffect(() => {
-    // Fetch dashboard immediately with a small delay to ensure component is ready
-    setTimeout(() => {
+    let isMounted = true;
+    
+    // Only fetch dashboard when we have the necessary data and haven't already initialized
+    if (userData && isFilterDataLoaded && !hasInitialized && isMounted) {
+      console.log('Dashboard: User data and filters loaded, fetching dashboard...');
       fetchDashboard();
       setHasInitialized(true);
-    }, 100);
-  }, []); // Only run once on mount
+    } else {
+      console.log('Dashboard: Waiting for user data and filters to load...', {
+        hasUserData: !!userData,
+        isFilterDataLoaded,
+        hasInitialized
+      });
+    }
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [userData, isFilterDataLoaded, hasInitialized]); // Remove loading dependency to prevent infinite loop
   
   // Debug logging for state changes (only in development)
   useEffect(() => {
@@ -592,7 +734,27 @@ const Dashboard = () => {
         total_minutes_consumed: metrics.core_performance_metrics.total_minutes_consumed,
         total_minutes_formatted: metrics.core_performance_metrics.total_minutes_formatted,
         avg_handle_time_minutes: metrics.core_performance_metrics.avg_handle_time_minutes,
-        avg_handle_time_formatted: metrics.core_performance_metrics.avg_handle_time_formatted
+        avg_handle_time_formatted: metrics.core_performance_metrics.avg_handle_time_formatted,
+        call_completion_rate: metrics.core_performance_metrics.call_completion_rate
+      });
+      
+      // Additional debugging for problematic fields
+      console.log('Dashboard: Problematic fields in state:', {
+        total_minutes_consumed: {
+          value: metrics.core_performance_metrics.total_minutes_consumed,
+          type: typeof metrics.core_performance_metrics.total_minutes_consumed,
+          is_null_object: metrics.core_performance_metrics.total_minutes_consumed && typeof metrics.core_performance_metrics.total_minutes_consumed === 'object' && metrics.core_performance_metrics.total_minutes_consumed.NULL === true
+        },
+        avg_handle_time_minutes: {
+          value: metrics.core_performance_metrics.avg_handle_time_minutes,
+          type: typeof metrics.core_performance_metrics.avg_handle_time_minutes,
+          is_null_object: metrics.core_performance_metrics.avg_handle_time_minutes && typeof metrics.core_performance_metrics.avg_handle_time_minutes === 'object' && metrics.core_performance_metrics.avg_handle_time_minutes.NULL === true
+        },
+        call_completion_rate: {
+          value: metrics.core_performance_metrics.call_completion_rate,
+          type: typeof metrics.core_performance_metrics.call_completion_rate,
+          is_null_object: metrics.core_performance_metrics.call_completion_rate && typeof metrics.core_performance_metrics.call_completion_rate === 'object' && metrics.core_performance_metrics.call_completion_rate.NULL === true
+        }
       });
     } else {
       console.log('Dashboard: Metrics state changed - metrics is null or missing core_performance_metrics');
@@ -644,21 +806,39 @@ const Dashboard = () => {
 
   // Fetch call details using the new recommended endpoint
   const fetchCallDetails = async () => {
-    if (callDetailsLoading) return;
+    if (callDetailsLoading || isApiCallInProgress) {
+      console.log('Dashboard: fetchCallDetails called but already loading or API call in progress, skipping...');
+      return;
+    }
     
     try {
       setCallDetailsLoading(true);
+      setIsApiCallInProgress(true);
       
       const params = new URLSearchParams();
       
-      // Always include org_id for the new endpoint
-      if (userOrgId && !isSuperAdmin) {
-        params.append('org_id', userOrgId);
-      } else if (filters.org_id && filters.org_id !== 'all') {
-        params.append('org_id', filters.org_id);
+      // Use the same organization filter logic as the main dashboard
+      let orgIdToUse = null;
+      
+      if (filters.org_id && filters.org_id !== 'all') {
+        // User has selected a specific organization from dropdown
+        orgIdToUse = filters.org_id;
+        console.log('Dashboard: Call details - Using selected organization from dropdown:', orgIdToUse);
+      } else if (userOrgId && !isSuperAdmin) {
+        // Regular user (non-super admin) - use their organization
+        orgIdToUse = userOrgId;
+        console.log('Dashboard: Call details - Using user organization ID:', orgIdToUse);
+      } else if (isSuperAdmin && filters.org_id === 'all') {
+        // Super admin viewing all organizations - don't include org_id
+        console.log('Dashboard: Call details - Super admin viewing all organizations - no org_id filter');
+      }
+      
+      if (orgIdToUse) {
+        params.append('org_id', orgIdToUse);
+        console.log('Dashboard: Call details - Added org_id parameter:', orgIdToUse);
       } else {
         // If no org_id is available, skip fetching call details
-        console.log('Dashboard: No org_id available, skipping call details fetch');
+        console.log('Dashboard: Call details - No org_id available, skipping call details fetch');
         return;
       }
       
@@ -671,6 +851,7 @@ const Dashboard = () => {
       
       const apiUrl = `/dashboard/call-details-with-org?${params}`;
       console.log('Dashboard: Fetching call details from:', apiUrl);
+      console.log('Dashboard: Full call details API URL:', `${process.env.NODE_ENV === 'development' ? 'https://platform.voxiflow.com/backend/api/v1' : ''}${apiUrl}`);
       
       const response = await authorizedFetch(apiUrl);
       
@@ -697,6 +878,7 @@ const Dashboard = () => {
       });
     } finally {
       setCallDetailsLoading(false);
+      setIsApiCallInProgress(false);
     }
   };
 
@@ -807,16 +989,7 @@ const Dashboard = () => {
   const calculatedMetrics = calculateMetrics(metrics);
   console.log('Dashboard: Calculated metrics debug:', calculatedMetrics);
   
-  // Helper function to handle NULL objects from API (available in render scope)
-  const safeValue = (value: any, defaultValue: any = 0) => {
-    if (value === null || value === undefined || value === '') {
-      return defaultValue;
-    }
-    if (typeof value === 'object' && value !== null && value.NULL === true) {
-      return defaultValue;
-    }
-    return value;
-  };
+
 
   // Additional safety check for required nested properties
   if (!metrics?.core_performance_metrics || !metrics?.user_interaction_metrics || !metrics?.outcome_based_metrics || !metrics?.failure_analysis) {
@@ -859,15 +1032,9 @@ const Dashboard = () => {
     }, 100);
   };
 
-  // Debug function to check data structure (REMOVED - no longer needed)
-  // const debugDataStructure = () => {
-  //   // Function removed - no longer needed
-  // };
 
-  // Apply filters locally to existing data without making API calls (REMOVED - now using server-side filtering)
-  // const applyFiltersLocally = () => {
-  //   // Function removed - now making API calls when filters change
-  // };
+  
+
 
   return (
     <div className="space-y-6">
@@ -876,15 +1043,7 @@ const Dashboard = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Call Center Dashboard</h1>
           <p className="text-gray-600 mt-1">
-            {safeRender(metrics?.dashboard_period, 'Loading...')} • 
-            {filters.org_id !== 'all' ? ` Organization: ${safeRender(organizations.find(org => org.id === filters.org_id)?.name, filters.org_id)}` : ' All Organizations'} • 
-            {filters.campaign_id !== 'all' ? ` Campaign: ${safeRender(campaigns.find(camp => camp.id === filters.campaign_id)?.name, filters.campaign_id)}` : ' All Campaigns'}
-            {userOrgId && !isSuperAdmin && (
-              <span className="text-blue-600 font-medium"> • Auto-detected: {safeRender(organizations.find(org => org.id === userOrgId)?.name, userOrgId)}</span>
-            )}
-            {metrics?.generated_at && (
-              <span className="text-gray-500"> • Generated: {new Date(metrics.generated_at).toLocaleString()}</span>
-            )}
+            {/* Status indicators hidden for cleaner look */}
           </p>
         </div>
         
@@ -908,7 +1067,14 @@ const Dashboard = () => {
         <div className="flex flex-col lg:flex-row gap-4">
           {/* Organization Filter */}
           <div className="flex-1">
-            <label className="text-sm font-medium text-gray-700 mb-2 block">Organization</label>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">
+              Organization
+              {filters.org_id !== 'all' && (
+                <span className="ml-2 text-xs text-blue-600 font-medium">
+                  🔒 Filtering: {organizations.find(org => org.id === filters.org_id)?.name}
+                </span>
+              )}
+            </label>
             {filterDataLoading ? (
               <div className="h-10 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-500 flex items-center gap-2">
                 <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -919,20 +1085,14 @@ const Dashboard = () => {
                 value={filters.org_id}
                 onValueChange={(value) => {
                   console.log('Dashboard: Organization filter changed to:', value);
-                  console.log('Dashboard: Current filters before change:', filters);
                   
                   setFilters(prev => {
                     const newFilters = { ...prev, org_id: value, campaign_id: 'all' };
-                    console.log('Dashboard: New filters after change:', newFilters);
                     return newFilters;
                   });
                   
-                  // Make API call to fetch filtered data
-                  console.log('Dashboard: Organization filter changed, fetching new data from API...');
-                  // Small delay to ensure state is updated
-                  setTimeout(() => {
-                    fetchDashboard();
-                  }, 100);
+                  // Use debounced API call to prevent rapid successive calls
+                  debouncedFetchDashboard(value); // Pass the new org_id value
                 }}
               >
                 <SelectTrigger>
@@ -974,20 +1134,14 @@ const Dashboard = () => {
                 value={filters.campaign_id}
                 onValueChange={(value) => {
                   console.log('Dashboard: Campaign filter changed to:', value);
-                  console.log('Dashboard: Current filters before change:', filters);
                   
                   setFilters(prev => {
                     const newFilters = { ...prev, campaign_id: value };
-                    console.log('Dashboard: New filters after change:', newFilters);
                     return newFilters;
                   });
                   
-                  // Make API call to fetch filtered data
-                  console.log('Dashboard: Campaign filter changed, fetching new data from API...');
-                  // Small delay to ensure state is updated
-                  setTimeout(() => {
-                    fetchDashboard();
-                  }, 100);
+                  // Use debounced API call to prevent rapid successive calls
+                  debouncedFetchDashboard(undefined, 300); // Pass undefined for org_id, use current filters
                 }}
                 disabled={filters.org_id === 'all' && !isSuperAdmin}
               >
@@ -1023,13 +1177,13 @@ const Dashboard = () => {
             <Select
               value={filters.days.toString()}
               onValueChange={(value) => {
-                console.log('Dashboard: Time period changed to:', value, 'days - making API call for new data');
+                console.log('Dashboard: Time period changed to:', value, 'days');
                 
                 setFilters(prev => ({ ...prev, days: parseInt(value) }));
                 
-                // Time period changes require new API calls since we need data for different time ranges
+                // Use debounced API call to prevent rapid successive calls
                 if (isFilterDataLoaded && hasInitialized) {
-                  fetchDashboard();
+                  debouncedFetchDashboard(undefined, 300); // Pass undefined for org_id, use current filters
                 }
               }}
             >
@@ -1132,7 +1286,27 @@ const Dashboard = () => {
                 <Clock className="h-5 w-5 text-white" />
               </div>
               <Badge variant="secondary" className="text-xs">
-                {safeValue(metrics?.core_performance_metrics?.avg_handle_time_formatted, '0 min')}
+                {(() => {
+                  const formatted = metrics?.core_performance_metrics?.avg_handle_time_formatted;
+                  const minutes = metrics?.core_performance_metrics?.avg_handle_time_minutes;
+                  
+                  // Check for NULL objects from API
+                  if (formatted && typeof formatted === 'object' && formatted.NULL === true) {
+                    return '0 min';
+                  }
+                  if (minutes && typeof minutes === 'object' && minutes.NULL === true) {
+                    return '0 min';
+                  }
+                  
+                  if (formatted && typeof formatted === 'string' && formatted !== '0 min') {
+                    return formatted;
+                  }
+                  if (minutes && typeof minutes === 'number' && minutes > 0) {
+                    return `${minutes.toFixed(1)} min`;
+                  }
+                  
+                  return '0 min';
+                })()}
               </Badge>
             </div>
             <div className="mt-4">
@@ -1143,15 +1317,25 @@ const Dashboard = () => {
                   const minutes = metrics?.core_performance_metrics?.avg_handle_time_minutes;
                   console.log('Dashboard: Rendering Avg Handle Time - formatted:', formatted, 'minutes:', minutes);
                   
-                  // Handle special NULL objects from API
+                  // Check for NULL objects from API
                   if (formatted && typeof formatted === 'object' && formatted.NULL === true) {
+                    console.log('Dashboard: avg_handle_time_formatted is NULL object');
                     return '0 min';
                   }
                   if (minutes && typeof minutes === 'object' && minutes.NULL === true) {
+                    console.log('Dashboard: avg_handle_time_minutes is NULL object');
                     return '0 min';
                   }
                   
-                                          return safeValue(formatted, '0 min') || (minutes ? `${safeValue(minutes, 0).toFixed(1)} min` : '0 min');
+                  // Use formatted value if available, otherwise calculate from minutes
+                  if (formatted && typeof formatted === 'string' && formatted !== '0 min') {
+                    return formatted;
+                  }
+                  if (minutes && typeof minutes === 'number' && minutes > 0) {
+                    return `${minutes.toFixed(1)} min`;
+                  }
+                  
+                  return '0 min';
                 })()}
               </p>
               <p className="text-xs text-muted-foreground mt-1">minutes per call</p>
@@ -1166,7 +1350,20 @@ const Dashboard = () => {
                 <BarChart3 className="h-5 w-5 text-white" />
               </div>
               <Badge variant="secondary" className="text-xs">
-                {safeValue(metrics?.core_performance_metrics?.call_completion_rate, 0)}% Complete
+                {(() => {
+                  const rate = metrics?.core_performance_metrics?.call_completion_rate;
+                  
+                  // Check for NULL objects from API
+                  if (rate && typeof rate === 'object' && rate.NULL === true) {
+                    return '0% Complete';
+                  }
+                  
+                  if (rate && typeof rate === 'number' && rate > 0) {
+                    return `${rate}% Complete`;
+                  }
+                  
+                  return '0% Complete';
+                })()}
               </Badge>
             </div>
             <div className="mt-4">
@@ -1177,15 +1374,25 @@ const Dashboard = () => {
                   const consumed = metrics?.core_performance_metrics?.total_minutes_consumed;
                   console.log('Dashboard: Rendering Total Minutes - formatted:', formatted, 'consumed:', consumed);
                   
-                  // Handle special NULL objects from API
+                  // Check for NULL objects from API
                   if (formatted && typeof formatted === 'object' && formatted.NULL === true) {
+                    console.log('Dashboard: total_minutes_formatted is NULL object');
                     return '0 min';
                   }
                   if (consumed && typeof consumed === 'object' && consumed.NULL === true) {
+                    console.log('Dashboard: total_minutes_consumed is NULL object');
                     return '0 min';
                   }
                   
-                                          return safeValue(formatted, '0 min') || (consumed ? `${safeValue(consumed, 0).toFixed(1)} min` : '0 min');
+                  // Use formatted value if available, otherwise calculate from consumed
+                  if (formatted && typeof formatted === 'string' && formatted !== '0 min') {
+                    return formatted;
+                  }
+                  if (consumed && typeof consumed === 'number' && consumed > 0) {
+                    return `${consumed.toFixed(1)} min`;
+                  }
+                  
+                  return '0 min';
                 })()}
               </p>
               <p className="text-xs text-muted-foreground mt-1">consumed</p>

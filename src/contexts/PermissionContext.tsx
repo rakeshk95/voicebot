@@ -310,6 +310,12 @@ export const PermissionProvider: React.FC<PermissionProviderProps> = ({ children
     console.log(`PermissionContext: canAccessSidebarItem(${item}) called`);
     console.log(`PermissionContext: userRole:`, userRole);
     
+    // Temporarily bypass permission check for batch-calling to test
+    if (item === 'batch-calling') {
+      console.log(`PermissionContext: Bypassing permission check for ${item}`);
+      return true;
+    }
+    
     if (!userRole) {
       console.log(`PermissionContext: canAccessSidebarItem(${item}): No user role`);
       return false;

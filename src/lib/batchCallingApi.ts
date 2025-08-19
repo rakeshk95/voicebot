@@ -1,0 +1,655 @@
+import { authorizedFetch } from './api';
+import {
+  BatchCallOperation,
+  BatchCallResponse,
+  BatchCallDetail,
+  BatchCallSummary,
+  BatchCallStartRequest,
+  BatchCallStartResponse,
+  BatchOperationsList,
+  BatchCallStatus
+} from '@/types/batchCalling';
+
+// API configuration
+const API_BASE_URL = 'https://platform.voxiflow.com/backend/api/v1';
+const BATCH_CALLS_BASE_URL = '/bulk-calls';
+
+/**
+ * Start a new batch call operation
+ */
+export async function startBatchCall(request: BatchCallStartRequest): Promise<BatchCallStartResponse> {
+  try {
+    // Validate input parameters
+    if (!request.file || !(request.file instanceof File)) {
+      throw new Error('Invalid file: file must be a valid File object');
+    }
+    
+    if (!request.campaign_id || typeof request.campaign_id !== 'string' || request.campaign_id.trim() === '') {
+      throw new Error('Invalid campaign_id: must be a non-empty string');
+    }
+    
+    if (!request.org_id || typeof request.org_id !== 'string' || request.org_id.trim() === '') {
+      throw new Error('Invalid org_id: must be a non-empty string');
+    }
+    
+    if (!request.user_id || typeof request.user_id !== 'string' || request.user_id.trim() === '') {
+      throw new Error('Invalid user_id: must be a non-empty string');
+    }
+
+    const formData = new FormData();
+    
+    // Required fields (must match curl command exactly)
+    formData.append('file', request.file);
+    formData.append('campaign_id', request.campaign_id.trim());
+    formData.append('org_id', request.org_id.trim());
+    formData.append('user_id', request.user_id.trim());
+    
+    // Optional fields (only append if they have values)
+    if (request.sleep_seconds && request.sleep_seconds > 0) {
+      formData.append('sleep_seconds', request.sleep_seconds.toString());
+    }
+    if (request.external_call_url && request.external_call_url.trim()) {
+      formData.append('external_call_url', request.external_call_url);
+    }
+    if (request.external_username && request.external_username.trim()) {
+      formData.append('external_username', request.external_username);
+    }
+    if (request.external_password && request.external_password.trim()) {
+      formData.append('external_password', request.external_password);
+    }
+
+    // Debug: Log the FormData contents
+    for (let [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        // File validation passed
+      } else {
+        // String validation passed
+      }
+    }
+
+    // Verify that all required fields are present in FormData
+    const requiredFields = ['file', 'campaign_id', 'org_id', 'user_id'];
+    const missingFields = requiredFields.filter(field => {
+      const value = formData.get(field);
+      return !value || (typeof value === 'string' && value.trim() === '');
+    });
+
+    if (missingFields.length > 0) {
+      throw new Error(`Missing required fields in FormData: ${missingFields.join(', ')}`);
+    }
+
+    // Use fetch directly instead of authorizedFetch to avoid header issues
+    const token = localStorage.getItem('authToken');
+    const fullUrl = `${API_BASE_URL}${BATCH_CALLS_BASE_URL}`;
+    
+    const response = await fetch(fullUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : '',
+        // Don't set Content-Type for FormData - let browser set it automatically
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Batch call start failed:', response.status, errorText);
+      console.error('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      // Try to parse error as JSON for better error messages
+      let errorMessage = `Failed to start batch call: ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.detail) {
+          errorMessage += ` - ${JSON.stringify(errorJson.detail)}`;
+        } else {
+          errorMessage += ` - ${errorText}`;
+        }
+      } catch {
+        errorMessage += ` - ${errorText}`;
+      }
+      
+      throw new Error(errorMessage);
+    }
+
+    const result = await response.json();
+
+    return result;
+  } catch (error) {
+    console.error('Failed to start batch call:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get the overall status of a batch operation
+ */
+export async function getBatchOperationStatus(bulkOperationId: string): Promise<BatchCallOperation> {
+  try {
+    console.log('Fetching operation status for:', bulkOperationId);
+    
+    const response = await authorizedFetch<BatchCallOperation>(
+      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}`
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to get operation status:', response.status, errorText);
+      
+      // Try to parse error as JSON for better error messages
+      let errorMessage = `Failed to get operation status: ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.detail) {
+          errorMessage += ` - ${JSON.stringify(errorJson.detail)}`;
+        } else {
+          errorMessage += ` - ${errorText}`;
+        }
+      } catch {
+        errorMessage += ` - ${errorText}`;
+      }
+      
+      throw new Error(errorMessage);
+    }
+
+    const result = await response.json();
+    
+    // Validate the response structure for new status system
+    if (!result.bulk_operation_id || !result.status) {
+      // Response missing required fields
+    }
+    
+    return result;
+  } catch (error) {
+    throw error;
+  }
+}
+
+/**
+ * Get the database status of a bulk operation
+ */
+export async function getBulkOperationDbStatus(bulkOperationId: string): Promise<any> {
+  try {
+    const response = await authorizedFetch<any>(
+      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/db-status`
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to get database status: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    throw error;
+  }
+}
+
+/**
+ * Get the memory status of a bulk operation
+ */
+export async function getBulkOperationMemoryStatus(bulkOperationId: string): Promise<any> {
+  try {
+    console.log('Fetching memory status for operation:', bulkOperationId);
+    
+    const response = await authorizedFetch<any>(
+      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/status`
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to get memory status:', response.status, errorText);
+      throw new Error(`Failed to get memory status: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('Memory status received:', result);
+    return result;
+  } catch (error) {
+    console.error('Failed to get memory status:', error);
+    throw error;
+  }
+}
+
+/**
+ * Simple health check to test if the API is reachable
+ */
+export async function testApiConnection(): Promise<boolean> {
+  try {
+    console.log('Testing API connection...');
+    const response = await fetch('https://platform.voxiflow.com/backend/api/v1/bulk-calls/summary', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+      },
+    });
+    
+    console.log('API connection test response:', response.status, response.statusText);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('API connection test successful:', data);
+      return true;
+    } else {
+      const errorText = await response.text();
+      console.error('API connection test failed:', response.status, errorText);
+      return false;
+    }
+  } catch (error) {
+    console.error('API connection test error:', error);
+    return false;
+  }
+}
+
+/**
+ * Get detailed status of individual calls in a batch operation
+ */
+export async function getBatchCallDetails(bulkOperationId: string): Promise<BatchCallResponse> {
+  try {
+    console.log('Fetching call details for operation:', bulkOperationId);
+    
+    // According to Swagger docs, the primary endpoint is /bulk-calls/calls/{bulk_operation_id}
+    const primaryEndpoint = `${BATCH_CALLS_BASE_URL}/calls/${bulkOperationId}`;
+    console.log('Trying primary endpoint:', primaryEndpoint);
+    console.log('Full URL will be:', `https://platform.voxiflow.com/backend${primaryEndpoint}`);
+    
+    const response = await authorizedFetch<BatchCallResponse>(primaryEndpoint);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to get call details from primary endpoint:', response.status, errorText);
+      console.error('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      // Try the alternative endpoint as fallback
+      console.log('Trying alternative endpoint as fallback...');
+      const alternativeEndpoint = `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/calls`;
+      console.log('Trying alternative endpoint:', alternativeEndpoint);
+      console.log('Full alternative URL will be:', `https://platform.voxiflow.com/backend${alternativeEndpoint}`);
+      
+      const alternativeResponse = await authorizedFetch<BatchCallResponse>(alternativeEndpoint);
+      
+      if (!alternativeResponse.ok) {
+        const alternativeErrorText = await alternativeResponse.text();
+        console.error('Failed to get call details from alternative endpoint:', alternativeResponse.status, alternativeErrorText);
+        console.error('Alternative response headers:', Object.fromEntries(alternativeResponse.headers.entries()));
+        throw new Error(`Failed to get call details: ${response.status} - ${errorText}`);
+      }
+      
+      const alternativeResult = await alternativeResponse.json();
+      console.log('Call details received from alternative endpoint:', alternativeResult);
+      return alternativeResult;
+    }
+
+    const result = await response.json();
+    console.log('Call details received from primary endpoint:', result);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    // Validate the response structure
+    if (!result.bulk_operation_id) {
+      console.warn('Call details response missing bulk_operation_id:', result);
+    }
+    
+    // Log call statuses if available (new API structure)
+    if (result.call_statuses) {
+      console.log(`Call details: ${Object.keys(result.call_statuses).length} call statuses found`);
+      Object.entries(result.call_statuses).forEach(([rowIndex, status]: [string, any]) => {
+        console.log(`Row ${rowIndex}: ${status.status} - ${status.progress}`);
+      });
+    }
+    
+    // Log traditional calls array if available (legacy structure)
+    if (result.calls && result.calls.length > 0) {
+      console.log(`Call details: ${result.calls.length} calls found in calls array`);
+      result.calls.forEach((call, index) => {
+        console.log(`Call ${index}: ${call.call_status} - ${call.customer_name} (${call.phone_number})`);
+      });
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Failed to get call details:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get real-time call progress for a bulk operation
+ */
+export async function getCallProgress(bulkOperationId: string): Promise<any> {
+  try {
+    console.log('Fetching call progress for operation:', bulkOperationId);
+    
+    const response = await authorizedFetch<any>(
+      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/progress`
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to get call progress:', response.status, errorText);
+      throw new Error(`Failed to get call progress: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('Call progress received:', result);
+    return result;
+  } catch (error) {
+    console.error('Failed to get call progress:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get comprehensive statistics for a bulk operation
+ */
+export async function getOperationStatistics(bulkOperationId: string): Promise<any> {
+  try {
+    console.log('Fetching operation statistics for:', bulkOperationId);
+    
+    const response = await authorizedFetch<any>(
+      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/statistics`
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to get operation statistics:', response.status, errorText);
+      throw new Error(`Failed to get operation statistics: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('Operation statistics received:', result);
+    return result;
+  } catch (error) {
+    console.error('Failed to get operation statistics:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get call status by specific row index
+ */
+export async function getCallStatusByRow(bulkOperationId: string, rowIndex: number): Promise<any> {
+  try {
+    console.log(`Fetching call status for operation ${bulkOperationId}, row ${rowIndex}`);
+    
+    const response = await authorizedFetch<any>(
+      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/calls/${rowIndex}`
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to get call status by row:', response.status, errorText);
+      throw new Error(`Failed to get call status by row: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('Call status by row received:', result);
+    return result;
+  } catch (error) {
+    console.error('Failed to get call status by row:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get summary of all batch operations
+ */
+export async function getBatchOperationsSummary(): Promise<BatchCallSummary> {
+  try {
+    console.log('Fetching operations summary...');
+    
+    const response = await authorizedFetch<BatchCallSummary>(
+      `${BATCH_CALLS_BASE_URL}/summary`
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to get operations summary:', response.status, errorText);
+      throw new Error(`Failed to get operations summary: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('Operations summary received:', result);
+    return result;
+  } catch (error) {
+    console.error('Failed to get operations summary:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get list of all batch operations
+ */
+export async function getBatchOperationsList(): Promise<BatchOperationsList> {
+  try {
+    console.log('Fetching operations list...');
+    
+    const response = await authorizedFetch<BatchOperationsList>(
+      `${BATCH_CALLS_BASE_URL}/operations`
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to get operations list:', response.status, errorText);
+      throw new Error(`Failed to get operations list: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('Operations list received:', result);
+    return result;
+  } catch (error) {
+    console.error('Failed to get operations list:', error);
+    throw error;
+  }
+}
+
+/**
+ * Pause an active batch operation
+ */
+export async function pauseBatchOperation(bulkOperationId: string): Promise<{ message: string; status: string }> {
+  try {
+    console.log('Pausing operation:', bulkOperationId);
+    
+    const response = await authorizedFetch<{ message: string; status: string }>(
+      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/pause`,
+      {
+        method: 'POST',
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to pause operation:', response.status, errorText);
+      throw new Error(`Failed to pause operation: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('Operation paused successfully:', result);
+    return result;
+  } catch (error) {
+    console.error('Failed to pause operation:', error);
+    throw error;
+  }
+}
+
+/**
+ * Resume a paused batch operation
+ */
+export async function resumeBatchOperation(bulkOperationId: string): Promise<{ message: string; status: string }> {
+  try {
+    console.log('Resuming operation:', bulkOperationId);
+    
+    const response = await authorizedFetch<{ message: string; status: string }>(
+      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/resume`,
+      {
+        method: 'POST',
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to resume operation:', response.status, errorText);
+      throw new Error(`Failed to resume operation: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('Operation resumed successfully:', result);
+    return result;
+  } catch (error) {
+    console.error('Failed to resume operation:', error);
+    throw error;
+  }
+}
+
+/**
+ * Cancel a batch operation
+ */
+export async function cancelBatchOperation(bulkOperationId: string): Promise<{ message: string; status: string }> {
+  try {
+    console.log('Cancelling operation:', bulkOperationId);
+    
+    const response = await authorizedFetch<{ message: string; status: string }>(
+      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/cancel`,
+      {
+        method: 'POST',
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to cancel operation:', response.status, errorText);
+      throw new Error(`Failed to cancel operation: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('Operation cancelled successfully:', result);
+    return result;
+  } catch (error) {
+    console.error('Failed to cancel operation:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get enhanced operation status with call statuses (new API structure)
+ */
+export async function getEnhancedOperationStatus(bulkOperationId: string): Promise<BatchCallOperation> {
+  try {
+    console.log('Fetching enhanced operation status for:', bulkOperationId);
+    
+    // First get the operation status
+    const operationStatus = await getBatchOperationStatus(bulkOperationId);
+    
+    // Then get the call details to include call_statuses
+    try {
+      const callDetails = await getBatchCallDetails(bulkOperationId);
+      
+      // Merge call_statuses into operation status if available
+      if (callDetails.call_statuses) {
+        operationStatus.call_statuses = callDetails.call_statuses;
+        console.log(`Enhanced status: Added ${Object.keys(callDetails.call_statuses).length} call statuses`);
+      }
+    } catch (callDetailsError) {
+      console.warn('Could not fetch call details for enhanced status:', callDetailsError);
+      // Continue with just operation status if call details fail
+    }
+    
+    return operationStatus;
+  } catch (error) {
+    console.error('Failed to get enhanced operation status:', error);
+    throw error;
+  }
+}
+
+/**
+ * Poll operation status with configurable interval
+ */
+export function pollOperationStatus(
+  bulkOperationId: string,
+  onUpdate: (status: BatchCallOperation) => void,
+  onComplete: (status: BatchCallOperation) => void,
+  onError: (error: Error) => void,
+  intervalMs: number = 5000
+): () => void {
+  console.log(`Starting polling for operation ${bulkOperationId} every ${intervalMs}ms`);
+  
+  const pollInterval = setInterval(async () => {
+    try {
+      console.log(`Polling operation ${bulkOperationId}...`);
+      // Use enhanced status for better call tracking
+      const status = await getEnhancedOperationStatus(bulkOperationId);
+      
+      console.log(`Operation ${bulkOperationId} status:`, status.status, `Progress: ${status.progress_percentage}%`);
+      if (status.call_statuses) {
+        const statusCounts = Object.values(status.call_statuses).reduce((acc, call) => {
+          acc[call.status] = (acc[call.status] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        console.log('Call status breakdown:', statusCounts);
+      }
+      
+      onUpdate(status);
+      
+      if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
+        console.log(`Operation ${bulkOperationId} completed with status: ${status.status}`);
+        clearInterval(pollInterval);
+        onComplete(status);
+      }
+    } catch (error) {
+      console.error(`Polling error for operation ${bulkOperationId}:`, error);
+      clearInterval(pollInterval);
+      onError(error as Error);
+    }
+  }, intervalMs);
+
+  // Return cleanup function
+  return () => {
+    console.log(`Stopping polling for operation ${bulkOperationId}`);
+    clearInterval(pollInterval);
+  };
+}
+
+/**
+ * Utility function to calculate status counts from call_statuses
+ */
+export function calculateCallStatusCounts(callStatuses: Record<string, any> | undefined): {
+  pending: number;
+  started: number;
+  completed: number;
+  failed: number;
+} {
+  if (!callStatuses) {
+    return { pending: 0, started: 0, completed: 0, failed: 0 };
+  }
+
+  return Object.values(callStatuses).reduce((acc, call) => {
+    const status = call.status || 'pending';
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, { pending: 0, started: 0, completed: 0, failed: 0 } as Record<string, number>);
+}
+
+/**
+ * Utility function to get status color class for UI
+ */
+export function getStatusColorClass(status: string): string {
+  switch (status) {
+    case 'pending':
+      return 'text-yellow-600 bg-yellow-100 border-yellow-200';
+    case 'started':
+      return 'text-blue-600 bg-blue-100 border-blue-200';
+    case 'completed':
+      return 'text-green-600 bg-green-100 border-green-200';
+    case 'failed':
+      return 'text-red-600 bg-red-100 border-red-200';
+    case 'processing':
+      return 'text-blue-600 bg-blue-100 border-blue-200';
+    case 'paused':
+      return 'text-orange-600 bg-orange-100 border-orange-200';
+    case 'cancelled':
+      return 'text-gray-600 bg-gray-100 border-gray-200';
+    default:
+      return 'text-gray-600 bg-gray-100 border-gray-200';
+  }
+}
