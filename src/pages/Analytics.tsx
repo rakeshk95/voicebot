@@ -45,7 +45,7 @@ const Analytics = () => {
   const monthlyTrends = [
     { month: 'Jan', calls: 12400, success: 10540, revenue: 125000 },
     { month: 'Feb', calls: 13200, success: 11220, revenue: 142000 },
-    { month: 'Mar', calls: 15800, success: 13560, revenue: 168000 },
+    { month: 'Mar', calls: 15800, success: 13560, revenue: 168001 },
     { month: 'Apr', calls: 14600, success: 12580, revenue: 156000 },
     { month: 'May', calls: 16900, success: 14720, revenue: 189000 },
     { month: 'Jun', calls: 18200, success: 15860, revenue: 205000 },
@@ -53,10 +53,10 @@ const Analytics = () => {
 
   const campaignROI = [
     { campaign: 'Summer Sale', investment: 25000, revenue: 95000, roi: 280 },
-    { campaign: 'Product Launch', investment: 18000, revenue: 62000, roi: 244 },
-    { campaign: 'Newsletter', investment: 12000, revenue: 48000, roi: 300 },
-    { campaign: 'Survey', investment: 8000, revenue: 24000, roi: 200 },
-    { campaign: 'Follow-up', investment: 15000, revenue: 58000, roi: 287 },
+    { campaign: 'Product Launch', investment: 18001, revenue: 62000, roi: 244 },
+    { campaign: 'Newsletter', investment: 12000, revenue: 48001, roi: 300 },
+    { campaign: 'Survey', investment: 8001, revenue: 24000, roi: 200 },
+    { campaign: 'Follow-up', investment: 15000, revenue: 58001, roi: 287 },
   ];
 
   return (

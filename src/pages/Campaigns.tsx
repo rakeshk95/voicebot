@@ -343,6 +343,9 @@ function generateUUID() {
 const Campaigns = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  
+  console.log('Campaigns component mounted');
+  
   const [searchTerm, setSearchTerm] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [viewingCampaign, setViewingCampaign] = useState<any>(null);
@@ -459,25 +462,54 @@ const Campaigns = () => {
     setEndDate(null);
   };
 
+  // Fetch campaigns immediately when component mounts
   useEffect(() => {
+    console.log('Campaigns useEffect running - fetching campaigns');
+    
     const fetchCampaigns = async () => {
       try {
+        console.log('Fetching campaigns...');
+        console.log('Current organizations count:', organizations.length);
+        
+        const authToken = localStorage.getItem('authToken');
+        if (!authToken) {
+          console.error('No auth token found');
+          toast({
+            title: "Error",
+            description: "Authentication token not found. Please login again.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        console.log('Campaigns API URL:', 'https://platform.voxiflow.com/backend/api/v1/campaigns/');
+        console.log('Auth token:', authToken.substring(0, 20) + '...');
+
         const response = await fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+            'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json'
           },
         });
 
+        console.log('Campaigns API response:', response.status, response.statusText);
+
         if (!response.ok) {
-          throw new Error('Failed to fetch campaigns');
+          const errorText = await response.text();
+          console.error('API Error:', response.status, errorText);
+          throw new Error(`API Error: ${response.status} - ${errorText}`);
         }
 
         const data = await response.json();
+        console.log('Campaigns API data:', data);
+        
+        // Format campaigns with organization names if available
         const formattedCampaigns = data.map((campaign: any) => {
           // Find organization name by org_id
           const organization = organizations.find(org => org.id === campaign.org_id);
           const orgName = organization ? organization.name : 'Unknown Organization';
+          
+          console.log(`Campaign ${campaign.name}: org_id=${campaign.org_id}, org_name=${orgName}`);
           
           return {
             id: campaign.id,
@@ -500,12 +532,13 @@ const Campaigns = () => {
           };
         });
 
+        console.log('Formatted campaigns:', formattedCampaigns);
         setCampaigns(formattedCampaigns);
       } catch (error) {
         console.error('Error fetching campaigns:', error);
         toast({
           title: "Error",
-          description: "Failed to load campaigns. Please try again.",
+          description: error instanceof Error ? error.message : "Failed to load campaigns. Please try again.",
           variant: "destructive",
         });
       } finally {
@@ -513,18 +546,51 @@ const Campaigns = () => {
       }
     };
 
-    // Only fetch campaigns if organizations are loaded and we haven't already fetched
-    if (organizations.length > 0 && campaigns.length === 0 && !isLoading) {
+    // Only fetch campaigns if organizations are loaded or if we haven't fetched campaigns yet
+    if (organizations.length > 0 || campaigns.length === 0) {
       fetchCampaigns();
     }
-  }, [organizations.length, campaigns.length, isLoading]); // Add proper dependencies
+  }, [organizations]); // Add organizations as dependency
+
+
 
   useEffect(() => {
+    console.log('Organizations useEffect running - fetching organizations');
+    
     const fetchOrganizations = async () => {
       try {
-        // Use cached fetch to prevent duplicate API calls
-        const data = await cachedFetch<Organization[]>('/organizations');
+        console.log('Fetching organizations...');
+        
+        // Try direct fetch first to debug the issue
+        const authToken = localStorage.getItem('authToken');
+        if (!authToken) {
+          console.error('No auth token found for organizations fetch');
+          return;
+        }
+        
+        console.log('Organizations API URL:', 'https://platform.voxiflow.com/backend/api/v1/organizations/');
+        console.log('Auth token:', authToken.substring(0, 20) + '...');
+        
+        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations/', {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          },
+        });
+        
+        console.log('Organizations API response:', response.status, response.statusText);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Organizations API Error:', response.status, errorText);
+          throw new Error(`Organizations API Error: ${response.status} - ${errorText}`);
+        }
+        
+        const data = await response.json();
+        console.log('Organizations API data:', data);
+        
         if (Array.isArray(data)) {
+          console.log('Setting organizations:', data.length, 'organizations');
           setOrganizations(data);
           hasFetchedOrganizations.current = true;
         } else {
@@ -1609,9 +1675,9 @@ const Campaigns = () => {
           <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium">
             {filteredCampaigns.length} Total
           </Badge>
-              </div>
+        </div>
         <p className="text-sm text-gray-500">Manage your voice campaigns and automation</p>
-            </div>
+      </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-3 p-2">
         <div className="flex flex-wrap items-center gap-3">
