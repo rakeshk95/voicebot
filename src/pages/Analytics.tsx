@@ -59,10 +59,69 @@ const Analytics = () => {
     { campaign: 'Follow-up', investment: 15000, revenue: 58001, roi: 287 },
   ];
 
+  const userInteractionMetrics = {
+    intent_recognition_accuracy: 65.78,
+    fallback_or_error_triggers: 193,
+    first_response_time_seconds: 51.15,
+    average_bot_response_time_seconds: 51.15,
+    average_user_talk_time_seconds: 10.23,
+    average_bot_talk_time_seconds: 15.34,
+    first_attempt_responses: 371,
+    multi_attempt_responses: 193,
+    total_interactions: 564
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Advanced Analytics</h1>
+      </div>
+
+      {/* User Interaction Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+          <CardContent className="p-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-700">
+                {userInteractionMetrics.intent_recognition_accuracy}%
+              </div>
+              <div className="text-sm text-blue-600 font-medium">Intent Recognition</div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+          <CardContent className="p-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-700">
+                {userInteractionMetrics.total_interactions}
+              </div>
+              <div className="text-sm text-green-600 font-medium">Total Interactions</div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+          <CardContent className="p-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-700">
+                {userInteractionMetrics.first_response_time_seconds}s
+              </div>
+              <div className="text-sm text-purple-600 font-medium">Avg Response Time</div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+          <CardContent className="p-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-700">
+                {userInteractionMetrics.first_attempt_responses}
+              </div>
+              <div className="text-sm text-orange-600 font-medium">First Attempt Success</div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Conversion Funnel & Performance Radar */}
@@ -216,6 +275,135 @@ const Analytics = () => {
                 <Bar dataKey="roi" fill="#8b5cf6" />
               </RechartsBarChart>
             </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* User Interaction Metrics */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center space-x-2">
+              <Brain className="w-5 h-5" />
+              <span>User Interaction Metrics</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Key Metrics Row */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-3 bg-blue-50 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {userInteractionMetrics.intent_recognition_accuracy}%
+                  </div>
+                  <div className="text-sm text-blue-700">Intent Recognition</div>
+                </div>
+                <div className="text-center p-3 bg-green-50 rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">
+                    {userInteractionMetrics.total_interactions}
+                  </div>
+                  <div className="text-sm text-green-700">Total Interactions</div>
+                </div>
+              </div>
+              
+              {/* Response Time Metrics */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">First Response Time</span>
+                  <span className="text-sm text-gray-600">
+                    {userInteractionMetrics.first_response_time_seconds}s
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min((userInteractionMetrics.first_response_time_seconds / 60) * 100, 100)}%` }}
+                  ></div>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Avg Bot Response Time</span>
+                  <span className="text-sm text-gray-600">
+                    {userInteractionMetrics.average_bot_response_time_seconds}s
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min((userInteractionMetrics.average_bot_response_time_seconds / 60) * 100, 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center space-x-2">
+              <Activity className="w-5 h-5" />
+              <span>Interaction Breakdown</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Talk Time Distribution */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-700">Talk Time Distribution</h4>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">User Talk Time</span>
+                  <span className="text-sm font-medium">
+                    {userInteractionMetrics.average_user_talk_time_seconds}s
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-purple-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${(userInteractionMetrics.average_user_talk_time_seconds / 30) * 100}%` }}
+                  ></div>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Bot Talk Time</span>
+                  <span className="text-sm font-medium">
+                    {userInteractionMetrics.average_bot_talk_time_seconds}s
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-orange-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${(userInteractionMetrics.average_bot_talk_time_seconds / 30) * 100}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Response Attempts */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-700">Response Attempts</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="text-center p-2 bg-green-50 rounded">
+                    <div className="text-lg font-bold text-green-600">
+                      {userInteractionMetrics.first_attempt_responses}
+                    </div>
+                    <div className="text-xs text-green-700">First Attempt</div>
+                  </div>
+                  <div className="text-center p-2 bg-yellow-50 rounded">
+                    <div className="text-lg font-bold text-yellow-600">
+                      {userInteractionMetrics.multi_attempt_responses}
+                    </div>
+                    <div className="text-xs text-yellow-700">Multi Attempt</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Error Triggers */}
+              <div className="text-center p-3 bg-red-50 rounded-lg">
+                <div className="text-lg font-bold text-red-600">
+                  {userInteractionMetrics.fallback_or_error_triggers}
+                </div>
+                <div className="text-xs text-red-700">Fallback/Error Triggers</div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

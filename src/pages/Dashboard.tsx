@@ -142,6 +142,7 @@ interface DashboardMetrics {
     first_attempt_responses: number | { NULL: true };
     multi_attempt_responses: number | { NULL: true };
     total_interactions: number | { NULL: true };
+    average_bot_talk_time_seconds: number | { NULL: true };
   };
   outcome_based_metrics: {
     conversion_rate: number;
@@ -318,6 +319,15 @@ const Dashboard = () => {
   const userData = getUserData();
   const isSuperAdmin = userPermissions?.admin;
   
+  // Auto-detect user's organization on component mount
+  useEffect(() => {
+    if (userData?.org_id && !isSuperAdmin) {
+      setUserOrgId(userData.org_id);
+      setFilters(prev => ({ ...prev, org_id: userData.org_id }));
+      console.log('Dashboard: Auto-detected user organization:', userData.org_id);
+    }
+  }, [userData, isSuperAdmin]);
+
   // Fetch organizations and campaigns for filters
   const fetchFilterData = async () => {
     try {
@@ -346,25 +356,24 @@ const Dashboard = () => {
         setOrganizations([]);
       }
 
-      // Fetch campaigns
+      // Fetch campaigns with organization filtering
       console.log('Dashboard: Fetching campaigns...');
-      const campaignResponse = await authorizedFetch('/campaigns/');
+      let campaignUrl = '/campaigns/';
+      
+      // Add organization filter for non-super admin users
+      if (!isSuperAdmin && userData?.org_id) {
+        campaignUrl += `?org_id=${userData.org_id}`;
+        console.log('Dashboard: Fetching campaigns with org filter:', campaignUrl);
+      }
+      
+      const campaignResponse = await authorizedFetch(campaignUrl);
       if (campaignResponse.ok) {
         const campaignData = await campaignResponse.json() as Campaign[];
         console.log('Dashboard: Campaigns fetched:', campaignData);
         
-        // Filter campaigns based on user permissions
-        if (isSuperAdmin) {
-          setCampaigns(campaignData);
-        } else if (userData?.org_id) {
-          const userCampaigns = campaignData.filter((campaign: Campaign) => 
-            campaign.org_id === userData.org_id
-          );
-          console.log('Dashboard: Filtered campaigns for user:', userCampaigns);
-          setCampaigns(userCampaigns);
-        } else {
-          setCampaigns([]);
-        }
+        // For non-super admin users, campaigns are already filtered by API
+        // For super admin users, show all campaigns
+        setCampaigns(campaignData);
       } else {
         console.error('Dashboard: Failed to fetch campaigns:', campaignResponse.status);
         setCampaigns([]);
@@ -384,7 +393,7 @@ const Dashboard = () => {
       setFilterDataLoading(false);
     }
   };
-  
+
   // Debug user data and permissions (only in development)
   if (process.env.NODE_ENV === 'development') {
     console.log('Dashboard: User data:', userData);
@@ -395,41 +404,16 @@ const Dashboard = () => {
     console.log('Dashboard: isFilterDataLoaded:', isFilterDataLoaded);
   }
 
-  // Auto-detect user's organization on component mount
-  useEffect(() => {
-    if (userData?.org_id && !isSuperAdmin) {
-      setUserOrgId(userData.org_id);
-      setFilters(prev => ({ ...prev, org_id: userData.org_id }));
-      console.log('Dashboard: Auto-detected user organization:', userData.org_id);
-    }
-  }, [userData, isSuperAdmin]);
-
-  // Refresh dashboard when user organization changes
+  // Consolidated initialization effect - prevents multiple API calls
   useEffect(() => {
     let isMounted = true;
     
-    if (userOrgId && hasInitialized && !loading && !refreshing && isMounted) {
-      console.log('Dashboard: User organization changed, refreshing dashboard...');
-      fetchDashboard();
-    }
-    
-    return () => {
-      isMounted = false;
-    };
-  }, [userOrgId, hasInitialized]); // Remove loading and refreshing dependencies to prevent loops
-
-  // Initialize filter data when user data is available
-  useEffect(() => {
-    let isMounted = true;
-    
+    // Only run once when component mounts and user data is available
     if (userData && !isFilterDataLoaded && !filterDataLoading && isMounted) {
-      console.log('Dashboard: User data available, initializing filters...');
-      // Small delay to ensure permissions are loaded
-      setTimeout(() => {
-        if (!isFilterDataLoaded && isMounted) {
-          fetchFilterData();
-        }
-      }, 500);
+      console.log('Dashboard: Initializing dashboard...');
+      
+      // Fetch filter data first
+      fetchFilterData();
     }
     
     return () => {
@@ -437,27 +421,35 @@ const Dashboard = () => {
     };
   }, [userData, isFilterDataLoaded, filterDataLoading]);
 
-  // Fetch organizations and campaigns for filters - ONLY ONCE
+  // Dashboard fetch effect - only runs after filters are loaded
   useEffect(() => {
-    // Prevent multiple executions
-    if (isFilterDataLoaded) {
-      return;
-    }
-    
     let isMounted = true;
     
-    // Only fetch if we have the necessary data
-    if (userData && (isSuperAdmin !== undefined) && isMounted) {
-      console.log('Dashboard: Starting filter data fetch...');
-      fetchFilterData();
-    } else {
-      console.log('Dashboard: Waiting for user data or permissions...', { userData, isSuperAdmin });
+    // Only fetch dashboard when filters are loaded and we haven't initialized yet
+    if (isFilterDataLoaded && !hasInitialized && isMounted) {
+      console.log('Dashboard: Filters loaded, fetching dashboard...');
+      fetchDashboard();
+      setHasInitialized(true);
     }
-
+    
     return () => {
       isMounted = false;
     };
-  }, [userData, isSuperAdmin, isFilterDataLoaded]); // Add proper dependencies
+  }, [isFilterDataLoaded, hasInitialized]);
+
+  // Refresh dashboard when user organization changes (only for non-super admin users)
+  useEffect(() => {
+    let isMounted = true;
+    
+    if (userOrgId && hasInitialized && !loading && !refreshing && !isSuperAdmin && isMounted) {
+      console.log('Dashboard: User organization changed, refreshing dashboard...');
+      fetchDashboard();
+    }
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [userOrgId, hasInitialized, loading, refreshing, isSuperAdmin]);
 
   // Debounced function to fetch dashboard data
   const debouncedFetchDashboard = (newOrgId?: string, delay: number = 300) => {
@@ -698,27 +690,7 @@ const Dashboard = () => {
     setRefreshing(false);
   };
 
-  // Initial dashboard fetch - wait for user data and filters to be loaded
-  useEffect(() => {
-    let isMounted = true;
-    
-    // Only fetch dashboard when we have the necessary data and haven't already initialized
-    if (userData && isFilterDataLoaded && !hasInitialized && isMounted) {
-      console.log('Dashboard: User data and filters loaded, fetching dashboard...');
-      fetchDashboard();
-      setHasInitialized(true);
-    } else {
-      console.log('Dashboard: Waiting for user data and filters to load...', {
-        hasUserData: !!userData,
-        isFilterDataLoaded,
-        hasInitialized
-      });
-    }
-    
-    return () => {
-      isMounted = false;
-    };
-  }, [userData, isFilterDataLoaded, hasInitialized]); // Remove loading dependency to prevent infinite loop
+
   
   // Debug logging for state changes (only in development)
   useEffect(() => {
@@ -1606,6 +1578,18 @@ const Dashboard = () => {
               <span className="text-sm text-gray-600">Total Interactions</span>
               <Badge variant="outline">{safeValue(metrics?.user_interaction_metrics?.total_interactions, 0)}</Badge>
             </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Avg Bot Response</span>
+              <Badge variant="outline">{safeValue(metrics?.user_interaction_metrics?.average_bot_response_time_seconds, 0)}s</Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">User Talk Time</span>
+              <Badge variant="outline">{safeValue(metrics?.user_interaction_metrics?.average_user_talk_time_seconds, 0)}s</Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Bot Talk Time</span>
+              <Badge variant="outline">{safeValue(metrics?.user_interaction_metrics?.average_bot_talk_time_seconds, 0)}s</Badge>
+            </div>
           </CardContent>
         </Card>
 
@@ -1760,121 +1744,8 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Call Details Table - Enhanced with new API data */}
-      {((callDetails?.success && callDetails?.data?.calls && callDetails?.data?.calls.length > 0) || 
-        (metrics?.call_details?.success && metrics?.call_details?.data?.calls && metrics?.call_details?.data?.calls.length > 0)) && (
-        <Card className="hover:shadow-lg transition-shadow duration-200">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Phone className="h-5 w-5 text-blue-500" />
-              Recent Call Details
-              {callDetails?.data?.note && (
-                <Badge variant="outline" className="text-xs">
-                  {callDetails.data.note}
-                </Badge>
-              )}
-              {callDetailsLoading && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                  Loading...
-                </div>
-              )}
-            </CardTitle>
-            <div className="text-sm text-gray-600">
-              Showing {Math.min((callDetails?.data?.calls?.length || metrics?.call_details?.data?.calls?.length || 0), 50)} recent calls
-            </div>
-          </CardHeader>
-          <CardContent>
-            {callDetailsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="flex items-center gap-2 text-gray-600">
-                  <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                  Loading call details...
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-2">Call ID</th>
-                        <th className="text-left py-2">Status</th>
-                        <th className="text-left py-2">Duration</th>
-                        <th className="text-left py-2">From</th>
-                        <th className="text-left py-2">To</th>
-                        <th className="text-left py-2">Price</th>
-                        <th className="text-left py-2">Start Time</th>
-                        <th className="text-left py-2">Answered By</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(callDetails?.data?.calls || metrics?.call_details?.data?.calls || []).slice(0, 50).map((call) => (
-                        <tr key={call.call_id || `call-${Math.random()}`} className="border-b hover:bg-gray-50">
-                          <td className="py-2 font-mono text-xs">{safeRender(call.call_id, 'N/A')}</td>
-                          <td className="py-2">
-                            <Badge 
-                              variant={call.status_color === 'success' ? 'default' : 
-                                      call.status_color === 'danger' ? 'destructive' : 
-                                      call.status_color === 'warning' ? 'secondary' : 'outline'}
-                            >
-                              {safeRender(call.status, 'Unknown')}
-                            </Badge>
-                          </td>
-                          <td className="py-2">{safeRender(call.duration_formatted, '0 min')}</td>
-                          <td className="py-2 font-mono text-xs">{safeRender(call.From, 'N/A')}</td>
-                          <td className="py-2 font-mono text-xs">{safeRender(call.To, 'N/A')}</td>
-                          <td className="py-2">${safeRender(call.Price, '0.00')}</td>
-                          <td className="py-2 text-xs">{safeRender(call.StartTime, 'N/A')}</td>
-                          <td className="py-2">
-                            <Badge variant="outline" className="text-xs">
-                              {safeRender(call.AnsweredBy, 'Unknown')}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                
-                {/* Call Summary */}
-                {(callDetails?.data?.summary || metrics?.call_details?.data?.summary) && (
-                  <div className="mt-6 pt-4 border-t">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Call Summary</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="text-center">
-                        <div className="text-lg font-bold text-blue-600">
-                          {callDetails?.data?.summary?.total_calls || metrics?.call_details?.data?.summary?.total_calls || 0}
-                        </div>
-                        <div className="text-xs text-gray-600">Total Calls</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-lg font-bold text-green-600">
-                          {callDetails?.data?.summary?.completed_calls || metrics?.call_details?.data?.summary?.completed_calls || 0}
-                        </div>
-                        <div className="text-xs text-gray-600">Completed</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-lg font-bold text-red-600">
-                          {callDetails?.data?.summary?.failed_calls || metrics?.call_details?.data?.summary?.failed_calls || 0}
-                        </div>
-                        <div className="text-xs text-gray-600">Failed</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-lg font-bold text-yellow-600">
-                          {callDetails?.data?.summary?.in_progress_calls || metrics?.call_details?.data?.summary?.in_progress_calls || 0}
-                        </div>
-                        <div className="text-xs text-gray-600">In Progress</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
-     </div>
+           </div>
+     
   );
 };
 

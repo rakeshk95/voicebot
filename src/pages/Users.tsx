@@ -692,7 +692,7 @@ export default function Users() {
       const csvData = users.map(user => [
         `${user.first_name} ${user.last_name}`.trim() || 'Not Set',
         user.email,
-        user.role === 'superuser' ? 'Super Admin' : user.role.replace('_', ' '),
+        getRoleDisplayName(user.role_id),
         user.status,
         user.mobile_number || 'Not Set',
         user.organization_name,
@@ -733,6 +733,44 @@ export default function Users() {
         variant: "destructive",
       });
     }
+  };
+
+  // Function to get role name from role_id
+  const getRoleName = (roleId: string | undefined) => {
+    if (!roleId) return 'Not Set';
+    const role = roles.find(r => r.id === roleId);
+    return role ? role.name : 'Unknown Role';
+  };
+
+  // Function to get role display name (for badges and UI)
+  const getRoleDisplayName = (roleId: string | undefined) => {
+    const roleName = getRoleName(roleId);
+    if (roleName === 'Not Set' || roleName === 'Unknown Role') return roleName;
+    
+    // Map role names to display names
+    const roleDisplayMap: { [key: string]: string } = {
+      'superuser': 'Super Admin',
+      'org_admin': 'Org Admin',
+      'user': 'User',
+      'agent': 'Agent'
+    };
+    
+    return roleDisplayMap[roleName.toLowerCase()] || roleName;
+  };
+
+  // Function to get role badge variant
+  const getRoleBadgeVariant = (roleId: string | undefined) => {
+    const roleName = getRoleName(roleId);
+    if (roleName === 'Not Set' || roleName === 'Unknown Role') return 'outline';
+    
+    const roleVariantMap: { [key: string]: string } = {
+      'superuser': 'bg-purple-50 text-purple-700 border-purple-200',
+      'org_admin': 'bg-blue-50 text-blue-700 border-blue-200',
+      'agent': 'bg-green-50 text-green-700 border-green-200',
+      'user': 'bg-gray-50 text-gray-700 border-gray-200'
+    };
+    
+    return roleVariantMap[roleName.toLowerCase()] || 'bg-gray-50 text-gray-700 border-gray-200';
   };
 
   return (
@@ -872,14 +910,9 @@ export default function Users() {
                   <TableCell>
                     <Badge variant="outline" className={cn(
                       "capitalize font-medium",
-                      {
-                        'bg-purple-50 text-purple-700 border-purple-200': user.role === 'superuser',
-                        'bg-blue-50 text-blue-700 border-blue-200': user.role === 'org_admin',
-                        'bg-green-50 text-green-700 border-green-200': user.role === 'agent',
-                        'bg-gray-50 text-gray-700 border-gray-200': user.role === 'user'
-                      }
+                      getRoleBadgeVariant(user.role_id)
                     )}>
-                      {user.role === 'superuser' ? 'Super Admin' : user.role.replace('_', ' ')}
+                      {getRoleDisplayName(user.role_id)}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -1049,13 +1082,15 @@ export default function Users() {
                       >
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select role" />
+                            <SelectValue placeholder="Select role">
+                              {field.value ? getRoleDisplayName(field.value) : "Select role"}
+                            </SelectValue>
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {roles.map((role) => (
                             <SelectItem key={role.id} value={role.id}>
-                              {role.name}
+                              {getRoleDisplayName(role.id)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1248,14 +1283,9 @@ export default function Users() {
                   <div className="p-3 bg-muted/50 rounded-lg">
                     <div className={cn(
                       "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize",
-                      {
-                        'bg-purple-100 text-purple-800': viewingUser?.role === 'superuser',
-                        'bg-blue-100 text-blue-800': viewingUser?.role === 'org_admin',
-                        'bg-green-100 text-green-800': viewingUser?.role === 'agent',
-                        'bg-gray-100 text-gray-800': viewingUser?.role === 'user'
-                      }
+                      getRoleBadgeVariant(viewingUser?.role_id)
                     )}>
-                      {viewingUser?.role === 'superuser' ? 'Super Admin' : viewingUser?.role.replace('_', ' ')}
+                      {getRoleDisplayName(viewingUser?.role_id)}
                     </div>
                   </div>
                 </div>
@@ -1494,13 +1524,13 @@ export default function Users() {
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select role">
-                      {roles.find(r => r.id === createFormData.role_id)?.name || "Select role"}
+                      {createFormData.role_id ? getRoleDisplayName(createFormData.role_id) : "Select role"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {roles.map((role) => (
                       <SelectItem key={role.id} value={role.id}>
-                        {role.name}
+                        {getRoleDisplayName(role.id)}
                       </SelectItem>
                     ))}
                   </SelectContent>
