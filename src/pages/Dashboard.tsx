@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -316,6 +316,9 @@ const Dashboard = () => {
   // Debounce timer for filter changes
   const [filterDebounceTimer, setFilterDebounceTimer] = useState<NodeJS.Timeout | null>(null);
   
+  // Ref to track if initialization has already run
+  const hasInitializedRef = useRef(false);
+  
   const userData = getUserData();
   const isSuperAdmin = userPermissions?.admin;
   
@@ -330,6 +333,12 @@ const Dashboard = () => {
 
   // Fetch organizations and campaigns for filters
   const fetchFilterData = async () => {
+    // Prevent multiple calls
+    if (filterDataLoading || isFilterDataLoaded) {
+      console.log('Dashboard: Filter data already loading or loaded, skipping...');
+      return;
+    }
+    
     try {
       setFilterDataLoading(true);
       console.log('Dashboard: Fetching filter data...', { isSuperAdmin, userData: userData?.org_id });
@@ -366,7 +375,9 @@ const Dashboard = () => {
         console.log('Dashboard: Fetching campaigns with org filter:', campaignUrl);
       }
       
+      console.log('Dashboard: Campaigns API call starting at:', new Date().toISOString());
       const campaignResponse = await authorizedFetch(campaignUrl);
+      console.log('Dashboard: Campaigns API call completed at:', new Date().toISOString());
       if (campaignResponse.ok) {
         const campaignData = await campaignResponse.json() as Campaign[];
         console.log('Dashboard: Campaigns fetched:', campaignData);
@@ -408,18 +419,28 @@ const Dashboard = () => {
   useEffect(() => {
     let isMounted = true;
     
+    console.log('Dashboard: useEffect triggered with:', {
+      userData: !!userData,
+      isFilterDataLoaded,
+      hasInitializedRef: hasInitializedRef.current,
+      isMounted
+    });
+    
     // Only run once when component mounts and user data is available
-    if (userData && !isFilterDataLoaded && !filterDataLoading && isMounted) {
+    if (userData && !isFilterDataLoaded && !hasInitializedRef.current && isMounted) {
       console.log('Dashboard: Initializing dashboard...');
+      hasInitializedRef.current = true;
       
       // Fetch filter data first
       fetchFilterData();
+    } else {
+      console.log('Dashboard: Skipping initialization - conditions not met');
     }
     
     return () => {
       isMounted = false;
     };
-  }, [userData, isFilterDataLoaded, filterDataLoading]);
+  }, [userData, isFilterDataLoaded]); // Removed filterDataLoading dependency
 
   // Dashboard fetch effect - only runs after filters are loaded
   useEffect(() => {
@@ -467,16 +488,17 @@ const Dashboard = () => {
       };
       
       // Call fetchDashboard with the updated filter state
-      fetchDashboardWithFilters(tempFilters);
+      fetchDashboard(tempFilters);
     }, delay);
     
     setFilterDebounceTimer(timer);
   };
   
-  // Function to fetch dashboard with specific filters
-  const fetchDashboardWithFilters = (filterState: typeof filters) => {
+  // Single, consolidated dashboard fetch function
+  const fetchDashboard = async (customFilters?: typeof filters) => {
     // Prevent multiple simultaneous API calls
     if (loading || isApiCallInProgress) {
+      console.log('Dashboard: API call already in progress, skipping...');
       return;
     }
     
@@ -487,7 +509,10 @@ const Dashboard = () => {
       
       const params = new URLSearchParams();
       
-      // Simplified organization filter logic using passed filter state
+      // Use custom filters if provided, otherwise use current filters
+      const filterState = customFilters || filters;
+      
+      // Simplified organization filter logic
       let orgIdToUse = null;
       
       if (filterState.org_id && filterState.org_id !== 'all') {
@@ -519,19 +544,6 @@ const Dashboard = () => {
       const apiUrl = `/dashboard/comprehensive?${params}`;
       console.log('Dashboard: API call:', `${process.env.NODE_ENV === 'development' ? 'https://platform.voxiflow.com/backend/api/v1' : ''}${apiUrl}`);
       
-      // Call the original fetchDashboard with the constructed URL
-      fetchDashboardWithUrl(apiUrl);
-      
-    } catch (error) {
-      console.error('Dashboard: Error in fetchDashboardWithFilters:', error);
-      setLoading(false);
-      setIsApiCallInProgress(false);
-    }
-  };
-  
-  // Function to fetch dashboard with a specific URL
-  const fetchDashboardWithUrl = async (apiUrl: string) => {
-    try {
       const response = await authorizedFetch(apiUrl);
       
       if (!response.ok) {
@@ -548,7 +560,7 @@ const Dashboard = () => {
       setMetrics(data);
       
       // Also fetch call details using the new recommended endpoint
-      if (userOrgId || (filters.org_id && filters.org_id !== 'all')) {
+      if (userOrgId || (filterState.org_id && filterState.org_id !== 'all')) {
         fetchCallDetails();
       }
       
@@ -564,6 +576,7 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
       setIsApiCallInProgress(false);
+      console.log('Dashboard: fetchDashboard finished (loading set to false)');
     }
   };
   
@@ -589,192 +602,6 @@ const Dashboard = () => {
       setFilterDataLoading(false);
     };
   }, [filterDebounceTimer]);
-
-  // Fetch dashboard metrics using the new comprehensive endpoint
-  const fetchDashboard = async () => {
-    // Prevent multiple simultaneous API calls
-    if (loading || isApiCallInProgress) {
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      setIsApiCallInProgress(true);
-      setError(null);
-      
-      const params = new URLSearchParams();
-      
-      // Simplified organization filter logic
-      let orgIdToUse = null;
-      
-      if (filters.org_id && filters.org_id !== 'all') {
-        // User has selected a specific organization from dropdown
-        orgIdToUse = filters.org_id;
-        console.log('Dashboard: Using selected organization:', orgIdToUse);
-      } else if (userOrgId && !isSuperAdmin) {
-        // Regular user (non-super admin) - use their organization
-        orgIdToUse = userOrgId;
-        console.log('Dashboard: Using user organization ID:', userOrgId);
-      } else if (isSuperAdmin && filters.org_id === 'all') {
-        // Super admin viewing all organizations - don't include org_id
-        console.log('Dashboard: Super admin viewing all organizations - no org_id filter');
-      }
-      
-      if (orgIdToUse) {
-        params.append('org_id', orgIdToUse);
-        console.log('Dashboard: Added org_id parameter:', orgIdToUse);
-      } else {
-        console.log('Dashboard: No org_id parameter added - will fetch all organizations data');
-      }
-      
-      if (filters.campaign_id && filters.campaign_id !== 'all') {
-        params.append('campaign_id', filters.campaign_id);
-      }
-      params.append('days', filters.days.toString());
-
-      // Use the new comprehensive dashboard endpoint
-      const apiUrl = `/dashboard/comprehensive?${params}`;
-      console.log('Dashboard: API call:', `${process.env.NODE_ENV === 'development' ? 'https://platform.voxiflow.com/backend/api/v1' : ''}${apiUrl}`);
-      
-      const response = await authorizedFetch(apiUrl);
-      
-      if (!response.ok) {
-        const errorData = await response.json() as { detail?: string };
-        console.error('Dashboard: API error response:', errorData);
-        throw new Error(errorData.detail || 'Failed to fetch dashboard data');
-      }
-
-      const data = await response.json() as DashboardMetrics;
-      console.log('Dashboard: Data received successfully');
-      
-      // Store all data for reference
-      setAllMetrics(data);
-      setMetrics(data);
-      
-      // Also fetch call details using the new recommended endpoint
-      if (userOrgId || (filters.org_id && filters.org_id !== 'all')) {
-        fetchCallDetails();
-      }
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch dashboard data';
-      console.error('Dashboard: Fetch error:', error);
-      setError(errorMessage);
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-      setIsApiCallInProgress(false);
-      console.log('Dashboard: fetchDashboard finished (loading set to false)');
-    }
-  };
-
-  // Refresh dashboard data
-  const handleRefresh = async () => {
-    if (refreshing || loading) {
-      console.log('Dashboard: Refresh already in progress, skipping...');
-      return;
-    }
-    
-    setRefreshing(true);
-    await fetchDashboard();
-    
-    // Also refresh call details if we have an org_id
-    if (userOrgId || (filters.org_id && filters.org_id !== 'all')) {
-      await fetchCallDetails();
-    }
-    
-    setRefreshing(false);
-  };
-
-
-  
-  // Debug logging for state changes (only in development)
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Dashboard: State changed - isFilterDataLoaded:', isFilterDataLoaded, 'hasInitialized:', hasInitialized);
-    }
-  }, [isFilterDataLoaded, hasInitialized]);
-  
-  // Debug when metrics state changes
-  useEffect(() => {
-    if (metrics?.core_performance_metrics) {
-      console.log('Dashboard: Metrics state changed - Core metrics:', {
-        total_minutes_consumed: metrics.core_performance_metrics.total_minutes_consumed,
-        total_minutes_formatted: metrics.core_performance_metrics.total_minutes_formatted,
-        avg_handle_time_minutes: metrics.core_performance_metrics.avg_handle_time_minutes,
-        avg_handle_time_formatted: metrics.core_performance_metrics.avg_handle_time_formatted,
-        call_completion_rate: metrics.core_performance_metrics.call_completion_rate
-      });
-      
-      // Additional debugging for problematic fields
-      console.log('Dashboard: Problematic fields in state:', {
-        total_minutes_consumed: {
-          value: metrics.core_performance_metrics.total_minutes_consumed,
-          type: typeof metrics.core_performance_metrics.total_minutes_consumed,
-          is_null_object: metrics.core_performance_metrics.total_minutes_consumed && typeof metrics.core_performance_metrics.total_minutes_consumed === 'object' && metrics.core_performance_metrics.total_minutes_consumed.NULL === true
-        },
-        avg_handle_time_minutes: {
-          value: metrics.core_performance_metrics.avg_handle_time_minutes,
-          type: typeof metrics.core_performance_metrics.avg_handle_time_minutes,
-          is_null_object: metrics.core_performance_metrics.avg_handle_time_minutes && typeof metrics.core_performance_metrics.avg_handle_time_minutes === 'object' && metrics.core_performance_metrics.avg_handle_time_minutes.NULL === true
-        },
-        call_completion_rate: {
-          value: metrics.core_performance_metrics.call_completion_rate,
-          type: typeof metrics.core_performance_metrics.call_completion_rate,
-          is_null_object: metrics.core_performance_metrics.call_completion_rate && typeof metrics.core_performance_metrics.call_completion_rate === 'object' && metrics.core_performance_metrics.call_completion_rate.NULL === true
-        }
-      });
-    } else {
-      console.log('Dashboard: Metrics state changed - metrics is null or missing core_performance_metrics');
-    }
-  }, [metrics]);
-
-  // Transform data for charts
-  const transformChartData = () => {
-    if (!metrics) return { hourlyData: [], dailyData: [], failureReasons: [] };
-
-    try {
-      // Additional safety check for nested properties
-      if (!metrics?.core_performance_metrics || !metrics?.outcome_based_metrics || !metrics?.failure_analysis) {
-        return { hourlyData: [], dailyData: [], failureReasons: [] };
-      }
-
-      // Transform hourly data
-      const hourlyData = Object.entries(metrics?.outcome_based_metrics?.call_activity?.hourly || {})
-        .map(([hour, calls]) => ({
-          hour: `${hour}:00`,
-          calls,
-          success: Math.round(calls * ((safeValue(metrics?.core_performance_metrics?.success_percentage, 0)) / 100))
-        }))
-        .sort((a, b) => parseInt(a.hour) - parseInt(b.hour));
-
-      // Transform daily data
-      const dailyData = Object.entries(metrics?.outcome_based_metrics?.call_activity?.daily || {})
-        .map(([date, calls]) => ({
-          date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          calls,
-          success: Math.round(calls * ((safeValue(metrics?.core_performance_metrics?.success_percentage, 0)) / 100))
-        }))
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-      // Transform failure reasons for pie chart
-      const failureReasons = Object.entries(metrics?.failure_analysis?.failure_reasons || {})
-        .filter(([_, count]) => count > 0)
-        .map(([reason, count]) => ({
-          name: reason,
-          value: count
-        }));
-
-      return { hourlyData, dailyData, failureReasons };
-    } catch (error) {
-      console.error('Error transforming chart data:', error);
-      return { hourlyData: [], dailyData: [], failureReasons: [] };
-    }
-  };
 
   // Fetch call details using the new recommended endpoint
   const fetchCallDetails = async () => {
@@ -854,6 +681,18 @@ const Dashboard = () => {
     }
   };
 
+  // Refresh dashboard data
+  const handleRefresh = async () => {
+    if (refreshing || loading) {
+      console.log('Dashboard: Refresh already in progress, skipping...');
+      return;
+    }
+    
+    setRefreshing(true);
+    await fetchDashboard();
+    setRefreshing(false);
+  };
+
   // Loading skeleton
   if (loading) {
     return (
@@ -896,7 +735,7 @@ const Dashboard = () => {
         <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Failed to Load Dashboard</h2>
         <p className="text-gray-600 mb-4">{error}</p>
-        <Button onClick={fetchDashboard} variant="outline">
+        <Button onClick={handleRefresh} variant="outline">
           <RefreshCw className="h-4 w-4 mr-2" />
           Try Again
         </Button>
@@ -984,6 +823,49 @@ const Dashboard = () => {
     );
   }
 
+  // Transform data for charts
+  const transformChartData = () => {
+    if (!metrics) return { hourlyData: [], dailyData: [], failureReasons: [] };
+
+    try {
+      // Additional safety check for nested properties
+      if (!metrics?.core_performance_metrics || !metrics?.outcome_based_metrics || !metrics?.failure_analysis) {
+        return { hourlyData: [], dailyData: [], failureReasons: [] };
+      }
+
+      // Transform hourly data
+      const hourlyData = Object.entries(metrics?.outcome_based_metrics?.call_activity?.hourly || {})
+        .map(([hour, calls]) => ({
+          hour: `${hour}:00`,
+          calls,
+          success: Math.round(calls * ((safeValue(metrics?.core_performance_metrics?.success_percentage, 0)) / 100))
+        }))
+        .sort((a, b) => parseInt(a.hour) - parseInt(b.hour));
+
+      // Transform daily data
+      const dailyData = Object.entries(metrics?.outcome_based_metrics?.call_activity?.daily || {})
+        .map(([date, calls]) => ({
+          date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          calls,
+          success: Math.round(calls * ((safeValue(metrics?.core_performance_metrics?.success_percentage, 0)) / 100))
+        }))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Transform failure reasons for pie chart
+      const failureReasons = Object.entries(metrics?.failure_analysis?.failure_reasons || {})
+        .filter(([_, count]) => count > 0)
+        .map(([reason, count]) => ({
+          name: reason,
+          value: count
+        }));
+
+      return { hourlyData, dailyData, failureReasons };
+    } catch (error) {
+      console.error('Error transforming chart data:', error);
+      return { hourlyData: [], dailyData: [], failureReasons: [] };
+    }
+  };
+
   // Transform data for charts only when metrics is available
   const { hourlyData, dailyData, failureReasons } = transformChartData();
 
@@ -1021,10 +903,7 @@ const Dashboard = () => {
         
         <div className="flex items-center gap-3">
           <Button
-            onClick={() => {
-              setRefreshing(true);
-              fetchDashboard();
-            }}
+            onClick={handleRefresh}
             disabled={loading || refreshing}
             className="h-10"
           >
@@ -1180,12 +1059,26 @@ const Dashboard = () => {
           <div className="flex items-end gap-2">
             <Button
               onClick={() => {
-                setIsFilterDataLoaded(false);
-                setFilterDataLoading(true);
-                // Force refresh of filter data
-                setTimeout(() => {
-                  fetchFilterData();
-                }, 100);
+                // Only refresh organizations, not campaigns (campaigns are relatively static)
+                console.log('Dashboard: Refreshing organizations only...');
+                if (isSuperAdmin) {
+                  // For super admin, refresh organizations
+                  const refreshOrganizations = async () => {
+                    try {
+                      const orgResponse = await authorizedFetch('/organizations/');
+                      if (orgResponse.ok) {
+                        const orgData = await orgResponse.json() as Organization[];
+                        setOrganizations(orgData);
+                        console.log('Dashboard: Organizations refreshed');
+                      }
+                    } catch (error) {
+                      console.error('Dashboard: Failed to refresh organizations:', error);
+                    }
+                  };
+                  refreshOrganizations();
+                } else {
+                  console.log('Dashboard: Non-super admin - no need to refresh organizations');
+                }
               }}
               variant="outline"
               size="sm"
@@ -1193,7 +1086,7 @@ const Dashboard = () => {
               className="h-10"
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${filterDataLoading ? 'animate-spin' : ''}`} />
-              Refresh Filters
+              Refresh Orgs
             </Button>
             
             <Button
