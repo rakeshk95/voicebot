@@ -356,6 +356,15 @@ const Campaigns = () => {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  
+  // Get user data and check role
+  const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+  const isSuperUser = userData?.role_name === 'superuser';
+  console.log('Campaigns: User role check:', { 
+    roleName: userData?.role_name, 
+    isSuperUser,
+    orgId: userData?.org_id 
+  });
   const [selectedOrgFilter, setSelectedOrgFilter] = useState<string>('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [currentStep, setCurrentStep] = useState(1);
@@ -482,10 +491,17 @@ const Campaigns = () => {
           return;
         }
 
-        console.log('Campaigns API URL:', 'https://platform.voxiflow.com/backend/api/v1/campaigns/');
+        // Build API URL with organization filter for non-superusers
+        let campaignUrl = 'http://192.168.2.153:8001/api/v1/campaigns/';
+        if (!isSuperUser && userData?.org_id) {
+          campaignUrl += `?org_id=${userData.org_id}`;
+          console.log('Campaigns: Non-superuser - filtering by organization:', userData.org_id);
+        }
+        
+        console.log('Campaigns API URL:', campaignUrl);
         console.log('Auth token:', authToken.substring(0, 20) + '...');
 
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
+        const response = await fetch(campaignUrl, {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json'
@@ -568,10 +584,22 @@ const Campaigns = () => {
           return;
         }
         
-        console.log('Organizations API URL:', 'https://platform.voxiflow.com/backend/api/v1/organizations/');
+        // Build organizations API URL with role-based filtering
+        let orgUrl = 'http://192.168.2.153:8001/api/v1/organizations/';
+        if (!isSuperUser && userData?.org_id) {
+          // For non-superusers, only show their organization
+          console.log('Campaigns: Non-superuser - setting single organization:', userData.org_id);
+          setOrganizations([{ id: userData.org_id, name: userData.user_name || userData.org_name || 'My Organization' }]);
+          // Set the organization filter to their organization for non-superusers
+          setSelectedOrgFilter(userData.org_id);
+          hasFetchedOrganizations.current = true;
+          return; // Skip API call for non-superusers
+        }
+        
+        console.log('Organizations API URL:', orgUrl);
         console.log('Auth token:', authToken.substring(0, 20) + '...');
         
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations/', {
+        const response = await fetch(orgUrl, {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json'
@@ -652,7 +680,7 @@ const Campaigns = () => {
   const handleEdit = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://192.168.2.153:8001/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -906,8 +934,8 @@ const Campaigns = () => {
       // Remove FormData and Excel template logic for campaign create/edit
       // Send JSON body instead
       const url = editingCampaign 
-        ? `https://platform.voxiflow.com/backend/api/v1/campaigns/${editingCampaign.id}`
-        : 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
+        ? `http://192.168.2.153:8001/api/v1/campaigns/${editingCampaign.id}`
+        : 'http://192.168.2.153:8001/api/v1/campaigns/';
 
       const response = await fetch(url, {
         method: editingCampaign ? 'PUT' : 'POST',
@@ -998,7 +1026,7 @@ const Campaigns = () => {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
 
     try {
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://192.168.2.153:8001/api/v1/campaigns/${campaign.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1049,7 +1077,7 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaignId}/upload`, {
+      const response = await fetch(`http://192.168.2.153:8001/api/v1/campaigns/${campaignId}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1109,7 +1137,7 @@ const Campaigns = () => {
         file: bulkCallFile.name
       });
 
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/bulk-calls/bulk-calls', {
+      const response = await fetch('http://192.168.2.153:8001/api/v1/bulk-calls/bulk-calls', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1170,7 +1198,7 @@ const Campaigns = () => {
     };
 
     try {
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/calls/', {
+      const response = await fetch('http://192.168.2.153:8001/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1282,7 +1310,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://192.168.2.153:8001/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'

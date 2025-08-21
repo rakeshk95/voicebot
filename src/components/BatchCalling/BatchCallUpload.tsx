@@ -52,6 +52,10 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
     sleep_seconds: '100' // Default to 100 seconds
   });
 
+  // Get user data and check role
+  const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+  const isSuperUser = userData?.role_name === 'superuser';
+  
   // Fetch campaigns and organizations only once on mount
   useEffect(() => {
     let isMounted = true;
@@ -60,10 +64,21 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
       try {
         setLoading(true);
         
+        // Build API URLs with role-based filtering
+        let campaignsUrl = '/campaigns/';
+        let orgsUrl = '/organizations/';
+        
+        if (!isSuperUser && userData?.org_id) {
+          campaignsUrl += `?org_id=${userData.org_id}`;
+          console.log('BatchCallUpload: Non-superuser - filtering campaigns by organization:', userData.org_id);
+          // Set the organization filter to their organization for non-superusers
+          setFormData(prev => ({ ...prev, org_id: userData.org_id }));
+        }
+        
         // Use the existing API utilities for consistency
         const [campaignsRes, orgsRes] = await Promise.all([
-          authorizedFetch('/campaigns/'),
-          authorizedFetch('/organizations/')
+          authorizedFetch(campaignsUrl),
+          isSuperUser ? authorizedFetch(orgsUrl) : Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: userData.org_id, name: userData.user_name || userData.org_name || 'My Organization' }]) })
         ]);
 
         if (!isMounted) return;

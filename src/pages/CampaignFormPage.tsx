@@ -27,12 +27,19 @@ const campaignFormSchema = z.object({
     gender: z.string(),
     language: z.string(),
     voice_id: z.string(),
-    vendor: z.string().optional()
+    vendor: z.string().optional(),
+    transfer_call: z.boolean().optional()
   }),
   stt: z.object({
-    vendor: z.string()
+    vendor: z.string(),
+    provider: z.string().optional()
   }),
   telephonic_provider: z.string(),
+  telephony_config: z.object({
+    channels: z.number().min(1, "At least 1 channel is required"),
+    max_concurrent_calls: z.number().min(1, "At least 1 concurrent call is required"),
+    call_timeout: z.number().min(30, "Call timeout must be at least 30 seconds")
+  }).optional(),
   knowledge_base: z.object({
     url: z.string(),
     file: z.any().nullable()
@@ -55,6 +62,11 @@ const campaignFormSchema = z.object({
     useProxyLlm: z.boolean().optional(),
     UseStructuredPrompt: z.boolean().optional(),
     provider: z.string().optional(),
+    model: z.string().optional(),
+    temperature: z.string().optional(),
+    maxCallDuration: z.string().optional(),
+    useEmbeddings: z.boolean().optional(),
+    prompt: z.string().optional(),
     promptJson: z.object({
       skeleton: z.string().optional(),
       promptVariables: z.record(z.string()).optional(),
@@ -67,12 +79,7 @@ const campaignFormSchema = z.object({
       botStateDefinitions: z.record(z.any()).optional(),
       language: z.string().optional(),
       mermaidGraph: z.string().optional()
-    }).optional(),
-    temperature: z.string().optional(),
-    maxCallDuration: z.string().optional(),
-    model: z.string().optional(),
-    useEmbeddings: z.boolean().optional(),
-    prompt: z.string().optional()
+    }).optional()
   }).optional(),
 }).strict();
 
@@ -88,11 +95,18 @@ type CampaignFormValues = {
     language: string;
     voice_id: string;
     vendor?: string;
+    transfer_call?: boolean;
   };
   stt: {
     vendor: string;
+    provider?: string;
   };
   telephonic_provider: string;
+  telephony_config?: {
+    channels: number;
+    max_concurrent_calls: number;
+    call_timeout: number;
+  };
   knowledge_base: {
     url: string;
     file: any;
@@ -108,6 +122,30 @@ type CampaignFormValues = {
     };
   };
   callback_endpoint: string;
+  llm?: {
+    initialMessage?: string;
+    useProxyLlm?: boolean;
+    UseStructuredPrompt?: boolean;
+    provider?: string;
+    model?: string;
+    temperature?: string;
+    maxCallDuration?: string;
+    useEmbeddings?: boolean;
+    prompt?: string;
+    promptJson?: {
+      skeleton?: string;
+      promptVariables?: Record<string, string>;
+      knowledgeBase?: {
+        url?: string;
+        file?: any;
+      };
+      nodes?: Record<string, any>;
+      context?: string;
+      botStateDefinitions?: Record<string, any>;
+      language?: string;
+      mermaidGraph?: string;
+    };
+  };
 };
 
 type KeyValuePair = { key: string; value: string };
@@ -139,6 +177,11 @@ const defaultValues: CampaignFormValues = {
     vendor: "deepgram"
   },
   telephonic_provider: "exotel",
+  telephony_config: {
+    channels: 1,
+    max_concurrent_calls: 1,
+    call_timeout: 30
+  },
   knowledge_base: {
     url: "",
     file: null
@@ -255,7 +298,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
   useEffect(() => {
     async function fetchOrganizations() {
       try {
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+        const response = await fetch('http://192.168.2.153:8001/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -278,7 +321,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
     if (mode === 'edit' && params.id) {
       (async () => {
         try {
-          const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${params.id}`, {
+          const response = await fetch(`http://192.168.2.153:8001/api/v1/campaigns/${params.id}`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -327,12 +370,19 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
           gender: campaignData.tts?.gender || 'female',
           language: campaignData.tts?.language || 'hindi',
           voice_id: campaignData.tts?.voice_id || 'hi-IN-AnanyaNeural',
-          vendor: campaignData.tts?.vendor || '11labs'
+          vendor: campaignData.tts?.vendor || '11labs',
+          transfer_call: campaignData.tts?.transfer_call || false
         },
         stt: {
-          vendor: campaignData.stt?.vendor || 'deepgram'
+          vendor: campaignData.stt?.vendor || 'deepgram',
+          provider: campaignData.stt?.provider || 'deepgram'
         },
         telephonic_provider: campaignData.telephonic_provider || 'exotel',
+        telephony_config: campaignData.telephony_config || {
+          channels: 1,
+          max_concurrent_calls: 1,
+          call_timeout: 30
+        },
         knowledge_base: {
           url: campaignData.knowledge_base?.url || '',
           file: campaignData.knowledge_base?.file || null
@@ -345,6 +395,28 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
           data_extracted: {
             system_prompt: data_extracted.system_prompt || '',
             fields: data_extracted.fields || {}
+          }
+        },
+        callback_endpoint: campaignData.callback_endpoint || '',
+        llm: {
+          initialMessage: campaignData.llm?.initialMessage || '',
+          useProxyLlm: campaignData.llm?.useProxyLlm || false,
+          UseStructuredPrompt: campaignData.llm?.UseStructuredPrompt || false,
+          provider: campaignData.llm?.provider || 'OPENAI',
+          model: campaignData.llm?.model || 'gpt-4o',
+          temperature: campaignData.llm?.temperature || '0.5',
+          maxCallDuration: campaignData.llm?.maxCallDuration || '300',
+          useEmbeddings: campaignData.llm?.useEmbeddings || false,
+          prompt: campaignData.llm?.prompt || '',
+          promptJson: {
+            skeleton: campaignData.llm?.promptJson?.skeleton || 'Simple output format.',
+            promptVariables: campaignData.llm?.promptJson?.promptVariables || {},
+            knowledgeBase: campaignData.llm?.promptJson?.knowledgeBase || {},
+            nodes: campaignData.llm?.promptJson?.nodes || {},
+            context: campaignData.llm?.promptJson?.context || '',
+            botStateDefinitions: campaignData.llm?.promptJson?.botStateDefinitions || {},
+            language: campaignData.llm?.promptJson?.language || 'hindi',
+            mermaidGraph: campaignData.llm?.promptJson?.mermaidGraph || 'initial_message -->|edge| node1\nnode1 -->|edge| node2'
           }
         }
       });
@@ -434,10 +506,15 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         state: data.state || "",
         version: "0",
         llm: {
-          initialMessage: "",
-          useProxyLlm: false,
-          UseStructuredPrompt: false,
-          provider: "OPENAI",
+          initialMessage: data.llm?.initialMessage || "",
+          useProxyLlm: data.llm?.useProxyLlm || false,
+          UseStructuredPrompt: data.llm?.UseStructuredPrompt || false,
+          provider: data.llm?.provider || "OPENAI",
+          model: data.llm?.model || "gpt-4o",
+          temperature: data.llm?.temperature || "0.5",
+          maxCallDuration: data.llm?.maxCallDuration || "300",
+          useEmbeddings: data.llm?.useEmbeddings || false,
+          prompt: data.llm?.prompt || "",
           promptJson: {
             skeleton: "Simple output format.",
             promptVariables: variables.reduce((acc, v) => {
@@ -450,21 +527,18 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
             botStateDefinitions: {},
             language: data.tts?.language || "hindi",
             mermaidGraph: "initial_message -->|edge| node1\nnode1 -->|edge| node2"
-          },
-          temperature: "0.5",
-          maxCallDuration: "300",
-          model: "gpt-4o",
-          useEmbeddings: false,
-          prompt: ""
+          }
         },
         tts: {
           gender: data.tts.gender || "",
           voice_id: data.tts.voice_id || "",
           language: data.tts.language || "",
-          vendor: data.tts.vendor || "11labs"
+          vendor: data.tts.vendor || "11labs",
+          transfer_call: data.tts.transfer_call || false
         },
         stt: {
-          vendor: data.stt?.vendor || 'deepgram'
+          vendor: data.stt?.vendor || 'deepgram',
+          provider: data.stt?.provider || 'deepgram'
         },
         timezone: "Asia/Kolkata",
         post_call_actions: postCallActions,
@@ -473,6 +547,11 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         retry: {},
         account_id: "a43b689f-b95f-4178-a7c7-7cfd547a1f68",
         telephonic_provider: data.telephonic_provider || "",
+        telephony_config: data.telephony_config || {
+          channels: 1,
+          max_concurrent_calls: 1,
+          call_timeout: 30
+        },
         allow_interruption: allowInterruptions,
         speech_setting: {
           interruption: {
@@ -494,8 +573,8 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
       };
       console.log('Campaign create/edit payload:', requestData); // Debug: verify campaign_id in payload
       const url = mode === 'edit' && params.id
-        ? `https://platform.voxiflow.com/backend/api/v1/campaigns/${params.id}`
-        : 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
+        ? `http://192.168.2.153:8001/api/v1/campaigns/${params.id}`
+        : 'http://192.168.2.153:8001/api/v1/campaigns/';
       const response = await fetch(url, {
         method: mode === 'edit' ? 'PUT' : 'POST',
         headers: {
@@ -763,10 +842,10 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
                           if (isValid) {
                             // Only pass the fields defined in the Zod schema to validation and handleSubmit
                             const {
-                              campaign_id, name, direction, state, org_id, tts, stt, telephonic_provider, knowledge_base, post_call_actions, callback_endpoint
+                              campaign_id, name, direction, state, org_id, tts, stt, telephonic_provider, telephony_config, knowledge_base, post_call_actions, callback_endpoint, llm
                             } = form.getValues();
                             handleSubmit({
-                              campaign_id, name, direction, state, org_id, tts, stt, telephonic_provider, knowledge_base, post_call_actions, callback_endpoint
+                              campaign_id, name, direction, state, org_id, tts, stt, telephonic_provider, telephony_config, knowledge_base, post_call_actions, callback_endpoint, llm
                             });
                           } else {
                             const errors = form.formState.errors;
@@ -782,7 +861,9 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
                                 case 'tts': return 'Voice Settings';
                                 case 'stt': return 'STT Settings';
                                 case 'telephonic_provider': return 'Telephony Provider';
+                                case 'telephony_config': return 'Telephony Configuration';
                                 case 'knowledge_base': return 'Knowledge Base';
+                                case 'llm': return 'LLM Configuration';
                                 default: return key;
                               }
                             });

@@ -331,6 +331,14 @@ const Dashboard = () => {
     }
   }, [userData, isSuperAdmin]);
 
+  // Check if user is superuser based on role
+  const isSuperUser = userData?.role_name === 'superuser';
+  console.log('Dashboard: User role check:', { 
+    roleName: userData?.role_name, 
+    isSuperUser, 
+    isSuperAdmin: userPermissions?.admin 
+  });
+
   // Fetch organizations and campaigns for filters
   const fetchFilterData = async () => {
     // Prevent multiple calls
@@ -344,8 +352,8 @@ const Dashboard = () => {
       console.log('Dashboard: Fetching filter data...', { isSuperAdmin, userData: userData?.org_id });
       
       // Fetch organizations
-      if (isSuperAdmin) {
-        console.log('Dashboard: Fetching all organizations for super admin');
+      if (isSuperUser) {
+        console.log('Dashboard: Fetching all organizations for superuser');
         const orgResponse = await authorizedFetch('/organizations/');
         if (orgResponse.ok) {
           const orgData = await orgResponse.json() as Organization[];
@@ -357,9 +365,11 @@ const Dashboard = () => {
           setOrganizations([]);
         }
       } else if (userData?.org_id) {
-        // Regular user - only show their organization
-        console.log('Dashboard: Setting user organization:', userData.org_id);
+        // Regular user (non-superuser) - only show their organization
+        console.log('Dashboard: Setting user organization for non-superuser:', userData.org_id);
         setOrganizations([{ id: userData.org_id, name: userData.user_name || userData.org_name || 'My Organization' }]);
+        // For non-superusers, set their organization as the default filter
+        setFilters(prev => ({ ...prev, org_id: userData.org_id }));
       } else {
         console.log('Dashboard: No user data or org_id available');
         setOrganizations([]);
@@ -369,10 +379,10 @@ const Dashboard = () => {
       console.log('Dashboard: Fetching campaigns...');
       let campaignUrl = '/campaigns/';
       
-      // Add organization filter for non-super admin users
-      if (!isSuperAdmin && userData?.org_id) {
+      // Add organization filter for non-superuser users
+      if (!isSuperUser && userData?.org_id) {
         campaignUrl += `?org_id=${userData.org_id}`;
-        console.log('Dashboard: Fetching campaigns with org filter:', campaignUrl);
+        console.log('Dashboard: Fetching campaigns with org filter for non-superuser:', campaignUrl);
       }
       
       console.log('Dashboard: Campaigns API call starting at:', new Date().toISOString());
@@ -382,8 +392,8 @@ const Dashboard = () => {
         const campaignData = await campaignResponse.json() as Campaign[];
         console.log('Dashboard: Campaigns fetched:', campaignData);
         
-        // For non-super admin users, campaigns are already filtered by API
-        // For super admin users, show all campaigns
+        // For non-superuser users, campaigns are already filtered by API
+        // For superuser users, show all campaigns
         setCampaigns(campaignData);
       } else {
         console.error('Dashboard: Failed to fetch campaigns:', campaignResponse.status);
@@ -458,11 +468,11 @@ const Dashboard = () => {
     };
   }, [isFilterDataLoaded, hasInitialized]);
 
-  // Refresh dashboard when user organization changes (only for non-super admin users)
+  // Refresh dashboard when user organization changes (only for non-superuser users)
   useEffect(() => {
     let isMounted = true;
     
-    if (userOrgId && hasInitialized && !loading && !refreshing && !isSuperAdmin && isMounted) {
+    if (userOrgId && hasInitialized && !loading && !refreshing && !isSuperUser && isMounted) {
       console.log('Dashboard: User organization changed, refreshing dashboard...');
       fetchDashboard();
     }
@@ -470,7 +480,7 @@ const Dashboard = () => {
     return () => {
       isMounted = false;
     };
-  }, [userOrgId, hasInitialized, loading, refreshing, isSuperAdmin]);
+  }, [userOrgId, hasInitialized, loading, refreshing, isSuperUser]);
 
   // Debounced function to fetch dashboard data
   const debouncedFetchDashboard = (newOrgId?: string, delay: number = 300) => {
@@ -512,20 +522,24 @@ const Dashboard = () => {
       // Use custom filters if provided, otherwise use current filters
       const filterState = customFilters || filters;
       
-      // Simplified organization filter logic
+      // Role-based organization filter logic
       let orgIdToUse = null;
       
       if (filterState.org_id && filterState.org_id !== 'all') {
         // User has selected a specific organization from dropdown
         orgIdToUse = filterState.org_id;
         console.log('Dashboard: Using selected organization:', orgIdToUse);
-      } else if (userOrgId && !isSuperAdmin) {
-        // Regular user (non-super admin) - use their organization
+      } else if (userOrgId && !isSuperUser) {
+        // Regular user (non-superuser) - use their organization
         orgIdToUse = userOrgId;
-        console.log('Dashboard: Using user organization ID:', userOrgId);
-      } else if (isSuperAdmin && filterState.org_id === 'all') {
-        // Super admin viewing all organizations - don't include org_id
-        console.log('Dashboard: Super admin viewing all organizations - no org_id filter');
+        console.log('Dashboard: Using user organization ID for non-superuser:', userOrgId);
+      } else if (isSuperUser && filterState.org_id === 'all') {
+        // Superuser viewing all organizations - don't include org_id
+        console.log('Dashboard: Superuser viewing all organizations - no org_id filter');
+      } else if (!isSuperUser && userOrgId) {
+        // Non-superuser without specific selection - use their organization
+        orgIdToUse = userOrgId;
+        console.log('Dashboard: Non-superuser using default organization:', userOrgId);
       }
       
       if (orgIdToUse) {
@@ -542,7 +556,7 @@ const Dashboard = () => {
 
       // Use the new comprehensive dashboard endpoint
       const apiUrl = `/dashboard/comprehensive?${params}`;
-      console.log('Dashboard: API call:', `${process.env.NODE_ENV === 'development' ? 'https://platform.voxiflow.com/backend/api/v1' : ''}${apiUrl}`);
+      console.log('Dashboard: API call:', `${process.env.NODE_ENV === 'development' ? 'http://192.168.2.153:8001/api/v1' : ''}${apiUrl}`);
       
       const response = await authorizedFetch(apiUrl);
       
@@ -616,20 +630,24 @@ const Dashboard = () => {
       
       const params = new URLSearchParams();
       
-      // Use the same organization filter logic as the main dashboard
+      // Use the same role-based organization filter logic as the main dashboard
       let orgIdToUse = null;
       
       if (filters.org_id && filters.org_id !== 'all') {
         // User has selected a specific organization from dropdown
         orgIdToUse = filters.org_id;
         console.log('Dashboard: Call details - Using selected organization from dropdown:', orgIdToUse);
-      } else if (userOrgId && !isSuperAdmin) {
-        // Regular user (non-super admin) - use their organization
+      } else if (userOrgId && !isSuperUser) {
+        // Regular user (non-superuser) - use their organization
         orgIdToUse = userOrgId;
-        console.log('Dashboard: Call details - Using user organization ID:', orgIdToUse);
-      } else if (isSuperAdmin && filters.org_id === 'all') {
+        console.log('Dashboard: Call details - Using user organization ID for non-superuser:', userOrgId);
+      } else if (isSuperUser && filters.org_id === 'all') {
         // Super admin viewing all organizations - don't include org_id
         console.log('Dashboard: Call details - Super admin viewing all organizations - no org_id filter');
+      } else if (!isSuperUser && userOrgId) {
+        // Non-superuser without specific selection - use their organization
+        orgIdToUse = userOrgId;
+        console.log('Dashboard: Call details - Non-superuser using default organization:', userOrgId);
       }
       
       if (orgIdToUse) {
@@ -650,7 +668,7 @@ const Dashboard = () => {
       
       const apiUrl = `/dashboard/call-details-with-org?${params}`;
       console.log('Dashboard: Fetching call details from:', apiUrl);
-      console.log('Dashboard: Full call details API URL:', `${process.env.NODE_ENV === 'development' ? 'https://platform.voxiflow.com/backend/api/v1' : ''}${apiUrl}`);
+      console.log('Dashboard: Full call details API URL:', `${process.env.NODE_ENV === 'development' ? 'http://192.168.2.153:8001/api/v1' : ''}${apiUrl}`);
       
       const response = await authorizedFetch(apiUrl);
       
@@ -919,7 +937,7 @@ const Dashboard = () => {
           {/* Organization Filter */}
           <div className="flex-1">
             <label className="text-sm font-medium text-gray-700 mb-2 block">
-              Organization
+              {isSuperUser ? 'Organization' : 'My Organization'}
               {filters.org_id !== 'all' && (
                 <span className="ml-2 text-xs text-blue-600 font-medium">
                   🔒 Filtering: {organizations.find(org => org.id === filters.org_id)?.name}
@@ -947,12 +965,15 @@ const Dashboard = () => {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="All Organizations">
-                    {filters.org_id === 'all' ? 'All Organizations' : organizations.find(org => org.id === filters.org_id)?.name || 'Select Organization'}
+                  <SelectValue placeholder={isSuperUser ? "All Organizations" : "My Organization"}>
+                    {isSuperUser 
+                      ? (filters.org_id === 'all' ? 'All Organizations' : organizations.find(org => org.id === filters.org_id)?.name || 'Select Organization')
+                      : organizations.find(org => org.id === filters.org_id)?.name || 'My Organization'
+                    }
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {isSuperAdmin && (
+                  {isSuperUser && (
                     <SelectItem value="all">All Organizations</SelectItem>
                   )}
                   {organizations.map((org) => (
@@ -994,7 +1015,7 @@ const Dashboard = () => {
                   // Use debounced API call to prevent rapid successive calls
                   debouncedFetchDashboard(undefined, 300); // Pass undefined for org_id, use current filters
                 }}
-                disabled={filters.org_id === 'all' && !isSuperAdmin}
+                disabled={false}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All Campaigns">
@@ -1004,7 +1025,12 @@ const Dashboard = () => {
                 <SelectContent>
                   <SelectItem value="all">All Campaigns</SelectItem>
                   {campaigns
-                    .filter(campaign => filters.org_id === 'all' || campaign.org_id === filters.org_id)
+                    .filter(campaign => {
+                      // For non-superusers, all campaigns are already filtered by their organization
+                      // For superusers, filter by selected organization
+                      if (!isSuperUser) return true;
+                      return filters.org_id === 'all' || campaign.org_id === filters.org_id;
+                    })
                     .map((campaign) => (
                       <SelectItem key={campaign.id} value={campaign.id}>
                         <div className="flex items-center gap-2">
@@ -1061,8 +1087,8 @@ const Dashboard = () => {
               onClick={() => {
                 // Only refresh organizations, not campaigns (campaigns are relatively static)
                 console.log('Dashboard: Refreshing organizations only...');
-                if (isSuperAdmin) {
-                  // For super admin, refresh organizations
+                if (isSuperUser) {
+                  // For superuser, refresh organizations
                   const refreshOrganizations = async () => {
                     try {
                       const orgResponse = await authorizedFetch('/organizations/');
@@ -1077,7 +1103,7 @@ const Dashboard = () => {
                   };
                   refreshOrganizations();
                 } else {
-                  console.log('Dashboard: Non-super admin - no need to refresh organizations');
+                  console.log('Dashboard: Non-superuser - no need to refresh organizations');
                 }
               }}
               variant="outline"

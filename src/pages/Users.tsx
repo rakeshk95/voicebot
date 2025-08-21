@@ -269,7 +269,7 @@ export default function Users() {
         params.append("end_date", endDate.toISOString());
       }
   
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/users/?${params.toString()}`, {
+      const response = await fetch(`http://192.168.2.153:8001/api/v1/users/?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
           "Content-Type": "application/json",
@@ -342,7 +342,7 @@ export default function Users() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+        const response = await fetch('http://192.168.2.153:8001/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -365,9 +365,22 @@ export default function Users() {
       }
     };
 
+    // Get user data and check role
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    const isSuperUser = userData?.role_name === 'superuser';
+    
     const fetchCampaignsData = async () => {
       try {
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
+        // Build API URL with role-based filtering
+        let campaignsUrl = 'http://192.168.2.153:8001/api/v1/campaigns/';
+        if (!isSuperUser && userData?.org_id) {
+          campaignsUrl += `?org_id=${userData.org_id}`;
+          console.log('Users: Non-superuser - filtering campaigns by organization:', userData.org_id);
+          // For non-superusers, campaigns are already filtered by their organization
+          // No need to set additional filters
+        }
+        
+        const response = await fetch(campaignsUrl, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -392,7 +405,7 @@ export default function Users() {
 
     const fetchRolesData = async () => {
       try {
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/roles/', {
+        const response = await fetch('http://192.168.2.153:8001/api/v1/roles/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -423,7 +436,14 @@ export default function Users() {
   // Function to fetch campaigns
   const fetchCampaigns = async () => {
     try {
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
+      // Build API URL with role-based filtering
+      let campaignsUrl = 'http://192.168.2.153:8001/api/v1/campaigns/';
+      if (!isSuperUser && userData?.org_id) {
+        campaignsUrl += `?org_id=${userData.org_id}`;
+        console.log('Users: Non-superuser - filtering campaigns by organization:', userData.org_id);
+      }
+      
+      const response = await fetch(campaignsUrl, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -450,20 +470,29 @@ export default function Users() {
   const fetchCreateUserData = async () => {
     try {
       setIsLoadingCreateData(true);
+      // Build API URLs with role-based filtering
+      let campaignsUrl = 'http://192.168.2.153:8001/api/v1/campaigns/';
+      let orgsUrl = 'http://192.168.2.153:8001/api/v1/organizations';
+      
+      if (!isSuperUser && userData?.org_id) {
+        campaignsUrl += `?org_id=${userData.org_id}`;
+        console.log('Users: Non-superuser - filtering campaigns by organization:', userData.org_id);
+      }
+      
       const [rolesResponse, orgsResponse, campaignsResponse] = await Promise.all([
-        fetch('https://platform.voxiflow.com/backend/api/v1/roles/', {
+        fetch('http://192.168.2.153:8001/api/v1/roles/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
           },
         }),
-        fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+        isSuperUser ? fetch(orgsUrl, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
           },
-        }),
-        fetch('https://platform.voxiflow.com/backend/api/v1/campaigns/', {
+        }) : Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: userData.org_id, name: userData.user_name || userData.org_name || 'My Organization' }]) }),
+        fetch(campaignsUrl, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -509,7 +538,7 @@ export default function Users() {
   const handleDeleteUser = async (user: User) => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/users/${user.id}`, {
+      const response = await fetch(`http://192.168.2.153:8001/api/v1/users/${user.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -572,7 +601,7 @@ export default function Users() {
 
       console.log('Sending update data:', updateData); // Debug log
 
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/users/${editingUser.id}`, {
+      const response = await fetch(`http://192.168.2.153:8001/api/v1/users/${editingUser.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -640,7 +669,7 @@ export default function Users() {
         campaign_ids: createFormData.campaign_ids || [],
       };
 
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/users/', {
+      const response = await fetch('http://192.168.2.153:8001/api/v1/users/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

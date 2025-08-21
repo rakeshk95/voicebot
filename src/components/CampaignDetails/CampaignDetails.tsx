@@ -61,9 +61,22 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
     };
   }, [audioRef.current]);
 
+  // Get user data and check role
+  const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+  const isSuperUser = userData?.role_name === 'superuser';
+  
   // Fetch organizations for display
   useEffect(() => {
-    fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+    if (!isSuperUser && userData?.org_id) {
+      // For non-superusers, only show their organization
+      console.log('CampaignDetails: Non-superuser - setting single organization:', userData.org_id);
+      setOrganizations([{ id: userData.org_id, name: userData.user_name || userData.org_name || 'My Organization' }]);
+      return;
+    }
+    
+    // For superusers, fetch all organizations
+    console.log('CampaignDetails: Superuser - fetching all organizations');
+    fetch('http://192.168.2.153:8001/api/v1/organizations', {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         'Content-Type': 'application/json'
@@ -72,12 +85,12 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
       .then(res => res.json())
       .then(data => setOrganizations(data))
       .catch(() => setOrganizations([]));
-  }, []);
+  }, [isSuperUser, userData?.org_id]);
 
   // Fetch voices for display
   useEffect(() => {
     setLoadingVoices(true);
-    fetch('https://platform.voxiflow.com/backend/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222', {
+    fetch('http://192.168.2.153:8001/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222', {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         'accept': 'application/json',
