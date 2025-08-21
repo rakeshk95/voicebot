@@ -24,7 +24,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
   const [language, setLanguage] = useState('all');
   const [gender, setGender] = useState('all');
   const [type, setType] = useState('all');
-  const [provider, setProvider] = useState('elevenlabs');
+  const [provider, setProvider] = useState('all');
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -35,77 +35,38 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
   const [voicesPerPage] = useState(10);
   
   useEffect(() => {
-    if (provider === 'elevenlabs') {
-      setLoading(true);
-      setError(null);
-      authorizedFetch('/voices', {
-        headers: {
-          'accept': 'application/json',
-        },
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            const errorData = await res.json().catch(() => ({}));
-            throw new Error((errorData as any).detail || `Failed to fetch Eleven Labs voices: ${res.status}`);
-          }
-          return res.json();
-        })
-        .then((data) => {
-          setVoices(data as any[]);
-          setLoading(false);
-        })
-        .catch((error) => {
-          console.error('Eleven Labs API error:', error);
-          setError(error.message);
-          setVoices([]);
-          setLoading(false);
-          toast({
-            title: "Error",
-            description: error.message,
-            variant: "destructive",
-          });
-        });
-  
-    } else if (provider === 'cartesia') {
-      setLoading(true);
-      setError(null);
-      
-      // Check if Cartesia token exists
+    // Fetch all voices from a single API call
+    setLoading(true);
+    setError(null);
     
-      authorizedFetch('/voices?voice_ids=f91ab3e6-5071-4e15-b016-cde6f2bcd222', {
-        headers: {
-          'accept': 'application/json',
-        },
+    authorizedFetch('/voices', {
+      headers: {
+        'accept': 'application/json',
+      },
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error((errorData as any).detail || `Failed to fetch voices: ${res.status}`);
+        }
+        return res.json();
       })
-        .then(async (res) => {
-          if (!res.ok) {
-            const errorData = await res.json().catch(() => ({}));
-            throw new Error((errorData as any).detail || `Failed to fetch Cartesia voices: ${res.status}`);
-          }
-          return res.json();
-        })
-        .then((data) => {
-          setVoices(data as any[]);
-          setLoading(false);
-        })
-        .catch((error) => {
-          console.error('Cartesia API error:', error);
-          setError(error.message);
-          setVoices([]);
-          setLoading(false);
-          toast({
-            title: "Cartesia API Error",
-            description: error.message,
-            variant: "destructive",
-          });
+      .then((data) => {
+        setVoices(data as any[]);
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error('Voice API error:', error);
+        setError(error.message);
+        setVoices([]);
+        setLoading(false);
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
         });
-  
-    } else {
-      // No provider or unsupported provider → clear voices
-      setVoices([]);
-      setError(null);
-    }
-  }, [provider, toast]);
+      });
+  }, [toast]);
   
   useEffect(() => {
     const formVoiceId = form.getValues('tts.voice_id');
@@ -153,22 +114,18 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
 
   // Improved filtering logic with better data structure handling
   const filteredVoices = voices.filter((voice: any) => {
-    if (provider === 'elevenlabs') {
-      if (voice.source !== 'eleven_labs') return false;
-      const matchesSearch = search === '' || (voice.name || '').toLowerCase().includes(search.toLowerCase());
-      const matchesLanguage = language === 'all' || language === '' || (voice.language || '').toLowerCase() === language;
-      const matchesGender = gender === 'all' || gender === '' || (voice.gender || '').toLowerCase() === gender;
-      const matchesType = type === 'all' || type === '' || (voice.main_accent || '').toLowerCase() === type;
-      return matchesSearch && matchesLanguage && matchesGender && matchesType;
-    } else if (provider === 'cartesia') {
-      if (voice.source !== 'cartesia') return false;
-      const matchesSearch = search === '' || (voice.name || '').toLowerCase().includes(search.toLowerCase());
-      const matchesLanguage = language === 'all' || language === '' || (voice.language || '').toLowerCase() === language;
-      const matchesGender = gender === 'all' || gender === '' || (voice.gender || '').toLowerCase() === gender;
-      const matchesType = type === 'all' || type === '' || (voice.main_accent || '').toLowerCase() === type;
-      return matchesSearch && matchesLanguage && matchesGender && matchesType;
-    }
-    return false;
+    // Filter by provider source (skip if "all" is selected)
+    if (provider === 'elevenlabs' && voice.source !== 'eleven_labs') return false;
+    if (provider === 'cartesia' && voice.source !== 'cartesia') return false;
+    // If provider is "all", don't filter by source
+    
+    // Apply other filters
+    const matchesSearch = search === '' || (voice.name || '').toLowerCase().includes(search.toLowerCase());
+    const matchesLanguage = language === 'all' || language === '' || (voice.language || '').toLowerCase() === language;
+    const matchesGender = gender === 'all' || gender === '' || (voice.gender || '').toLowerCase() === gender;
+    const matchesType = type === 'all' || type === '' || (voice.main_accent || '').toLowerCase() === type;
+    
+    return matchesSearch && matchesLanguage && matchesGender && matchesType;
   });
 
   // Pagination logic
@@ -352,6 +309,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
               <SelectValue placeholder="Provider" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">All Providers</SelectItem>
               <SelectItem value="elevenlabs">Eleven Labs</SelectItem>
               <SelectItem value="cartesia">Cartesia</SelectItem>
             </SelectContent>
@@ -400,7 +358,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
             className="ml-2 px-3 h-8 text-sm rounded bg-gray-100 border border-gray-300 hover:bg-gray-200 transition"
             onClick={() => {
               setSearch('');
-              setProvider('elevenlabs');
+              setProvider('all');
               setLanguage('all');
               setGender('all');
               setType('all');
@@ -417,6 +375,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
         <div className="mb-3 px-2 text-sm text-gray-600">
           Showing {indexOfFirstVoice + 1}-{Math.min(indexOfLastVoice, filteredVoices.length)} of {filteredVoices.length} voices
           {search && ` matching "${search}"`}
+          {provider && provider !== 'all' && ` from ${provider === 'elevenlabs' ? 'Eleven Labs' : 'Cartesia'}`}
           {language && language !== 'all' && ` in ${language.toUpperCase()}`}
           {gender && gender !== 'all' && ` (${gender.charAt(0).toUpperCase() + gender.slice(1)})`}
           {type && type !== 'all' && ` - ${type.charAt(0).toUpperCase() + type.slice(1)}`}
@@ -451,6 +410,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
                 <tr style={{ background: PRIMARY_COLOR }} className="text-white">
                   <th className="px-2 py-2 text-left font-semibold"> </th>
                   <th className="px-2 py-2 text-left font-semibold">Name</th>
+                  <th className="px-2 py-2 text-left font-semibold">Provider</th>
                   <th className="px-2 py-2 text-left font-semibold">Voice Type</th>
                   <th className="px-2 py-2 text-left font-semibold">Gender</th>
                   <th className="px-2 py-2 text-left font-semibold">Country</th>
@@ -483,6 +443,9 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
                       </td>
                       <td className="px-2 py-2 flex items-center gap-2">
                         <span className="font-bold text-gray-800">{voice.name}</span>
+                      </td>
+                      <td className="px-2 py-2">
+                        <span className="text-blue-500 font-medium">{voice.source === 'eleven_labs' ? 'Eleven Labs' : voice.source === 'cartesia' ? 'Cartesia' : voice.source || '-'}</span>
                       </td>
                       <td className="px-2 py-2">
                         <span className="text-blue-500 font-medium">{voice.main_accent || voice.accent || '-'}</span>
