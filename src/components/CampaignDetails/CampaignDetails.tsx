@@ -76,7 +76,7 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
     
     // For superusers, fetch all organizations
     console.log('CampaignDetails: Superuser - fetching all organizations');
-    fetch('http://192.168.2.153:8001/api/v1/organizations', {
+    fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         'Content-Type': 'application/json'
@@ -90,7 +90,7 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
   // Fetch voices for display
   useEffect(() => {
     setLoadingVoices(true);
-    fetch('http://192.168.2.153:8001/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222', {
+    fetch('https://platform.voxiflow.com/backend/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222', {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         'accept': 'application/json',
@@ -454,8 +454,13 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
+                            <SelectItem value="czentrix">Czentrix</SelectItem>
                             <SelectItem value="exotel">Exotel</SelectItem>
                             <SelectItem value="twilio">Twilio</SelectItem>
+                            <SelectItem value="servotel">ServoTel</SelectItem>
+                            <SelectItem value="plivo">Plivo</SelectItem>
+                            <SelectItem value="sampark">Sampark</SelectItem>
+                            <SelectItem value="smallestai">SmallestAI</SelectItem>
                           </SelectContent>
                         </Select>
                       </FormItem>

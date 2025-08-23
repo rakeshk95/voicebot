@@ -16,6 +16,8 @@ interface StepVoiceProps {
 }
 
 const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
+  console.log('StepVoice component rendering with props:', { form, selectedVoiceId });
+  
   const [voices, setVoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [playingUrl, setPlayingUrl] = useState<string | null>(null);
@@ -34,8 +36,11 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [voicesPerPage] = useState(10);
   
+  console.log('StepVoice state initialized');
+  
   useEffect(() => {
     // Fetch all voices from a single API call
+    console.log('StepVoice: Starting to fetch voices...');
     setLoading(true);
     setError(null);
     
@@ -45,6 +50,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
       },
     })
       .then(async (res) => {
+        console.log('StepVoice: API response status:', res.status);
         if (!res.ok) {
           const errorData = await res.json().catch(() => ({}));
           throw new Error((errorData as any).detail || `Failed to fetch voices: ${res.status}`);
@@ -52,11 +58,13 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
         return res.json();
       })
       .then((data) => {
+        console.log('StepVoice: Voices data received:', data);
+        console.log('StepVoice: Number of voices:', data?.length || 0);
         setVoices(data as any[]);
         setLoading(false);
       })
       .catch((error) => {
-        console.error('Voice API error:', error);
+        console.error('StepVoice: Voice API error:', error);
         setError(error.message);
         setVoices([]);
         setLoading(false);
@@ -114,9 +122,16 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
 
   // Improved filtering logic with better data structure handling
   const filteredVoices = voices.filter((voice: any) => {
+    console.log('StepVoice: Filtering voice:', voice);
     // Filter by provider source (skip if "all" is selected)
-    if (provider === 'elevenlabs' && voice.source !== 'eleven_labs') return false;
-    if (provider === 'cartesia' && voice.source !== 'cartesia') return false;
+    if (provider === 'elevenlabs' && voice.source !== 'eleven_labs') {
+      console.log('StepVoice: Filtering out voice due to provider mismatch:', voice.source);
+      return false;
+    }
+    if (provider === 'cartesia' && voice.source !== 'cartesia') {
+      console.log('StepVoice: Filtering out voice due to provider mismatch:', voice.source);
+      return false;
+    }
     // If provider is "all", don't filter by source
     
     // Apply other filters
@@ -125,6 +140,19 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
     const matchesGender = gender === 'all' || gender === '' || (voice.gender || '').toLowerCase() === gender;
     const matchesType = type === 'all' || type === '' || (voice.main_accent || '').toLowerCase() === type;
     
+    if (!matchesSearch) {
+      console.log('StepVoice: Filtering out voice due to search mismatch:', voice.name);
+    }
+    if (!matchesLanguage) {
+      console.log('StepVoice: Filtering out voice due to language mismatch:', voice.language);
+    }
+    if (!matchesGender) {
+      console.log('StepVoice: Filtering out voice due to gender mismatch:', voice.gender);
+    }
+    if (!matchesType) {
+      console.log('StepVoice: Filtering out voice due to type mismatch:', voice.main_accent || voice.accent);
+    }
+
     return matchesSearch && matchesLanguage && matchesGender && matchesType;
   });
 
@@ -133,6 +161,16 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
   const indexOfFirstVoice = indexOfLastVoice - voicesPerPage;
   const currentVoices = filteredVoices.slice(indexOfFirstVoice, indexOfLastVoice);
   const totalPages = Math.ceil(filteredVoices.length / voicesPerPage);
+
+  console.log('StepVoice: Pagination info:', {
+    totalVoices: voices.length,
+    filteredVoices: filteredVoices.length,
+    currentVoices: currentVoices.length,
+    currentPage,
+    totalPages,
+    indexOfFirstVoice,
+    indexOfLastVoice
+  });
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -144,128 +182,15 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
   const uniqueGenders = [...new Set(voices.map(voice => voice.gender).filter(Boolean))];
   const uniqueTypes = [...new Set(voices.map(voice => voice.main_accent || voice.accent).filter(Boolean))];
 
+  console.log('StepVoice about to render with:', { 
+    voicesCount: voices.length, 
+    filteredCount: filteredVoices.length,
+    currentPage,
+    totalPages 
+  });
+
   return (
     <div className="space-y-6">
-      {/* STT and LLM Configuration Section */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Speech & Language Model Configuration</h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* STT Configuration */}
-          <div className="space-y-4">
-            <h4 className="text-sm font-medium text-gray-700">Speech-to-Text (STT)</h4>
-            
-            <FormField
-              control={form.control}
-              name="stt.vendor"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-medium text-gray-600">STT Provider</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Select STT provider" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="deepgram">Deepgram</SelectItem>
-                      <SelectItem value="whisper">OpenAI Whisper</SelectItem>
-                      <SelectItem value="google">Google Speech-to-Text</SelectItem>
-                      <SelectItem value="azure">Azure Speech Services</SelectItem>
-                      <SelectItem value="aws">Amazon Transcribe</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage className="text-xs" />
-                </FormItem>
-              )}
-            />
-            
-            <FormField
-              control={form.control}
-              name="stt.provider"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-medium text-gray-600">STT Model</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Select STT model" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="nova-2">Nova-2 (Deepgram)</SelectItem>
-                      <SelectItem value="whisper-1">Whisper-1 (OpenAI)</SelectItem>
-                      <SelectItem value="whisper-large-v3">Whisper Large V3</SelectItem>
-                      <SelectItem value="google-speech">Google Speech</SelectItem>
-                      <SelectItem value="azure-cognitive">Azure Cognitive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage className="text-xs" />
-                </FormItem>
-              )}
-            />
-          </div>
-          
-          {/* LLM Configuration */}
-          <div className="space-y-4">
-            <h4 className="text-sm font-medium text-gray-700">Large Language Model (LLM)</h4>
-            
-            <FormField
-              control={form.control}
-              name="llm.provider"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-medium text-gray-600">LLM Provider</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Select LLM provider" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="OPENAI">OpenAI</SelectItem>
-                      <SelectItem value="GEMINI">Google Gemini</SelectItem>
-                      <SelectItem value="ANTHROPIC">Anthropic Claude</SelectItem>
-                      <SelectItem value="AZURE">Azure OpenAI</SelectItem>
-                      <SelectItem value="AWS">AWS Bedrock</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage className="text-xs" />
-                </FormItem>
-              )}
-            />
-            
-            <FormField
-              control={form.control}
-              name="llm.model"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-medium text-gray-600">LLM Model</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Select LLM model" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="gpt-4o">GPT-4o (OpenAI)</SelectItem>
-                      <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
-                      <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-                      <SelectItem value="gemini-pro">Gemini Pro (Google)</SelectItem>
-                      <SelectItem value="claude-3-opus">Claude 3 Opus</SelectItem>
-                      <SelectItem value="claude-3-sonnet">Claude 3 Sonnet</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage className="text-xs" />
-                </FormItem>
-              )}
-            />
-            
-
-          </div>
-        </div>
-      </div>
-
       {/* Transfer Call Option */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Call Transfer Configuration</h3>
