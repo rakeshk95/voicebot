@@ -198,6 +198,7 @@ export const BatchCallOperations: React.FC<BatchCallOperationsProps> = ({
                 {/* Action Buttons */}
                 {operation.is_active && (
                   <div className="flex items-center justify-center space-x-2 pt-2 border-t">
+                    {/* Pause Button - Show for processing operations */}
                     {operation.status === 'processing' && (
                       <Button
                         size="sm"
@@ -212,7 +213,8 @@ export const BatchCallOperations: React.FC<BatchCallOperationsProps> = ({
                       </Button>
                     )}
                     
-                    {operation.status === 'paused' && (
+                    {/* Resume Button - Show for paused operations or processing operations that can be resumed */}
+                    {(operation.status === 'paused' || operation.status === 'processing') && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -226,6 +228,7 @@ export const BatchCallOperations: React.FC<BatchCallOperationsProps> = ({
                       </Button>
                     )}
                     
+                    {/* Cancel Button - Show for active operations */}
                     {(operation.status === 'processing' || operation.status === 'paused') && (
                       <Button
                         size="sm"

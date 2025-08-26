@@ -19,7 +19,10 @@ import {
   Users,
   Phone,
   Settings,
-  RefreshCw
+  RefreshCw,
+  Pause,
+  Play,
+  X
 } from 'lucide-react';
 import { startBatchCall, pollOperationStatus, calculateCallStatusCounts, getStatusColorClass } from '@/lib/batchCallingApi';
 import { BatchCallStartRequest, BatchCallOperation } from '@/types/batchCalling';
@@ -39,6 +42,9 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
   const [uploading, setUploading] = useState(false);
   const [currentOperation, setCurrentOperation] = useState<BatchCallOperation | null>(null);
   const [isPolling, setIsPolling] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [lastStatusCheck, setLastStatusCheck] = useState<Date | null>(null);
+  const [statusSource, setStatusSource] = useState<'memory' | 'database' | 'capabilities' | null>(null);
   const { toast } = useToast();
   
   // Use refs to track polling state and prevent multiple calls
@@ -55,7 +61,7 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
   // Get user data and check role
   const userData = JSON.parse(localStorage.getItem('userData') || '{}');
   const isSuperUser = userData?.role_name === 'superuser';
-  
+
   // Fetch campaigns and organizations only once on mount
   useEffect(() => {
     let isMounted = true;
@@ -68,26 +74,26 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
         let campaignsUrl = '/campaigns/';
         let orgsUrl = '/organizations/';
         
-        if (!isSuperUser && userData?.org_id) {
-          campaignsUrl += `?org_id=${userData.org_id}`;
-          console.log('BatchCallUpload: Non-superuser - filtering campaigns by organization:', userData.org_id);
-          // Set the organization filter to their organization for non-superusers
-          setFormData(prev => ({ ...prev, org_id: userData.org_id }));
-        }
+                  if (!isSuperUser && userData?.org_id) {
+            campaignsUrl += `?org_id=${userData.org_id}`;
+          }
         
-        // Use the existing API utilities for consistency
+        // Always fetch organizations from API for both superusers and non-superusers
         const [campaignsRes, orgsRes] = await Promise.all([
           authorizedFetch(campaignsUrl),
-          isSuperUser ? authorizedFetch(orgsUrl) : Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: userData.org_id, name: userData.user_name || userData.org_name || 'My Organization' }]) })
+          authorizedFetch(orgsUrl)
         ]);
 
         if (!isMounted) return;
 
-        if (campaignsRes.ok) {
-          const campaignsData = await campaignsRes.json() as Campaign[];
-          setCampaigns(campaignsData);
-        } else {
+                  if (campaignsRes.ok) {
+            const campaignsData = await campaignsRes.json() as Campaign[];
+            setCampaigns(campaignsData);
+            setApiError(null); // Clear any previous errors
+          } else {
           console.error('Failed to fetch campaigns:', campaignsRes.status);
+          const errorMsg = `Failed to load campaigns (${campaignsRes.status})`;
+          setApiError(errorMsg);
           toast({
             title: "Warning",
             description: "Could not load campaigns. Please refresh the page.",
@@ -98,8 +104,19 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
         if (orgsRes.ok) {
           const orgsData = await orgsRes.json() as any[];
           setOrganizations(orgsData);
+          
+          // For non-superusers, set their organization as default if it exists in the fetched list
+          if (!isSuperUser && userData?.org_id) {
+            const userOrg = orgsData.find(org => org.id === userData.org_id);
+            if (userOrg) {
+              setFormData(prev => ({ ...prev, org_id: userOrg.id }));
+            }
+          }
+          setApiError(null); // Clear any previous errors
         } else {
           console.error('Failed to fetch organizations:', orgsRes.status);
+          const errorMsg = `Failed to load organizations (${orgsRes.status})`;
+          setApiError(errorMsg);
           toast({
             title: "Warning",
             description: "Could not load organizations. Please refresh the page.",
@@ -132,7 +149,14 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
   // Filter campaigns based on selected organization
   useEffect(() => {
     if (formData.org_id && campaigns.length > 0) {
-      const filtered = campaigns.filter(campaign => campaign.org_id === formData.org_id);
+      // Convert both to strings for comparison to handle potential type mismatches
+      const orgIdStr = String(formData.org_id);
+      const filtered = campaigns.filter(campaign => {
+        const campaignOrgIdStr = String(campaign.org_id);
+        const matches = campaignOrgIdStr === orgIdStr;
+        return matches;
+      });
+      
       setFilteredCampaigns(filtered);
       
       // Reset campaign selection if current campaign is not in filtered list
@@ -178,11 +202,6 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
       }
 
       setFile(selectedFile);
-      console.log('BatchCallUpload: File selected:', {
-        name: selectedFile.name,
-        size: selectedFile.size,
-        type: selectedFile.type
-      });
       
       toast({
         title: "File Selected",
@@ -194,7 +213,11 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
   const handleInputChange = (field: string, value: string) => {
     // Trim the value to remove leading/trailing whitespace
     const trimmedValue = value.trim();
-    setFormData(prev => ({ ...prev, [field]: trimmedValue }));
+    
+    setFormData(prev => {
+      const newData = { ...prev, [field]: trimmedValue };
+      return newData;
+    });
   };
 
   const validateForm = (): boolean => {
@@ -284,21 +307,7 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
         return;
       }
 
-      console.log('BatchCallUpload: Sending request:', {
-        campaign_id: request.campaign_id,
-        org_id: request.org_id,
-        channels: request.channels,
-        sleep_seconds: request.sleep_seconds,
-        file_name: request.file.name,
-        file_size: request.file.size,
-        has_external_url: !!request.external_call_url,
-        has_external_username: !!request.external_username,
-        has_external_password: !!request.external_password
-      });
-
       const response = await startBatchCall(request);
-      
-      console.log('BatchCallUpload: Response received:', response);
       
       toast({
         title: "Upload Successful",
@@ -308,8 +317,6 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
       // Start polling for status updates (only if not already polling)
       if (!isPolling) {
         startPolling(response.bulk_operation_id);
-      } else {
-        console.log('handleSubmit: Already polling, skipping new polling start');
       }
       
       // Reset form
@@ -354,13 +361,10 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
     
     // Prevent multiple polling instances
     if (pollingRef.current) {
-      console.log('startPolling: Already polling, stopping existing instance');
       stopPolling();
     }
     
     setIsPolling(true);
-    
-    console.log(`startPolling: Starting polling for operation ${operationId}`);
     
     const cleanup = pollOperationStatus(
       operationId,
@@ -369,7 +373,6 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
         
         // Stop polling if operation is complete
         if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
-          console.log(`startPolling: Operation ${operationId} completed with status ${status.status}, stopping polling`);
           stopPolling();
         }
       },
@@ -402,7 +405,6 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
 
   const stopPolling = () => {
     if (pollingRef.current) {
-      console.log('stopPolling: Stopping polling and cleaning up');
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
@@ -412,7 +414,6 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
   // Cleanup polling on unmount or when operation changes
   useEffect(() => {
     return () => {
-      console.log('BatchCallUpload: Component unmounting, cleaning up polling');
       stopPolling();
     };
   }, []);
@@ -420,10 +421,243 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
   // Additional cleanup when currentOperation changes
   useEffect(() => {
     if (currentOperation && (currentOperation.status === 'completed' || currentOperation.status === 'failed' || currentOperation.status === 'cancelled')) {
-      console.log(`BatchCallUpload: Operation ${currentOperation.bulk_operation_id} finished, ensuring polling is stopped`);
       stopPolling();
     }
   }, [currentOperation]);
+
+  // Handler functions for operation control
+  const handlePauseOperation = async (operationId: string) => {
+    try {
+      const response = await authorizedFetch(`/bulk-calls/operations/${operationId}/pause`, { method: 'POST' });
+      if (response.ok) {
+        toast({
+          title: "Operation Paused",
+          description: "Batch operation paused successfully.",
+        });
+        // Refresh status after pausing
+        handleCheckStatus(operationId);
+      } else {
+        const errorData = await response.json() as any;
+        toast({
+          title: "Pause Failed",
+          description: errorData.detail || "Failed to pause operation.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error pausing operation:', error);
+      toast({
+        title: "Pause Failed",
+        description: "Failed to pause operation. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleResumeOperation = async (operationId: string) => {
+    try {
+      const response = await authorizedFetch(`/bulk-calls/operations/${operationId}/resume`, { method: 'POST' });
+      if (response.ok) {
+        toast({
+          title: "Operation Resumed",
+          description: "Batch operation resumed successfully.",
+        });
+        // Refresh status after resuming
+        handleCheckStatus(operationId);
+      } else {
+        const errorData = await response.json() as any;
+        toast({
+          title: "Resume Failed",
+          description: errorData.detail || "Failed to resume operation.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error resuming operation:', error);
+      toast({
+        title: "Resume Failed",
+        description: "Failed to resume operation. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCancelOperation = async (operationId: string) => {
+    if (window.confirm('Are you sure you want to cancel this batch operation? This action cannot be undone.')) {
+      try {
+        const response = await authorizedFetch(`/bulk-calls/operations/${operationId}/cancel`, { method: 'POST' });
+        if (response.ok) {
+          toast({
+            title: "Operation Cancelled",
+            description: "Batch operation cancelled successfully.",
+          });
+          // Refresh status after cancelling
+          handleCheckStatus(operationId);
+        } else {
+          const errorData = await response.json() as any;
+          toast({
+            title: "Cancel Failed",
+            description: errorData.detail || "Failed to cancel operation.",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error('Error cancelling operation:', error);
+        toast({
+          title: "Cancel Failed",
+          description: "Failed to cancel operation. Please try again.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handleCheckStatus = async (operationId: string) => {
+    try {
+      const response = await authorizedFetch(`/bulk-calls/operations/${operationId}/check-status`);
+      if (response.ok) {
+        const data = await response.json() as any;
+        
+        // Ensure the response has all required properties
+        const status: BatchCallOperation = {
+          ...data,
+          can_pause: data.can_pause || false,
+          can_resume: data.can_resume || false,
+          can_cancel: data.can_cancel || false,
+          exists: data.exists || false,
+          location: data.location || 'unknown',
+          message: data.message || '',
+          actions_available: data.actions_available || {
+            pause: false,
+            resume: false,
+            cancel: false,
+            view_status: true,
+            view_calls: true
+          }
+        };
+        
+        setCurrentOperation(status);
+        // If operation is completed, stop polling
+        if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
+          stopPolling();
+        }
+      } else {
+        const errorData = await response.json() as any;
+        console.error('Error fetching status:', errorData);
+        toast({
+          title: "Status Check Failed",
+          description: errorData.detail || "Failed to check operation status.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching status:', error);
+      toast({
+        title: "Status Check Failed",
+        description: "Failed to check operation status. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Comprehensive status checking with fallback strategy
+  const checkOperationStatus = async (operationId: string, source: 'check-status' | 'status' | 'db-status' = 'status') => {
+    try {
+      let endpoint = '';
+      switch (source) {
+        case 'check-status':
+          endpoint = `/bulk-calls/operations/${operationId}/check-status`;
+          break;
+        case 'status':
+          endpoint = `/bulk-calls/operations/${operationId}/check-status`;
+          break;
+        case 'db-status':
+          endpoint = `/bulk-calls/operations/${operationId}/db-status`;
+          break;
+      }
+      
+      const response = await authorizedFetch(endpoint);
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (source === 'check-status') {
+          // Handle capabilities response
+          const capabilitiesData = data as any; // Type cast to access properties
+          const capabilities = [];
+          if (capabilitiesData.can_pause) capabilities.push('Pause');
+          if (capabilitiesData.can_resume) capabilities.push('Resume');
+          if (capabilitiesData.can_cancel) capabilities.push('Cancel');
+          
+          toast({
+            title: "Capabilities Check",
+            description: `Available actions: ${capabilities.join(', ') || 'None'}`,
+          });
+          
+          return { success: true, data: capabilitiesData, type: 'capabilities' };
+        } else {
+          // Handle status response
+          const status = data as BatchCallOperation;
+          setCurrentOperation(status);
+          setLastStatusCheck(new Date());
+          
+          // If operation is completed, stop polling
+          if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
+            stopPolling();
+          }
+          
+          return { success: true, data: status, type: 'status' };
+        }
+      } else {
+        const errorData = await response.json() as any;
+        console.error(`Error fetching ${source}:`, errorData);
+        return { success: false, error: errorData.detail || `Failed to fetch ${source}` };
+      }
+    } catch (error) {
+      console.error(`Error in ${source} check:`, error);
+      return { success: false, error: `Failed to check ${source}` };
+    }
+  };
+
+  // Enhanced status check with smart fallback
+  const smartStatusCheck = async (operationId: string) => {
+    // First try real-time status from memory
+    let result = await checkOperationStatus(operationId, 'status');
+    if (result.success) {
+      toast({
+        title: "Status Updated",
+        description: `Operation status: ${(result.data as BatchCallOperation).status}`,
+      });
+      return;
+    }
+    
+    // If memory status fails, try database status
+    result = await checkOperationStatus(operationId, 'db-status');
+    if (result.success) {
+      toast({
+        title: "Status Updated (Database)",
+        description: `Operation status: ${(result.data as BatchCallOperation).status}`,
+      });
+      return;
+    }
+    
+    // If both fail, try capabilities check
+    result = await checkOperationStatus(operationId, 'check-status');
+    if (result.success) {
+      const capabilitiesData = result.data as any;
+      toast({
+        title: "Capabilities Check",
+        description: `Operation exists but status unavailable. Available actions: ${capabilitiesData.can_pause ? 'Pause' : ''} ${capabilitiesData.can_resume ? 'Resume' : ''} ${capabilitiesData.can_cancel ? 'Cancel' : ''}`.trim(),
+      });
+      return;
+    }
+    
+    // All checks failed
+    toast({
+      title: "Status Check Failed",
+      description: "Unable to retrieve operation status from any source.",
+      variant: "destructive",
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -491,10 +725,85 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
+            {loading && (
+              <div className="flex items-center justify-center p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <RefreshCw className="h-5 w-5 mr-2 animate-spin text-blue-600" />
+                <span className="text-blue-600">Loading campaigns and organizations...</span>
+              </div>
+            )}
+            {apiError && (
+              <div className="flex items-center justify-between p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center">
+                  <AlertCircle className="h-5 w-5 mr-2 text-red-600 flex-shrink-0" />
+                  <span className="text-red-600 text-sm">{apiError}</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setApiError(null);
+                    setLoading(true);
+                    // Trigger a re-fetch
+                    const fetchData = async () => {
+                      try {
+                        let campaignsUrl = '/campaigns/';
+                        let orgsUrl = '/organizations/';
+                        
+                        if (!isSuperUser && userData?.org_id) {
+                          campaignsUrl += `?org_id=${userData.org_id}`;
+                        }
+                        
+                        const [campaignsRes, orgsRes] = await Promise.all([
+                          authorizedFetch(campaignsUrl),
+                          authorizedFetch(orgsUrl)
+                        ]);
+
+                        if (campaignsRes.ok) {
+                          const campaignsData = await campaignsRes.json() as Campaign[];
+                          setCampaigns(campaignsData);
+                          setApiError(null);
+                        } else {
+                          setApiError(`Failed to load campaigns (${campaignsRes.status})`);
+                        }
+
+                        if (orgsRes.ok) {
+                          const orgsData = await orgsRes.json() as any[];
+                          setOrganizations(orgsData);
+                          
+                          if (!isSuperUser && userData?.org_id) {
+                            const userOrg = orgsData.find(org => org.id === userData.org_id);
+                            if (userOrg) {
+                              setFormData(prev => ({ ...prev, org_id: userOrg.id }));
+                            }
+                          }
+                          setApiError(null);
+                        } else {
+                          setApiError(`Failed to load organizations (${orgsRes.status})`);
+                        }
+                      } catch (error) {
+                        console.error('Error refreshing data:', error);
+                        setApiError('Failed to refresh data');
+                      } finally {
+                        setLoading(false);
+                      }
+                    };
+                    
+                    fetchData();
+                  }}
+                  disabled={loading}
+                  className="text-red-600 border-red-200 hover:bg-red-100"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Retry
+                </Button>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="org_id">Organization *</Label>
-                <Select value={formData.org_id} onValueChange={(value) => handleInputChange('org_id', value)}>
+                <Select value={formData.org_id} onValueChange={(value) => {
+                  handleInputChange('org_id', value);
+                }}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select an organization" />
                   </SelectTrigger>
@@ -513,7 +822,9 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
 
               <div className="space-y-2">
                 <Label htmlFor="campaign_id">Campaign *</Label>
-                <Select value={formData.campaign_id} onValueChange={(value) => handleInputChange('campaign_id', value)} disabled={!formData.org_id}>
+                <Select value={formData.campaign_id} onValueChange={(value) => {
+                  handleInputChange('campaign_id', value);
+                }} disabled={!formData.org_id}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder={formData.org_id ? "Select a campaign" : "Select organization first"} />
                   </SelectTrigger>
@@ -592,6 +903,8 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
                 Please fill in all required fields to start the batch operation
               </p>
             )}
+
+
           </form>
         </CardContent>
       </Card>
@@ -682,6 +995,84 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
                 </div>
               </div>
             )}
+
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-blue-800 text-center">Operation Controls</h4>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {/* Pause Button */}
+                <Button
+                  onClick={() => handlePauseOperation(currentOperation.bulk_operation_id)}
+                  disabled={!currentOperation.can_pause}
+                  variant="outline"
+                  size="sm"
+                  className="border-yellow-300 text-yellow-700 hover:bg-yellow-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Pause className="h-4 w-4 mr-2" />
+                  Pause
+                </Button>
+
+                {/* Resume Button */}
+                <Button
+                  onClick={() => handleResumeOperation(currentOperation.bulk_operation_id)}
+                  disabled={!currentOperation.can_resume}
+                  variant="outline"
+                  size="sm"
+                  className="border-green-300 text-green-700 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Resume
+                </Button>
+
+                {/* Cancel Button */}
+                <Button
+                  onClick={() => handleCancelOperation(currentOperation.bulk_operation_id)}
+                  disabled={!currentOperation.can_cancel}
+                  variant="outline"
+                  size="sm"
+                  className="border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel
+                </Button>
+
+                {/* Check Status Button */}
+                <Button
+                  onClick={() => handleCheckStatus(currentOperation.bulk_operation_id)}
+                  variant="outline"
+                  size="sm"
+                  className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Check Status
+                </Button>
+              </div>
+
+              {/* Capabilities Info */}
+              <div className="text-xs text-blue-600 text-center">
+                <div className="flex justify-center space-x-4">
+                  <span className={`${currentOperation.can_pause ? 'text-green-600' : 'text-gray-400'}`}>
+                    Pause: {currentOperation.can_pause ? '✓' : '✗'}
+                  </span>
+                  <span className={`${currentOperation.can_resume ? 'text-green-600' : 'text-gray-400'}`}>
+                    Resume: {currentOperation.can_resume ? '✓' : '✗'}
+                  </span>
+                  <span className={`${currentOperation.can_cancel ? 'text-green-600' : 'text-gray-400'}`}>
+                    Cancel: {currentOperation.can_cancel ? '✓' : '✗'}
+                  </span>
+                </div>
+                {currentOperation.message && (
+                  <p className="mt-1 text-blue-700 font-medium">{currentOperation.message}</p>
+                )}
+              </div>
+
+              {/* Last Status Check */}
+              {lastStatusCheck && (
+                <div className="text-xs text-blue-500 text-center">
+                  Last updated: {lastStatusCheck.toLocaleTimeString()}
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}

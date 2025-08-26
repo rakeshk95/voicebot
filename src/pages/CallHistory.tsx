@@ -70,9 +70,9 @@ interface Call {
 }
 
 interface ExtractedData {
-  category?: string;
+  category?: string | Record<string, any>;
   summary?: string;
-  'extracted-data'?: string;
+  'extracted-data'?: string | Record<string, any>;
 }
 
 interface Campaign {
@@ -189,7 +189,7 @@ const CallHistory = () => {
     const insights = await Promise.all(
       calls.map(async call => {
         try {
-          const response = await fetch(`http://192.168.2.153:8001/api/v1/calls/${call.Sid}/artifacts`, {
+          const response = await fetch(`http://192.168.29.119:8000/api/v1/calls/${call.Sid}/artifacts`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -324,7 +324,7 @@ const CallHistory = () => {
         formattedEndDate = format(end, "yyyy-MM-dd'T'HH:mm:ss'Z'");
       }
 
-      const apiUrl = new URL(`http://192.168.2.153:8001/api/v1/calls/external/${targetCampaignId}/list`);
+      const apiUrl = new URL(`http://192.168.29.119:8000/api/v1/calls/external/${targetCampaignId}/list`);
       
       apiUrl.searchParams.append('start_date', formattedStartDate);
       apiUrl.searchParams.append('end_date', formattedEndDate);
@@ -619,7 +619,7 @@ const CallHistory = () => {
     setIsLoadingTranscription(true);
 
     try {
-      const apiUrl = `http://192.168.2.153:8001/api/v1/calls/${callId}/artifacts`;
+      const apiUrl = `http://192.168.29.119:8000/api/v1/calls/${callId}/artifacts`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -641,6 +641,9 @@ const CallHistory = () => {
 
       const data = await response.json();
       console.log('Artifacts API Response:', data);
+      console.log('Transcription data:', data.transcription);
+      console.log('Transcription type:', typeof data.transcription);
+      console.log('Is transcription array?', Array.isArray(data.transcription));
 
       setExtractedData({
         summary: data.summary,
@@ -648,9 +651,12 @@ const CallHistory = () => {
         'extracted-data': data['extracted-data'],
       });
 
+      const transcriptionMessages = Array.isArray(data.transcription) ? data.transcription : (data.transcription?.messages || []);
+      console.log('Processed transcription messages:', transcriptionMessages);
+
       setSelectedCallTranscription({
         transcription: {
-          messages: data.transcription?.messages || [],
+          messages: transcriptionMessages,
           call_id: callId,
         },
       });
@@ -714,7 +720,7 @@ const CallHistory = () => {
     setIsSubmittingRating(true);
     try {
       const response = await fetch(
-        `http://192.168.2.153:8001/api/v1/calls/${selectedCallForRating.Sid}/rating`,
+        `http://192.168.29.119:8000/api/v1/calls/${selectedCallForRating.Sid}/rating`,
         {
           method: 'POST',
           headers: {
@@ -784,7 +790,7 @@ const CallHistory = () => {
       campaign_id: selectedCampaign
     });
     try {
-      const response = await fetch('http://192.168.2.153:8001/api/v1/calls/', {
+      const response = await fetch('http://192.168.29.119:8000/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -843,7 +849,7 @@ const CallHistory = () => {
       }
 
       // Updated API endpoint as per user instruction
-      const apiUrl = `http://192.168.2.153:8001/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
+      const apiUrl = `http://192.168.29.119:8000/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -891,7 +897,7 @@ const CallHistory = () => {
     let page = 1;
     const pageSize = 10;
     do {
-      let apiUrl = new URL(`http://192.168.2.153:8001/api/v1/calls/external/${campaignId}/list`);
+      let apiUrl = new URL(`http://192.168.29.119:8000/api/v1/calls/external/${campaignId}/list`);
       apiUrl.searchParams.append('start_date', startDate);
       apiUrl.searchParams.append('end_date', endDate);
       apiUrl.searchParams.append('page_size', pageSize.toString());
@@ -915,7 +921,7 @@ const CallHistory = () => {
 
   // Add this function to fetch artifacts for a call
   const fetchArtifacts = async (callId: string) => {
-    const response = await fetch(`http://192.168.2.153:8001/api/v1/calls/${callId}/artifacts`, {
+    const response = await fetch(`http://192.168.29.119:8000/api/v1/calls/${callId}/artifacts`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         'Content-Type': 'application/json',
@@ -1434,29 +1440,40 @@ const CallHistory = () => {
                     <Card className="border-none shadow-none bg-transparent">
                       <CardContent className="p-4 bg-white rounded-lg shadow-sm">
                         {(() => {
-                          if (!extractedData?.category || extractedData.category.trim() === '' || extractedData.category.trim() === '{}' || extractedData.category.trim() === 'null') {
-                            return <div className="text-gray-500 text-sm">No category data available.</div>;
-                          }
-                          try {
-                            const categoryData = JSON.parse(
-                              extractedData.category.replace(/```json\n|\n```/g, '') || '{}'
-                            );
-                            if (Object.keys(categoryData).length === 0) {
-                              return <div className="text-gray-500 text-sm">No category data available.</div>;
+                          // Handle both string and object formats for category
+                          let categoryData = null;
+                          
+                          if (extractedData?.category) {
+                            if (typeof extractedData.category === 'string') {
+                              // Handle legacy string format
+                              try {
+                                const categoryStr = extractedData.category.replace(/```json\n|\n```/g, '').trim();
+                                if (categoryStr && categoryStr !== '{}' && categoryStr !== 'null') {
+                                  categoryData = JSON.parse(categoryStr);
+                                }
+                              } catch (e) {
+                                console.log('Failed to parse category string:', e);
+                              }
+                            } else if (typeof extractedData.category === 'object' && extractedData.category !== null) {
+                              // Handle new object format
+                              categoryData = extractedData.category;
                             }
-                            return (
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {Object.entries(categoryData).map(([key, value]) => (
-                                  <div key={key} className="bg-blue-50 p-4 rounded-lg flex flex-col">
-                                    <div className="font-semibold text-blue-800 mb-1 text-sm">{key}</div>
-                                    <div className="text-gray-700 text-sm break-words">{String(value)}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            );
-                          } catch (e) {
+                          }
+                          
+                          if (!categoryData || Object.keys(categoryData).length === 0) {
                             return <div className="text-gray-500 text-sm">No category data available.</div>;
                           }
+                          
+                          return (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {Object.entries(categoryData).map(([key, value]) => (
+                                <div key={key} className="bg-blue-50 p-4 rounded-lg flex flex-col">
+                                  <div className="font-semibold text-blue-800 mb-1 text-sm">{key}</div>
+                                  <div className="text-gray-700 text-sm break-words">{String(value)}</div>
+                                </div>
+                              ))}
+                            </div>
+                          );
                         })()}
                       </CardContent>
                     </Card>
@@ -1466,29 +1483,44 @@ const CallHistory = () => {
                     <Card className="border-none shadow-none bg-transparent">
                       <CardContent className="p-4 bg-white rounded-lg shadow-sm">
                         {(() => {
-                          if (!extractedData?.['extracted-data'] || extractedData['extracted-data'].trim() === '' || extractedData['extracted-data'].trim() === '{}' || extractedData['extracted-data'].trim() === 'null') {
-                            return <div className="text-gray-500 text-sm">No extracted data available.</div>;
-                          }
-                          try {
-                            const extractedDataObj = JSON.parse(extractedData['extracted-data'] || '{}');
-                            if (Object.keys(extractedDataObj).length === 0) {
-                              return <div className="text-gray-500 text-sm">No extracted data available.</div>;
+                          // Handle both string and object formats for extracted-data
+                          let extractedDataObj = null;
+                          
+                          if (extractedData?.['extracted-data']) {
+                            if (typeof extractedData['extracted-data'] === 'string') {
+                              // Handle legacy string format
+                              try {
+                                const extractedStr = extractedData['extracted-data'].replace(/```json\n|\n```/g, '').trim();
+                                if (extractedStr && extractedStr !== '{}' && extractedStr !== 'null') {
+                                  extractedDataObj = JSON.parse(extractedStr);
+                                }
+                              } catch (e) {
+                                console.log('Failed to parse extracted-data string:', e);
+                              }
+                            } else if (typeof extractedData['extracted-data'] === 'object' && extractedData['extracted-data'] !== null) {
+                              // Handle new object format
+                              extractedDataObj = extractedData['extracted-data'];
                             }
-                            return (
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {Object.entries(extractedDataObj).map(([key, value]) => (
-                                  <div key={key} className="bg-green-50 p-4 rounded-lg flex flex-col">
-                                    <div className="font-semibold text-green-800 mb-1 text-sm">
-                                      {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                    </div>
-                                    <div className="text-gray-700 text-sm break-words">{value === null ? 'Not Available' : String(value)}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            );
-                          } catch (e) {
+                          }
+                          
+                          if (!extractedDataObj || Object.keys(extractedDataObj).length === 0) {
                             return <div className="text-gray-500 text-sm">No extracted data available.</div>;
                           }
+                          
+                          return (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {Object.entries(extractedDataObj).map(([key, value]) => (
+                                <div key={key} className="bg-green-50 p-4 rounded-lg flex flex-col">
+                                  <div className="font-semibold text-green-800 mb-1 text-sm">
+                                    {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                  </div>
+                                  <div className="text-gray-700 text-sm break-words">
+                                    {value === null || value === undefined ? 'Not Available' : String(value)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          );
                         })()}
                       </CardContent>
                     </Card>

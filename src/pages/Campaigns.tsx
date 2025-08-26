@@ -224,9 +224,19 @@ const campaignFormSchema = z.object({
     voice_id: z.string()
   }),
   stt: z.object({
-    vendor: z.string()
+    vendor: z.string(),
+    provider: z.string()
   }),
   telephonic_provider: z.string(),
+  telephony_config: z.object({
+    channels: z.number().min(0, "Channels cannot be negative"),
+    max_concurrent_calls: z.number().min(1, "At least 1 concurrent call is required"),
+    call_timeout: z.number().min(30, "Call timeout must be at least 30 seconds")
+  }),
+  llm: z.object({
+    provider: z.string(),
+    model: z.string()
+  }),
   knowledge_base: z.object({
     url: z.string(),
     file: z.any().nullable()
@@ -252,9 +262,19 @@ const defaultValues: Partial<CampaignFormValues> = {
     voice_id: "hi-IN-AnanyaNeural"
   },
   stt: {
-    vendor: "deepgram"
+    vendor: "deepgram",
+    provider: "nova-2"
   },
-  telephonic_provider: "exotel",
+  llm: {
+    provider: "OPENAI",
+    model: "gpt-4o"
+  },
+  telephonic_provider: "czentrix",
+  telephony_config: {
+    channels: 0,
+    max_concurrent_calls: 1,
+    call_timeout: 30
+  },
   knowledge_base: {
     url: "",
     file: null
@@ -492,7 +512,7 @@ const Campaigns = () => {
         }
 
         // Build API URL with organization filter for non-superusers
-        let campaignUrl = 'http://192.168.2.153:8001/api/v1/campaigns/';
+        let campaignUrl = 'http://192.168.29.119:8000/api/v1/campaigns/';
         if (!isSuperUser && userData?.org_id) {
           campaignUrl += `?org_id=${userData.org_id}`;
           console.log('Campaigns: Non-superuser - filtering by organization:', userData.org_id);
@@ -585,7 +605,7 @@ const Campaigns = () => {
         }
         
         // Build organizations API URL with role-based filtering
-        let orgUrl = 'http://192.168.2.153:8001/api/v1/organizations/';
+        let orgUrl = 'http://192.168.29.119:8000/api/v1/organizations/';
         if (!isSuperUser && userData?.org_id) {
           // For non-superusers, only show their organization
           console.log('Campaigns: Non-superuser - setting single organization:', userData.org_id);
@@ -680,7 +700,7 @@ const Campaigns = () => {
   const handleEdit = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`http://192.168.2.153:8001/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://192.168.29.119:8000/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -714,7 +734,7 @@ const Campaigns = () => {
         stt: {
           vendor: campaignData.stt?.vendor || 'deepgram'
         },
-        telephonic_provider: campaignData.telephonic_provider || 'exotel',
+        telephonic_provider: campaignData.telephonic_provider || 'czentrix',
         knowledge_base: {
           url: campaignData.knowledge_base?.url || '',
           file: campaignData.knowledge_base?.file || null
@@ -934,8 +954,8 @@ const Campaigns = () => {
       // Remove FormData and Excel template logic for campaign create/edit
       // Send JSON body instead
       const url = editingCampaign 
-        ? `http://192.168.2.153:8001/api/v1/campaigns/${editingCampaign.id}`
-        : 'http://192.168.2.153:8001/api/v1/campaigns/';
+        ? `http://192.168.29.119:8000/api/v1/campaigns/${editingCampaign.id}`
+        : 'http://192.168.29.119:8000/api/v1/campaigns/';
 
       const response = await fetch(url, {
         method: editingCampaign ? 'PUT' : 'POST',
@@ -1026,7 +1046,7 @@ const Campaigns = () => {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
 
     try {
-      const response = await fetch(`http://192.168.2.153:8001/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://192.168.29.119:8000/api/v1/campaigns/${campaign.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1077,7 +1097,7 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`http://192.168.2.153:8001/api/v1/campaigns/${campaignId}/upload`, {
+      const response = await fetch(`http://192.168.29.119:8000/api/v1/campaigns/${campaignId}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1137,7 +1157,7 @@ const Campaigns = () => {
         file: bulkCallFile.name
       });
 
-      const response = await fetch('http://192.168.2.153:8001/api/v1/bulk-calls/bulk-calls', {
+      const response = await fetch('http://192.168.29.119:8000/api/v1/bulk-calls/bulk-calls', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1198,7 +1218,7 @@ const Campaigns = () => {
     };
 
     try {
-      const response = await fetch('http://192.168.2.153:8001/api/v1/calls/', {
+      const response = await fetch('http://192.168.29.119:8000/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1310,7 +1330,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`http://192.168.2.153:8001/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://192.168.29.119:8000/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'

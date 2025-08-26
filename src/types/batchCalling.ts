@@ -18,6 +18,20 @@ export interface BatchCallOperation {
     completed_at: string | null;
     progress: 'waiting' | 'processing' | 'success' | 'error';
   }>;
+  // New properties from check-status endpoint
+  exists?: boolean;
+  location?: 'memory' | 'database';
+  can_pause?: boolean;
+  can_resume?: boolean;
+  can_cancel?: boolean;
+  message?: string;
+  actions_available?: {
+    pause: boolean;
+    resume: boolean;
+    cancel: boolean;
+    view_status: boolean;
+    view_calls: boolean;
+  };
 }
 
 export interface BatchCallDetail {
@@ -52,6 +66,21 @@ export interface BatchCallResponse {
   org_id: string;
   campaign_id: string;
   calls: BatchCallDetail[];
+  // New field for call statuses from the API
+  call_statuses?: Record<string, {
+    status: 'pending' | 'started' | 'completed' | 'failed';
+    started_at: string;
+    completed_at: string | null;
+    progress: 'waiting' | 'processing' | 'success' | 'error';
+  }>;
+}
+
+// New interface for the /calls endpoint response
+export interface BatchCallSummaryResponse {
+  bulk_operation_id: string;
+  total_calls: number;
+  successful_calls: number;
+  failed_calls: number;
 }
 
 export interface BatchCallSummary {

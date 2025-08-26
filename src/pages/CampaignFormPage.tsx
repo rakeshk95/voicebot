@@ -36,7 +36,7 @@ const campaignFormSchema = z.object({
   }),
   telephonic_provider: z.string(),
   telephony_config: z.object({
-    channels: z.number().min(1, "At least 1 channel is required"),
+    channels: z.number().min(0, "Channels cannot be negative"),
     max_concurrent_calls: z.number().min(1, "At least 1 concurrent call is required"),
     call_timeout: z.number().min(30, "Call timeout must be at least 30 seconds")
   }).optional(),
@@ -174,11 +174,16 @@ const defaultValues: CampaignFormValues = {
     vendor: "11labs"
   },
   stt: {
-    vendor: "deepgram"
+    vendor: "deepgram",
+    provider: "nova-2"
   },
-  telephonic_provider: "exotel",
+  llm: {
+    provider: "OPENAI",
+    model: "gpt-4o"
+  },
+  telephonic_provider: "czentrix",
   telephony_config: {
-    channels: 1,
+    channels: 0,
     max_concurrent_calls: 1,
     call_timeout: 30
   },
@@ -298,7 +303,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
   useEffect(() => {
     async function fetchOrganizations() {
       try {
-        const response = await fetch('http://192.168.2.153:8001/api/v1/organizations', {
+        const response = await fetch('http://192.168.29.119:8000/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -321,7 +326,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
     if (mode === 'edit' && params.id) {
       (async () => {
         try {
-          const response = await fetch(`http://192.168.2.153:8001/api/v1/campaigns/${params.id}`, {
+          const response = await fetch(`http://192.168.29.119:8000/api/v1/campaigns/${params.id}`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -572,9 +577,11 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         ...(mode === 'edit' && params.id ? { id: params.id } : {})
       };
       console.log('Campaign create/edit payload:', requestData); // Debug: verify campaign_id in payload
+      console.log('LLM data from form:', data.llm); // Debug: verify LLM data
+      console.log('LLM model value:', data.llm?.model); // Debug: verify LLM model
       const url = mode === 'edit' && params.id
-        ? `http://192.168.2.153:8001/api/v1/campaigns/${params.id}`
-        : 'http://192.168.2.153:8001/api/v1/campaigns/';
+        ? `http://192.168.29.119:8000/api/v1/campaigns/${params.id}`
+        : 'http://192.168.29.119:8000/api/v1/campaigns/';
       const response = await fetch(url, {
         method: mode === 'edit' ? 'PUT' : 'POST',
         headers: {

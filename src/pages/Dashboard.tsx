@@ -39,7 +39,7 @@ import {
 } from 'recharts';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { getUserData } from '@/utils/localStorage';
-import { authorizedFetch } from '@/lib/api';
+import { authorizedFetch, cachedFetch } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
 
 // Utility function to safely render values
@@ -339,6 +339,34 @@ const Dashboard = () => {
     isSuperAdmin: userPermissions?.admin 
   });
 
+  // Fetch campaigns function
+  const fetchCampaigns = async (orgId?: string) => {
+    try {
+      console.log('Dashboard: Fetching campaigns...');
+      let campaignUrl = '/campaigns/';
+      
+      // Add organization filter if provided or if user is not superuser
+      const orgToUse = orgId || (!isSuperUser && userData?.org_id);
+      if (orgToUse) {
+        campaignUrl += `?org_id=${orgToUse}`;
+        console.log('Dashboard: Fetching campaigns with org filter:', campaignUrl);
+      }
+      
+      const campaignResponse = await authorizedFetch(campaignUrl);
+      if (campaignResponse.ok) {
+        const campaignData = await campaignResponse.json() as Campaign[];
+        console.log('Dashboard: Campaigns fetched:', campaignData);
+        setCampaigns(campaignData);
+      } else {
+        console.error('Dashboard: Failed to fetch campaigns:', campaignResponse.status);
+        setCampaigns([]);
+      }
+    } catch (error) {
+      console.error('Dashboard: Error fetching campaigns:', error);
+      setCampaigns([]);
+    }
+  };
+
   // Fetch organizations and campaigns for filters
   const fetchFilterData = async () => {
     // Prevent multiple calls
@@ -349,25 +377,40 @@ const Dashboard = () => {
     
     try {
       setFilterDataLoading(true);
-      console.log('Dashboard: Fetching filter data...', { isSuperAdmin, userData: userData?.org_id });
+      console.log('Dashboard: Starting fetchFilterData...', { isSuperUser, userData: userData?.org_id });
       
       // Fetch organizations
       if (isSuperUser) {
-        console.log('Dashboard: Fetching all organizations for superuser');
-        const orgResponse = await authorizedFetch('/organizations/');
-        if (orgResponse.ok) {
-          const orgData = await orgResponse.json() as Organization[];
-          console.log('Dashboard: Organizations fetched:', orgData);
-          setOrganizations(orgData);
-        } else {
-          console.error('Dashboard: Failed to fetch organizations:', orgResponse.status);
-          // Set empty array to prevent infinite loading
+        console.log('Dashboard: About to fetch organizations for superuser...');
+        try {
+          console.log('Dashboard: Calling organizations API directly...');
+          const orgResponse = await authorizedFetch('/organizations');
+          console.log('Dashboard: Organizations API response status:', orgResponse.status);
+          
+          if (orgResponse.ok) {
+            const orgData = await orgResponse.json() as Organization[];
+            console.log('Dashboard: Organizations fetched for superuser:', orgData);
+            if (orgData && orgData.length > 0) {
+              setOrganizations(orgData);
+            } else {
+              console.log('Dashboard: No organizations returned from API for superuser');
+              setOrganizations([]);
+            }
+          } else {
+            const errorText = await orgResponse.text();
+            console.error('Dashboard: Failed to fetch organizations for superuser:', orgResponse.status, errorText);
+            setOrganizations([]);
+          }
+        } catch (error) {
+          console.error('Dashboard: Error fetching organizations for superuser:', error);
+          // For superusers, if API fails, show empty state
           setOrganizations([]);
         }
       } else if (userData?.org_id) {
         // Regular user (non-superuser) - only show their organization
         console.log('Dashboard: Setting user organization for non-superuser:', userData.org_id);
-        setOrganizations([{ id: userData.org_id, name: userData.user_name || userData.org_name || 'My Organization' }]);
+        const orgName = userData.org_name || userData.user_name || 'My Organization';
+        setOrganizations([{ id: userData.org_id, name: orgName }]);
         // For non-superusers, set their organization as the default filter
         setFilters(prev => ({ ...prev, org_id: userData.org_id }));
       } else {
@@ -415,6 +458,77 @@ const Dashboard = () => {
     }
   };
 
+  // Force organizations to load for superusers if they're missing
+  useEffect(() => {
+    if (isSuperUser && userData && organizations.length === 0 && !filterDataLoading) {
+      console.log('Dashboard: Superuser detected with no organizations - forcing load...');
+      setIsFilterDataLoaded(false);
+      fetchFilterData();
+    }
+  }, [isSuperUser, userData, organizations.length, filterDataLoading]);
+
+  // Simple organizations loader - only check if superuser or not
+  useEffect(() => {
+    console.log('Dashboard: Organizations useEffect triggered with:', { isSuperUser, userData: !!userData });
+    
+    const loadOrganizations = async () => {
+      if (isSuperUser) {
+        console.log('Dashboard: Superuser detected - loading organizations...');
+        try {
+          console.log('Dashboard: Calling organizations API...');
+          const orgResponse = await authorizedFetch('/organizations');
+          console.log('Dashboard: Organizations API response status:', orgResponse.status);
+          
+          if (orgResponse.ok) {
+            const orgData = await orgResponse.json() as Organization[];
+            console.log('Dashboard: Organizations loaded successfully:', orgData);
+            setOrganizations(orgData);
+          } else {
+            const errorText = await orgResponse.text();
+            console.error('Dashboard: Organizations API error:', orgResponse.status, errorText);
+          }
+        } catch (error) {
+          console.error('Dashboard: Organizations fetch error:', error);
+        }
+      } else if (userData?.org_id) {
+        // Regular user - set their organization
+        console.log('Dashboard: Regular user - setting organization:', userData.org_id);
+        setOrganizations([{ id: userData.org_id, name: userData.user_name || 'My Organization' }]);
+        setFilters(prev => ({ ...prev, org_id: userData.org_id }));
+      }
+    };
+
+    // Call immediately if userData exists
+    if (userData) {
+      loadOrganizations();
+    } else {
+      console.log('Dashboard: No userData, skipping organizations load');
+    }
+  }, [isSuperUser, userData]);
+
+  // Force organizations to load when component mounts
+  useEffect(() => {
+    if (userData && organizations.length === 0) {
+      console.log('Dashboard: Component mounted with no organizations - forcing load...');
+      const loadOrganizations = async () => {
+        if (isSuperUser) {
+          try {
+            console.log('Dashboard: Force loading organizations...');
+            const orgResponse = await authorizedFetch('/organizations');
+            if (orgResponse.ok) {
+              const orgData = await orgResponse.json() as Organization[];
+              console.log('Dashboard: Force loaded organizations:', orgData);
+              setOrganizations(orgData);
+            }
+          } catch (error) {
+            console.error('Dashboard: Force load organizations error:', error);
+          }
+        }
+      };
+      loadOrganizations();
+    }
+  }, [userData, organizations.length, isSuperUser]);
+
   // Debug user data and permissions (only in development)
   if (process.env.NODE_ENV === 'development') {
     console.log('Dashboard: User data:', userData);
@@ -423,26 +537,54 @@ const Dashboard = () => {
     console.log('Dashboard: Organizations state:', organizations);
     console.log('Dashboard: Campaigns state:', campaigns);
     console.log('Dashboard: isFilterDataLoaded:', isFilterDataLoaded);
+    console.log('Dashboard: filterDataLoading:', filterDataLoading);
+    console.log('Dashboard: hasInitialized:', hasInitialized);
+    console.log('Dashboard: hasInitializedRef.current:', hasInitializedRef.current);
   }
 
-  // Consolidated initialization effect - prevents multiple API calls
+  // Immediate organizations load for superusers
+  if (isSuperUser && userData && organizations.length === 0) {
+    console.log('Dashboard: Immediate organizations load triggered...');
+    // Use setTimeout to avoid calling setState during render
+    setTimeout(() => {
+      const loadOrganizations = async () => {
+        try {
+          console.log('Dashboard: Immediate loading organizations...');
+          const orgResponse = await authorizedFetch('/organizations');
+          if (orgResponse.ok) {
+            const orgData = await orgResponse.json() as Organization[];
+            console.log('Dashboard: Immediate loaded organizations:', orgData);
+            setOrganizations(orgData);
+          }
+        } catch (error) {
+          console.error('Dashboard: Immediate load organizations error:', error);
+        }
+      };
+      loadOrganizations();
+    }, 0);
+  }
+
+  // Simple dashboard initialization
   useEffect(() => {
     let isMounted = true;
     
-    console.log('Dashboard: useEffect triggered with:', {
+    console.log('Dashboard: Dashboard useEffect triggered with:', {
       userData: !!userData,
-      isFilterDataLoaded,
       hasInitializedRef: hasInitializedRef.current,
-      isMounted
+      isMounted,
+      isSuperUser
     });
     
-    // Only run once when component mounts and user data is available
-    if (userData && !isFilterDataLoaded && !hasInitializedRef.current && isMounted) {
+    // Simple condition: if user data exists and not initialized yet
+    if (userData && !hasInitializedRef.current && isMounted) {
       console.log('Dashboard: Initializing dashboard...');
       hasInitializedRef.current = true;
       
-      // Fetch filter data first
-      fetchFilterData();
+      // Fetch campaigns and then dashboard
+      fetchCampaigns().then(() => {
+        console.log('Dashboard: Campaigns loaded, now fetching dashboard...');
+        fetchDashboard();
+      });
     } else {
       console.log('Dashboard: Skipping initialization - conditions not met');
     }
@@ -450,7 +592,7 @@ const Dashboard = () => {
     return () => {
       isMounted = false;
     };
-  }, [userData, isFilterDataLoaded]); // Removed filterDataLoading dependency
+  }, [userData]); // Simplified dependencies
 
   // Dashboard fetch effect - only runs after filters are loaded
   useEffect(() => {
@@ -556,7 +698,7 @@ const Dashboard = () => {
 
       // Use the new comprehensive dashboard endpoint
       const apiUrl = `/dashboard/comprehensive?${params}`;
-      console.log('Dashboard: API call:', `${process.env.NODE_ENV === 'development' ? 'http://192.168.2.153:8001/api/v1' : ''}${apiUrl}`);
+      console.log('Dashboard: API call:', `${process.env.NODE_ENV === 'development' ? 'http://192.168.29.119:8000/api/v1' : ''}${apiUrl}`);
       
       const response = await authorizedFetch(apiUrl);
       
@@ -573,10 +715,10 @@ const Dashboard = () => {
       setAllMetrics(data);
       setMetrics(data);
       
-      // Also fetch call details using the new recommended endpoint
-      if (userOrgId || (filterState.org_id && filterState.org_id !== 'all')) {
-        fetchCallDetails();
-      }
+      // Removed call details fetch - not essential for dashboard functionality
+      // if (userOrgId || (filterState.org_id && filterState.org_id !== 'all')) {
+      //   fetchCallDetails();
+      // }
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch dashboard data';
@@ -617,87 +759,10 @@ const Dashboard = () => {
     };
   }, [filterDebounceTimer]);
 
-  // Fetch call details using the new recommended endpoint
-  const fetchCallDetails = async () => {
-    if (callDetailsLoading || isApiCallInProgress) {
-      console.log('Dashboard: fetchCallDetails called but already loading or API call in progress, skipping...');
-      return;
-    }
-    
-    try {
-      setCallDetailsLoading(true);
-      setIsApiCallInProgress(true);
-      
-      const params = new URLSearchParams();
-      
-      // Use the same role-based organization filter logic as the main dashboard
-      let orgIdToUse = null;
-      
-      if (filters.org_id && filters.org_id !== 'all') {
-        // User has selected a specific organization from dropdown
-        orgIdToUse = filters.org_id;
-        console.log('Dashboard: Call details - Using selected organization from dropdown:', orgIdToUse);
-      } else if (userOrgId && !isSuperUser) {
-        // Regular user (non-superuser) - use their organization
-        orgIdToUse = userOrgId;
-        console.log('Dashboard: Call details - Using user organization ID for non-superuser:', userOrgId);
-      } else if (isSuperUser && filters.org_id === 'all') {
-        // Super admin viewing all organizations - don't include org_id
-        console.log('Dashboard: Call details - Super admin viewing all organizations - no org_id filter');
-      } else if (!isSuperUser && userOrgId) {
-        // Non-superuser without specific selection - use their organization
-        orgIdToUse = userOrgId;
-        console.log('Dashboard: Call details - Non-superuser using default organization:', userOrgId);
-      }
-      
-      if (orgIdToUse) {
-        params.append('org_id', orgIdToUse);
-        console.log('Dashboard: Call details - Added org_id parameter:', orgIdToUse);
-      } else {
-        // If no org_id is available, skip fetching call details
-        console.log('Dashboard: Call details - No org_id available, skipping call details fetch');
-        return;
-      }
-      
-      if (filters.campaign_id && filters.campaign_id !== 'all') {
-        params.append('campaign_id', filters.campaign_id);
-      }
-      
-      params.append('days', filters.days.toString());
-      params.append('limit', '50'); // Limit to 50 calls for performance
-      
-      const apiUrl = `/dashboard/call-details-with-org?${params}`;
-      console.log('Dashboard: Fetching call details from:', apiUrl);
-      console.log('Dashboard: Full call details API URL:', `${process.env.NODE_ENV === 'development' ? 'http://192.168.2.153:8001/api/v1' : ''}${apiUrl}`);
-      
-      const response = await authorizedFetch(apiUrl);
-      
-      if (!response.ok) {
-        const errorData = await response.json() as { detail?: string };
-        console.error('Dashboard: Call details API error:', errorData);
-        throw new Error(errorData.detail || 'Failed to fetch call details');
-      }
-      
-      const data = await response.json() as CallDetailsResponse;
-      console.log('Dashboard: Received call details:', data);
-      
-      // Store all call details for reference
-      setAllCallDetails(data);
-      setCallDetails(data);
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch call details';
-      console.error('Dashboard: Call details fetch error:', error);
-      toast({
-        title: "Warning",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setCallDetailsLoading(false);
-      setIsApiCallInProgress(false);
-    }
-  };
+  // Fetch call details using the new recommended endpoint - DISABLED due to 500 error
+  // const fetchCallDetails = async () => {
+  //   // ... entire function commented out ...
+  // };
 
   // Refresh dashboard data
   const handleRefresh = async () => {
@@ -789,34 +854,8 @@ const Dashboard = () => {
     );
   }
 
-        // Debug log to see what metrics contains
-      console.log('Dashboard: metrics data:', metrics);
-      console.log('Dashboard: metrics structure check:', {
-        hasMetrics: !!metrics,
-        hasCoreMetrics: !!metrics?.core_performance_metrics,
-        hasUserMetrics: !!metrics?.user_interaction_metrics,
-        hasOutcomeMetrics: !!metrics?.outcome_based_metrics,
-        hasFailureAnalysis: !!metrics?.failure_analysis,
-        hasCallDetails: !!metrics?.call_details,
-        organizationId: metrics?.organization_id,
-        campaignId: metrics?.campaign_id
-      });
-      
-      // Debug specific fields that might be showing 0
-      if (metrics?.core_performance_metrics) {
-        console.log('Dashboard: Core metrics debug:', {
-          total_minutes_consumed: metrics.core_performance_metrics.total_minutes_consumed,
-          total_minutes_formatted: metrics.core_performance_metrics.total_minutes_formatted,
-          avg_handle_time_minutes: metrics.core_performance_metrics.avg_handle_time_minutes,
-          avg_handle_time_formatted: metrics.core_performance_metrics.avg_handle_time_formatted,
-          transferred_to_human: metrics.core_performance_metrics.transferred_to_human,
-          call_back_requests: metrics.core_performance_metrics.call_back_requests
-        });
-      }
-      
-          // Debug calculated metrics
+  // Debug calculated metrics
   const calculatedMetrics = calculateMetrics(metrics);
-  console.log('Dashboard: Calculated metrics debug:', calculatedMetrics);
   
 
 
@@ -960,6 +999,13 @@ const Dashboard = () => {
                     return newFilters;
                   });
                   
+                  // Fetch campaigns for the selected organization
+                  if (value === 'all') {
+                    fetchCampaigns(); // Fetch all campaigns
+                  } else {
+                    fetchCampaigns(value); // Fetch campaigns for specific organization
+                  }
+                  
                   // Use debounced API call to prevent rapid successive calls
                   debouncedFetchDashboard(value); // Pass the new org_id value
                 }}
@@ -1026,10 +1072,14 @@ const Dashboard = () => {
                   <SelectItem value="all">All Campaigns</SelectItem>
                   {campaigns
                     .filter(campaign => {
-                      // For non-superusers, all campaigns are already filtered by their organization
-                      // For superusers, filter by selected organization
-                      if (!isSuperUser) return true;
-                      return filters.org_id === 'all' || campaign.org_id === filters.org_id;
+                      // Filter campaigns based on selected organization
+                      if (filters.org_id === 'all') {
+                        // Show all campaigns if "All Organizations" is selected
+                        return true;
+                      } else {
+                        // Show only campaigns that belong to the selected organization
+                        return campaign.org_id === filters.org_id;
+                      }
                     })
                     .map((campaign) => (
                       <SelectItem key={campaign.id} value={campaign.id}>
@@ -1085,26 +1135,26 @@ const Dashboard = () => {
           <div className="flex items-end gap-2">
             <Button
               onClick={() => {
-                // Only refresh organizations, not campaigns (campaigns are relatively static)
-                console.log('Dashboard: Refreshing organizations only...');
-                if (isSuperUser) {
-                  // For superuser, refresh organizations
-                  const refreshOrganizations = async () => {
-                    try {
-                      const orgResponse = await authorizedFetch('/organizations/');
-                      if (orgResponse.ok) {
-                        const orgData = await orgResponse.json() as Organization[];
-                        setOrganizations(orgData);
-                        console.log('Dashboard: Organizations refreshed');
-                      }
-                    } catch (error) {
-                      console.error('Dashboard: Failed to refresh organizations:', error);
+                console.log('Dashboard: Manual organizations refresh clicked...');
+                const refreshOrganizations = async () => {
+                  try {
+                    console.log('Dashboard: Making manual organizations API call...');
+                    const orgResponse = await authorizedFetch('/organizations');
+                    console.log('Dashboard: Manual organizations API response status:', orgResponse.status);
+                    
+                    if (orgResponse.ok) {
+                      const orgData = await orgResponse.json() as Organization[];
+                      console.log('Dashboard: Manual organizations fetch successful:', orgData);
+                      setOrganizations(orgData);
+                    } else {
+                      const errorText = await orgResponse.text();
+                      console.error('Dashboard: Manual organizations API error:', orgResponse.status, errorText);
                     }
-                  };
-                  refreshOrganizations();
-                } else {
-                  console.log('Dashboard: Non-superuser - no need to refresh organizations');
-                }
+                  } catch (error) {
+                    console.error('Dashboard: Manual organizations fetch error:', error);
+                  }
+                };
+                refreshOrganizations();
               }}
               variant="outline"
               size="sm"
@@ -1112,7 +1162,21 @@ const Dashboard = () => {
               className="h-10"
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${filterDataLoading ? 'animate-spin' : ''}`} />
-              Refresh Orgs
+              Test Orgs API
+            </Button>
+            
+            <Button
+              onClick={() => {
+                console.log('Dashboard: Manual dashboard fetch clicked...');
+                fetchDashboard();
+              }}
+              variant="outline"
+              size="sm"
+              className="h-10"
+              title="Test dashboard API"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Test Dashboard
             </Button>
             
             <Button

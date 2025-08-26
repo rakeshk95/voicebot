@@ -11,7 +11,7 @@ import {
 } from '@/types/batchCalling';
 
 // API configuration
-const API_BASE_URL = 'http://192.168.2.153:8001/api/v1';
+const API_BASE_URL = 'http://192.168.29.119:8000/api/v1';
 const BATCH_CALLS_BASE_URL = '/bulk-calls';
 
 /**
@@ -123,13 +123,14 @@ export async function startBatchCall(request: BatchCallStartRequest): Promise<Ba
 
 /**
  * Get the overall status of a batch operation
+ * Uses the check-status endpoint to get status and capabilities
  */
 export async function getBatchOperationStatus(bulkOperationId: string): Promise<BatchCallOperation> {
   try {
     console.log('Fetching operation status for:', bulkOperationId);
     
-    const response = await authorizedFetch<BatchCallOperation>(
-      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}`
+    const response = await authorizedFetch<any>(
+      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/check-status`
     );
 
     if (!response.ok) {
@@ -153,13 +154,33 @@ export async function getBatchOperationStatus(bulkOperationId: string): Promise<
     }
 
     const result = await response.json();
+    console.log('Operation check-status response:', result);
     
-    // Validate the response structure for new status system
-    if (!result.bulk_operation_id || !result.status) {
-      // Response missing required fields
-    }
+    // Map the new response format to BatchCallOperation
+    const mappedOperation: BatchCallOperation = {
+      bulk_operation_id: result.bulk_operation_id,
+      status: result.status,
+      started_at: new Date().toISOString(), // Default value since not in response
+      completed_at: null, // Default value since not in response
+      total_calls: 0, // Default value since not in response
+      completed_calls: 0, // Default value since not in response
+      successful_calls: 0, // Default value since not in response
+      failed_calls: 0, // Default value since not in response
+      pending_calls: 0, // Default value since not in response
+      progress_percentage: 0, // Default value since not in response
+      error: null, // Default value since not in response
+      is_active: true, // Default value since not in response
+      // Add the new capabilities and actions
+      exists: result.exists,
+      location: result.location,
+      can_pause: result.can_pause,
+      can_resume: result.can_resume,
+      can_cancel: result.can_cancel,
+      message: result.message,
+      actions_available: result.actions_available
+    };
     
-    return result;
+    return mappedOperation;
   } catch (error) {
     throw error;
   }
@@ -194,7 +215,7 @@ export async function getBulkOperationMemoryStatus(bulkOperationId: string): Pro
     console.log('Fetching memory status for operation:', bulkOperationId);
     
     const response = await authorizedFetch<any>(
-      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/status`
+      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/check-status`
     );
 
     if (!response.ok) {
@@ -213,33 +234,28 @@ export async function getBulkOperationMemoryStatus(bulkOperationId: string): Pro
 }
 
 /**
- * Simple health check to test if the API is reachable
+ * Get the check-status response for a batch operation (capabilities and actions)
  */
-export async function testApiConnection(): Promise<boolean> {
+export async function getBulkOperationCheckStatus(bulkOperationId: string): Promise<any> {
   try {
-    console.log('Testing API connection...');
-    const response = await fetch('http://192.168.2.153:8001/api/v1/bulk-calls/summary', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
-      },
-    });
+    console.log('Fetching operation check-status for:', bulkOperationId);
     
-    console.log('API connection test response:', response.status, response.statusText);
-    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-    
-    if (response.ok) {
-      const data = await response.json();
-      console.log('API connection test successful:', data);
-      return true;
-    } else {
+    const response = await authorizedFetch<any>(
+      `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/check-status`
+    );
+
+    if (!response.ok) {
       const errorText = await response.text();
-      console.error('API connection test failed:', response.status, errorText);
-      return false;
+      console.error('Failed to get operation check-status:', response.status, errorText);
+      throw new Error(`Failed to get operation check-status: ${response.status} - ${errorText}`);
     }
+
+    const result = await response.json();
+    console.log('Operation check-status received:', result);
+    return result;
   } catch (error) {
-    console.error('API connection test error:', error);
-    return false;
+    console.error('Failed to get operation check-status:', error);
+    throw error;
   }
 }
 
@@ -253,7 +269,7 @@ export async function getBatchCallDetails(bulkOperationId: string): Promise<Batc
     // According to Swagger docs, the primary endpoint is /bulk-calls/calls/{bulk_operation_id}
     const primaryEndpoint = `${BATCH_CALLS_BASE_URL}/calls/${bulkOperationId}`;
     console.log('Trying primary endpoint:', primaryEndpoint);
-    console.log('Full URL will be:', `http://192.168.2.153:8001${primaryEndpoint}`);
+    console.log('Full URL will be:', `http://192.168.29.119:8000${primaryEndpoint}`);
     
     const response = await authorizedFetch<BatchCallResponse>(primaryEndpoint);
 
@@ -266,7 +282,7 @@ export async function getBatchCallDetails(bulkOperationId: string): Promise<Batc
       console.log('Trying alternative endpoint as fallback...');
       const alternativeEndpoint = `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/calls`;
       console.log('Trying alternative endpoint:', alternativeEndpoint);
-      console.log('Full alternative URL will be:', `http://192.168.2.153:8001${alternativeEndpoint}`);
+      console.log('Full alternative URL will be:', `http://192.168.29.119:8000${alternativeEndpoint}`);
       
       const alternativeResponse = await authorizedFetch<BatchCallResponse>(alternativeEndpoint);
       
@@ -311,6 +327,69 @@ export async function getBatchCallDetails(bulkOperationId: string): Promise<Batc
   } catch (error) {
     console.error('Failed to get call details:', error);
     throw error;
+  }
+}
+
+/**
+ * Get calls summary for a batch operation (total, successful, failed counts)
+ */
+export async function getBatchCallSummary(bulkOperationId: string): Promise<BatchCallSummaryResponse> {
+  try {
+    console.log('Fetching calls summary for operation:', bulkOperationId);
+    
+    const response = await authorizedFetch<BatchCallSummaryResponse>(
+      `${BATCH_CALLS_BASE_URL}/calls/${bulkOperationId}`
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to get calls summary:', response.status, errorText);
+      throw new Error(`Failed to get calls summary: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('Calls summary received:', result);
+    
+    // Validate the response structure
+    if (!result.bulk_operation_id || typeof result.total_calls !== 'number') {
+      throw new Error('Invalid calls summary response format');
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Failed to get calls summary:', error);
+    throw error;
+  }
+}
+
+/**
+ * Simple health check to test if the API is reachable
+ */
+export async function testApiConnection(): Promise<boolean> {
+  try {
+    console.log('Testing API connection...');
+    const response = await fetch('http://192.168.29.119:8000/api/v1/bulk-calls/summary', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+      },
+    });
+    
+    console.log('API connection test response:', response.status, response.statusText);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('API connection test successful:', data);
+      return true;
+    } else {
+      const errorText = await response.text();
+      console.error('API connection test failed:', response.status, errorText);
+      return false;
+    }
+  } catch (error) {
+    console.error('API connection test error:', error);
+    return false;
   }
 }
 
