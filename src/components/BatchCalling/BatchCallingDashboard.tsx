@@ -313,12 +313,7 @@ export const BatchCallingDashboard: React.FC = () => {
         </div>
         <div className="flex items-center space-x-3">
           {/* Auto-refresh indicator */}
-          {autoRefreshActive && (
-            <div className="flex items-center space-x-2 text-sm text-blue-600 bg-blue-50 px-3 py-2 rounded-md">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-              <span>Auto-refresh active</span>
-            </div>
-          )}
+          
           <Button onClick={refreshData} disabled={refreshing} variant="outline">
             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             {refreshing ? 'Refreshing...' : 'Refresh'}
@@ -327,19 +322,7 @@ export const BatchCallingDashboard: React.FC = () => {
       </div>
 
       {/* Info Section */}
-      {autoRefreshActive && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-start space-x-2">
-            <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-            <div className="text-sm text-blue-800">
-              <p className="font-medium mb-1">Real-time Updates Active</p>
-              <p className="text-blue-700">
-                Dashboard is automatically refreshing every 2 minutes for active operations
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Status Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -438,12 +421,13 @@ export const BatchCallingDashboard: React.FC = () => {
                     status: op.status as any,
                     started_at: op.started_at,
                     completed_at: null,
+                    expected_total_calls: op.expected_total_calls || op.total_calls || 0,
                     total_calls: op.total_calls,
                     completed_calls: op.completed_calls,
-                    successful_calls: 0,
-                    failed_calls: 0,
-                    pending_calls: op.total_calls - op.completed_calls,
-                    progress_percentage: (op.completed_calls / op.total_calls) * 100,
+                    successful_calls: op.successful_calls || 0,
+                    failed_calls: op.failed_calls || 0,
+                    pending_calls: op.pending_calls || (op.total_calls - op.completed_calls),
+                    progress_percentage: op.expected_total_calls > 0 ? (op.completed_calls / op.expected_total_calls) * 100 : 0,
                     error: null,
                     is_active: op.is_active,
                     call_statuses: undefined

@@ -772,8 +772,55 @@ const Dashboard = () => {
     }
     
     setRefreshing(true);
-    await fetchDashboard();
-    setRefreshing(false);
+    try {
+      // Refresh filter data first
+      await fetchFilterData();
+      // Then refresh dashboard data
+      await fetchDashboard();
+    } catch (error) {
+      console.error('Dashboard: Refresh error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh dashboard data",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Comprehensive refresh function for all data
+  const refreshAllData = async () => {
+    if (loading || refreshing) {
+      console.log('Dashboard: Refresh already in progress, skipping...');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      console.log('Dashboard: Starting comprehensive refresh...');
+      
+      // Refresh organizations and campaigns
+      await fetchFilterData();
+      
+      // Refresh dashboard data
+      await fetchDashboard();
+      
+      toast({
+        title: "Success",
+        description: "All data refreshed successfully",
+        variant: "default",
+      });
+    } catch (error) {
+      console.error('Dashboard: Comprehensive refresh error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh all data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Loading skeleton
@@ -960,12 +1007,12 @@ const Dashboard = () => {
         
         <div className="flex items-center gap-3">
           <Button
-            onClick={handleRefresh}
+            onClick={refreshAllData}
             disabled={loading || refreshing}
             className="h-10"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading || refreshing ? 'animate-spin' : ''}`} />
+            Refresh All
           </Button>
         </div>
       </div>
@@ -991,7 +1038,7 @@ const Dashboard = () => {
             ) : organizations.length > 0 ? (
               <Select
                 value={filters.org_id}
-                onValueChange={(value) => {
+                onValueChange={async (value) => {
                   console.log('Dashboard: Organization filter changed to:', value);
                   
                   setFilters(prev => {
@@ -999,15 +1046,24 @@ const Dashboard = () => {
                     return newFilters;
                   });
                   
-                  // Fetch campaigns for the selected organization
-                  if (value === 'all') {
-                    fetchCampaigns(); // Fetch all campaigns
-                  } else {
-                    fetchCampaigns(value); // Fetch campaigns for specific organization
+                  try {
+                    // Fetch campaigns for the selected organization
+                    if (value === 'all') {
+                      await fetchCampaigns(); // Fetch all campaigns
+                    } else {
+                      await fetchCampaigns(value); // Fetch campaigns for specific organization
+                    }
+                    
+                    // Use debounced API call to prevent rapid successive calls
+                    debouncedFetchDashboard(value); // Pass the new org_id value
+                  } catch (error) {
+                    console.error('Dashboard: Error updating campaigns after org change:', error);
+                    toast({
+                      title: "Error",
+                      description: "Failed to update campaigns for selected organization",
+                      variant: "destructive",
+                    });
                   }
-                  
-                  // Use debounced API call to prevent rapid successive calls
-                  debouncedFetchDashboard(value); // Pass the new org_id value
                 }}
               >
                 <SelectTrigger>
@@ -1050,7 +1106,7 @@ const Dashboard = () => {
             ) : campaigns.length > 0 ? (
               <Select
                 value={filters.campaign_id}
-                onValueChange={(value) => {
+                onValueChange={async (value) => {
                   console.log('Dashboard: Campaign filter changed to:', value);
                   
                   setFilters(prev => {
@@ -1058,8 +1114,17 @@ const Dashboard = () => {
                     return newFilters;
                   });
                   
-                  // Use debounced API call to prevent rapid successive calls
-                  debouncedFetchDashboard(undefined, 300); // Pass undefined for org_id, use current filters
+                  try {
+                    // Use debounced API call to prevent rapid successive calls
+                    debouncedFetchDashboard(undefined, 300); // Pass undefined for org_id, use current filters
+                  } catch (error) {
+                    console.error('Dashboard: Error updating dashboard after campaign change:', error);
+                    toast({
+                      title: "Error",
+                      description: "Failed to update dashboard for selected campaign",
+                      variant: "destructive",
+                    });
+                  }
                 }}
                 disabled={false}
               >
@@ -1103,14 +1168,23 @@ const Dashboard = () => {
             <label className="text-sm font-medium text-gray-700 mb-2 block">Time Period</label>
             <Select
               value={filters.days.toString()}
-              onValueChange={(value) => {
+              onValueChange={async (value) => {
                 console.log('Dashboard: Time period changed to:', value, 'days');
                 
                 setFilters(prev => ({ ...prev, days: parseInt(value) }));
                 
-                // Use debounced API call to prevent rapid successive calls
-                if (isFilterDataLoaded && hasInitialized) {
-                  debouncedFetchDashboard(undefined, 300); // Pass undefined for org_id, use current filters
+                try {
+                  // Use debounced API call to prevent rapid successive calls
+                  if (isFilterDataLoaded && hasInitialized) {
+                    debouncedFetchDashboard(undefined, 300); // Pass undefined for org_id, use current filters
+                  }
+                } catch (error) {
+                  console.error('Dashboard: Error updating dashboard after time period change:', error);
+                  toast({
+                    title: "Error",
+                    description: "Failed to update dashboard for selected time period",
+                    variant: "destructive",
+                  });
                 }
               }}
             >
@@ -1134,27 +1208,58 @@ const Dashboard = () => {
           {/* Filter Refresh Button */}
           <div className="flex items-end gap-2">
             <Button
-              onClick={() => {
+              onClick={async () => {
                 console.log('Dashboard: Manual organizations refresh clicked...');
-                const refreshOrganizations = async () => {
-                  try {
-                    console.log('Dashboard: Making manual organizations API call...');
-                    const orgResponse = await authorizedFetch('/organizations');
-                    console.log('Dashboard: Manual organizations API response status:', orgResponse.status);
+                setFilterDataLoading(true);
+                
+                try {
+                  console.log('Dashboard: Making manual organizations API call...');
+                  const orgResponse = await authorizedFetch('/organizations');
+                  console.log('Dashboard: Manual organizations API response status:', orgResponse.status);
+                  
+                  if (orgResponse.ok) {
+                    const orgData = await orgResponse.json() as Organization[];
+                    console.log('Dashboard: Manual organizations fetch successful:', orgData);
+                    setOrganizations(orgData);
                     
-                    if (orgResponse.ok) {
-                      const orgData = await orgResponse.json() as Organization[];
-                      console.log('Dashboard: Manual organizations fetch successful:', orgData);
-                      setOrganizations(orgData);
-                    } else {
-                      const errorText = await orgResponse.text();
-                      console.error('Dashboard: Manual organizations API error:', orgResponse.status, errorText);
+                    // Also refresh campaigns after organizations are updated
+                    if (orgData.length > 0) {
+                      console.log('Dashboard: Refreshing campaigns after organizations update...');
+                      await fetchCampaigns();
                     }
-                  } catch (error) {
-                    console.error('Dashboard: Manual organizations fetch error:', error);
+                    
+                    // Refresh dashboard data with current filters
+                    console.log('Dashboard: Refreshing dashboard after organizations update...');
+                    await fetchDashboard();
+                    
+                    // Reset filter data loaded flag to ensure fresh data
+                    setIsFilterDataLoaded(false);
+                    setTimeout(() => setIsFilterDataLoaded(true), 100);
+                    
+                    toast({
+                      title: "Success",
+                      description: "Organizations and related data refreshed successfully",
+                      variant: "default",
+                    });
+                  } else {
+                    const errorText = await orgResponse.text();
+                    console.error('Dashboard: Manual organizations API error:', orgResponse.status, errorText);
+                    toast({
+                      title: "Error",
+                      description: `Failed to fetch organizations: ${orgResponse.status}`,
+                      variant: "destructive",
+                    });
                   }
-                };
-                refreshOrganizations();
+                } catch (error) {
+                  console.error('Dashboard: Manual organizations fetch error:', error);
+                  toast({
+                    title: "Error",
+                    description: "Failed to refresh organizations data",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setFilterDataLoading(false);
+                }
               }}
               variant="outline"
               size="sm"
@@ -1166,27 +1271,129 @@ const Dashboard = () => {
             </Button>
             
             <Button
-              onClick={() => {
+              onClick={async () => {
                 console.log('Dashboard: Manual dashboard fetch clicked...');
-                fetchDashboard();
+                setLoading(true);
+                
+                try {
+                  // Refresh all filter data first
+                  console.log('Dashboard: Refreshing filter data...');
+                  await fetchFilterData();
+                  
+                  // Then refresh dashboard data
+                  console.log('Dashboard: Refreshing dashboard data...');
+                  await fetchDashboard();
+                  
+                  toast({
+                    title: "Success",
+                    description: "Dashboard data refreshed successfully",
+                    variant: "default",
+                  });
+                } catch (error) {
+                  console.error('Dashboard: Manual refresh error:', error);
+                  toast({
+                    title: "Error",
+                    description: "Failed to refresh dashboard data",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setLoading(false);
+                }
               }}
               variant="outline"
               size="sm"
               className="h-10"
-              title="Test dashboard API"
+              title="Test dashboard API and refresh all data"
+              disabled={loading}
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Test Dashboard
             </Button>
             
             <Button
-              onClick={resetFilters}
+              onClick={async () => {
+                console.log('Dashboard: Manual campaigns fetch clicked...');
+                setFilterDataLoading(true);
+                
+                try {
+                  // Refresh campaigns data
+                  console.log('Dashboard: Refreshing campaigns...');
+                  await fetchCampaigns();
+                  
+                  // Also refresh dashboard to show updated campaign data
+                  console.log('Dashboard: Refreshing dashboard after campaigns update...');
+                  await fetchDashboard();
+                  
+                  toast({
+                    title: "Success",
+                    description: "Campaigns data refreshed successfully",
+                    variant: "default",
+                  });
+                } catch (error) {
+                  console.error('Dashboard: Manual campaigns refresh error:', error);
+                  toast({
+                    title: "Error",
+                    description: "Failed to refresh campaigns data",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setFilterDataLoading(false);
+                }
+              }}
               variant="outline"
               size="sm"
               className="h-10"
-              title="Reset filters to show all data"
+              title="Test campaigns API and refresh data"
+              disabled={filterDataLoading}
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
+              <RefreshCw className={`h-4 w-4 mr-2 ${filterDataLoading ? 'animate-spin' : ''}`} />
+              Test Campaigns
+            </Button>
+            
+            <Button
+              onClick={async () => {
+                console.log('Dashboard: Resetting filters and refreshing all data...');
+                setLoading(true);
+                
+                try {
+                  // Reset filters
+                  setFilters({
+                    org_id: 'all',
+                    campaign_id: 'all',
+                    days: filters.days // Keep the same time period
+                  });
+                  
+                  // Refresh filter data
+                  console.log('Dashboard: Refreshing filter data after reset...');
+                  await fetchFilterData();
+                  
+                  // Fetch all data from API
+                  console.log('Dashboard: Fetching all data from API after reset...');
+                  await fetchDashboard();
+                  
+                  toast({
+                    title: "Success",
+                    description: "Filters reset and data refreshed successfully",
+                    variant: "default",
+                  });
+                } catch (error) {
+                  console.error('Dashboard: Reset filters error:', error);
+                  toast({
+                    title: "Error",
+                    description: "Failed to reset filters and refresh data",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              variant="outline"
+              size="sm"
+              className="h-10"
+              title="Reset filters to show all data and refresh"
+              disabled={loading}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Reset Filters
             </Button>
           </div>

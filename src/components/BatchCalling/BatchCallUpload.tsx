@@ -259,16 +259,16 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
       return false;
     }
 
-    // Validate channels - ensure it's a valid number
-    const channels = parseInt(formData.channels);
-    if (isNaN(channels) || channels < 1 || channels > 10) {
-      toast({
-        title: "Invalid Channels",
-        description: "Number of channels must be between 1 and 10",
-        variant: "destructive",
-      });
-      return false;
-    }
+         // Validate channels - ensure it's a valid number
+     const channels = parseInt(formData.channels);
+     if (isNaN(channels) || channels < 1) {
+       toast({
+         title: "Invalid Channels",
+         description: "Number of channels must be at least 1",
+         variant: "destructive",
+       });
+       return false;
+     }
 
     return true;
   };
@@ -681,7 +681,7 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
                 type="file"
                 accept=".xlsx,.xls"
                 onChange={handleFileChange}
-                className="cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                className="cursor-pointer w-full min-w-0 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:flex-shrink-0"
               />
             </div>
             <p className="text-xs text-muted-foreground">
@@ -844,25 +844,19 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="channels">Number of Channels *</Label>
-                <Select value={formData.channels} onValueChange={(value) => handleInputChange('channels', value)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select number of channels" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                      <SelectItem key={num} value={num.toString()}>
-                        <div className="flex items-center space-x-2">
-                          <Phone className="h-4 w-4" />
-                          <span>{num} Channel{num > 1 ? 's' : ''}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Number of parallel channels for processing calls</p>
-              </div>
+                             <div className="space-y-2">
+                 <Label htmlFor="channels">Number of Channels *</Label>
+                 <Input
+                   id="channels"
+                   type="number"
+                   min="1"
+                   value={formData.channels}
+                   onChange={(e) => handleInputChange('channels', e.target.value)}
+                   placeholder="1"
+                   className="w-full"
+                 />
+                 <p className="text-xs text-muted-foreground">Number of parallel channels for processing calls (minimum 1)</p>
+               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="sleep_seconds">Delay Between Calls (seconds) *</Label>
@@ -951,8 +945,8 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
 
             <div className="grid grid-cols-4 gap-4 text-center">
               <div className="bg-white rounded-lg p-3 border border-blue-200">
-                <div className="text-lg font-bold text-blue-600">{currentOperation.total_calls}</div>
-                <div className="text-xs text-blue-600 font-medium">Total Calls</div>
+                <div className="text-lg font-bold text-blue-600">{currentOperation.expected_total_calls || currentOperation.total_calls || 0}</div>
+                <div className="text-xs text-blue-600 font-medium">Expected Calls</div>
               </div>
               <div className="bg-white rounded-lg p-3 border border-yellow-200">
                 <div className="text-lg font-bold text-yellow-600">{currentOperation.pending_calls || 0}</div>

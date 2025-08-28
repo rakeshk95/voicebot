@@ -312,8 +312,8 @@ export const BatchCallDetails: React.FC<BatchCallDetailsProps> = ({ operations }
                   <div className="p-4 bg-gray-50 rounded-lg border">
                     <h4 className="font-semibold text-gray-800 mb-2">Performance Metrics</h4>
                     <div className="space-y-1 text-sm">
-                      <p><span className="font-medium">Success Rate:</span> {((callDetails.successful_calls / callDetails.total_calls) * 100).toFixed(1)}%</p>
-                      <p><span className="font-medium">Failure Rate:</span> {((callDetails.failed_calls / callDetails.total_calls) * 100).toFixed(1)}%</p>
+                      <p><span className="font-medium">Success Rate:</span> {((callDetails.successful_calls / (callDetails.expected_total_calls || callDetails.total_calls || 1)) * 100).toFixed(1)}%</p>
+                      <p><span className="font-medium">Failure Rate:</span> {((callDetails.failed_calls / (callDetails.expected_total_calls || callDetails.total_calls || 1)) * 100).toFixed(1)}%</p>
                       <p><span className="font-medium">Avg Duration:</span> {(callDetails.calls.reduce((sum, call) => sum + call.processing_duration_ms, 0) / callDetails.calls.length).toFixed(0)}ms</p>
                     </div>
                   </div>

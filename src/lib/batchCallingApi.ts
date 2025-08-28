@@ -4,6 +4,7 @@ import {
   BatchCallResponse,
   BatchCallDetail,
   BatchCallSummary,
+  BatchCallSummaryResponse,
   BatchCallStartRequest,
   BatchCallStartResponse,
   BatchOperationsList,
@@ -162,11 +163,12 @@ export async function getBatchOperationStatus(bulkOperationId: string): Promise<
       status: result.status,
       started_at: new Date().toISOString(), // Default value since not in response
       completed_at: null, // Default value since not in response
-      total_calls: 0, // Default value since not in response
-      completed_calls: 0, // Default value since not in response
-      successful_calls: 0, // Default value since not in response
-      failed_calls: 0, // Default value since not in response
-      pending_calls: 0, // Default value since not in response
+      expected_total_calls: result.expected_total_calls || 0, // Total calls expected from the upload
+      total_calls: result.total_calls || 0, // Actually processed calls
+      completed_calls: result.completed_calls || 0, // Default value since not in response
+      successful_calls: result.successful_calls || 0, // Default value since not in response
+      failed_calls: result.failed_calls || 0, // Default value since not in response
+      pending_calls: result.pending_calls || 0, // Default value since not in response
       progress_percentage: 0, // Default value since not in response
       error: null, // Default value since not in response
       is_active: true, // Default value since not in response
@@ -307,6 +309,11 @@ export async function getBatchCallDetails(bulkOperationId: string): Promise<Batc
       console.warn('Call details response missing bulk_operation_id:', result);
     }
     
+    // Validate the new expected_total_calls field
+    if (typeof result.expected_total_calls !== 'number') {
+      console.warn('Call details response missing expected_total_calls:', result);
+    }
+    
     // Log call statuses if available (new API structure)
     if (result.call_statuses) {
       console.log(`Call details: ${Object.keys(result.call_statuses).length} call statuses found`);
@@ -323,7 +330,21 @@ export async function getBatchCallDetails(bulkOperationId: string): Promise<Batc
       });
     }
     
-    return result;
+    // Map the API response to our interface with proper field mapping
+    const mappedResult: BatchCallResponse = {
+      bulk_operation_id: result.bulk_operation_id,
+      expected_total_calls: result.expected_total_calls || result.total_calls || 0,
+      total_calls: result.total_calls || 0,
+      successful_calls: result.successful_calls || 0,
+      failed_calls: result.failed_calls || 0,
+      pending_calls: result.pending_calls || 0,
+      org_id: result.org_id,
+      campaign_id: result.campaign_id,
+      operation_name: result.operation_name,
+      calls: result.calls || []
+    };
+    
+    return mappedResult;
   } catch (error) {
     console.error('Failed to get call details:', error);
     throw error;
@@ -351,11 +372,24 @@ export async function getBatchCallSummary(bulkOperationId: string): Promise<Batc
     console.log('Calls summary received:', result);
     
     // Validate the response structure
-    if (!result.bulk_operation_id || typeof result.total_calls !== 'number') {
-      throw new Error('Invalid calls summary response format');
+    if (!result.bulk_operation_id || typeof result.expected_total_calls !== 'number') {
+      throw new Error('Invalid calls summary response format - missing expected_total_calls');
     }
     
-    return result;
+    // Map the API response to our interface with proper field mapping
+    const mappedResult: BatchCallSummaryResponse = {
+      bulk_operation_id: result.bulk_operation_id,
+      expected_total_calls: result.expected_total_calls,
+      total_calls: result.total_calls || 0,
+      successful_calls: result.successful_calls || 0,
+      failed_calls: result.failed_calls || 0,
+      pending_calls: result.pending_calls || 0,
+      org_id: result.org_id,
+      campaign_id: result.campaign_id,
+      operation_name: result.operation_name
+    };
+    
+    return mappedResult;
   } catch (error) {
     console.error('Failed to get calls summary:', error);
     throw error;
@@ -504,19 +538,89 @@ export async function getBatchOperationsList(): Promise<BatchOperationsList> {
   try {
     console.log('Fetching operations list...');
     
-    const response = await authorizedFetch<BatchOperationsList>(
+    // First get the operations list from /operations endpoint
+    const operationsResponse = await authorizedFetch<any>(
       `${BATCH_CALLS_BASE_URL}/operations`
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Failed to get operations list:', response.status, errorText);
-      throw new Error(`Failed to get operations list: ${response.status} - ${errorText}`);
+    if (!operationsResponse.ok) {
+      const errorText = await operationsResponse.text();
+      console.error('Failed to get operations list:', operationsResponse.status, errorText);
+      throw new Error(`Failed to get operations list: ${operationsResponse.status} - ${errorText}`);
     }
 
-    const result = await response.json();
-    console.log('Operations list received:', result);
-    return result;
+    const operationsResult = await operationsResponse.json();
+    console.log('Operations list received:', operationsResult);
+    
+    // Now enrich each operation with detailed call information from /calls endpoint
+    const enrichedOperations: Record<string, any> = {};
+    let totalOperations = 0;
+    let activeOperations = 0;
+    
+    for (const [operationId, operation] of Object.entries(operationsResult.operations || {})) {
+      try {
+        // Get detailed call information for each operation using the /calls endpoint
+        const callDetailsResponse = await authorizedFetch<any>(
+          `${BATCH_CALLS_BASE_URL}/calls/${operationId}`
+        );
+        
+        if (callDetailsResponse.ok) {
+          const callDetails = await callDetailsResponse.json();
+          console.log(`Call details for ${operationId}:`, callDetails);
+          
+          // Merge the operation data with call details
+          enrichedOperations[operationId] = {
+            ...(operation as any),
+            expected_total_calls: callDetails.expected_total_calls || callDetails.total_calls || 0,
+            total_calls: callDetails.total_calls || 0,
+            successful_calls: callDetails.successful_calls || 0,
+            failed_calls: callDetails.failed_calls || 0,
+            pending_calls: callDetails.pending_calls || 0,
+            completed_calls: (callDetails.successful_calls || 0) + (callDetails.failed_calls || 0)
+          };
+        } else {
+          // Fallback to original operation data if call details fail
+          console.warn(`Failed to get call details for ${operationId}, using fallback data`);
+          enrichedOperations[operationId] = {
+            ...(operation as any),
+            expected_total_calls: (operation as any).total_calls || 0,
+            pending_calls: (operation as any).pending_calls || 0,
+            completed_calls: (operation as any).completed_calls || 0,
+            successful_calls: (operation as any).successful_calls || 0,
+            failed_calls: (operation as any).failed_calls || 0
+          };
+        }
+        
+        totalOperations++;
+        if ((operation as any).is_active) {
+          activeOperations++;
+        }
+      } catch (callDetailsError) {
+        console.warn(`Error getting call details for ${operationId}:`, callDetailsError);
+        // Fallback to original operation data
+        enrichedOperations[operationId] = {
+          ...(operation as any),
+          expected_total_calls: (operation as any).total_calls || 0,
+          pending_calls: (operation as any).pending_calls || 0,
+          completed_calls: (operation as any).completed_calls || 0,
+          successful_calls: (operation as any).successful_calls || 0,
+          failed_calls: (operation as any).failed_calls || 0
+        };
+        totalOperations++;
+        if ((operation as any).is_active) {
+          activeOperations++;
+        }
+      }
+    }
+    
+    const enrichedResult: BatchOperationsList = {
+      total_operations: totalOperations,
+      active_operations: activeOperations,
+      operations: enrichedOperations
+    };
+    
+    console.log('Enriched operations list:', enrichedResult);
+    return enrichedResult;
   } catch (error) {
     console.error('Failed to get operations list:', error);
     throw error;
@@ -637,6 +741,33 @@ export async function getEnhancedOperationStatus(bulkOperationId: string): Promi
     return operationStatus;
   } catch (error) {
     console.error('Failed to get enhanced operation status:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get detailed operation information directly from the /calls endpoint
+ * This is the endpoint that returns expected_total_calls and other detailed information
+ */
+export async function getOperationDetailsFromCallsEndpoint(bulkOperationId: string): Promise<any> {
+  try {
+    console.log(`Fetching operation details from /calls endpoint for: ${bulkOperationId}`);
+    
+    const response = await authorizedFetch<any>(
+      `${BATCH_CALLS_BASE_URL}/calls/${bulkOperationId}`
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to get operation details from /calls endpoint:', response.status, errorText);
+      throw new Error(`Failed to get operation details: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('Operation details from /calls endpoint:', result);
+    return result;
+  } catch (error) {
+    console.error('Failed to get operation details from /calls endpoint:', error);
     throw error;
   }
 }

@@ -3,7 +3,8 @@ export interface BatchCallOperation {
   status: 'starting' | 'processing' | 'paused' | 'completed' | 'failed' | 'cancelled';
   started_at: string;
   completed_at: string | null;
-  total_calls: number;
+  expected_total_calls: number;  // Total calls expected from the upload
+  total_calls: number;           // Actually processed calls
   completed_calls: number;
   successful_calls: number;
   failed_calls: number;
@@ -60,11 +61,14 @@ export interface ParsedExternalApiResponse {
 
 export interface BatchCallResponse {
   bulk_operation_id: string;
-  total_calls: number;
+  expected_total_calls: number;  // Total calls expected from the upload
+  total_calls: number;           // Actually processed calls
   successful_calls: number;
   failed_calls: number;
+  pending_calls: number;         // Calls still pending
   org_id: string;
   campaign_id: string;
+  operation_name?: string;       // Name of the operation
   calls: BatchCallDetail[];
   // New field for call statuses from the API
   call_statuses?: Record<string, {
@@ -78,9 +82,14 @@ export interface BatchCallResponse {
 // New interface for the /calls endpoint response
 export interface BatchCallSummaryResponse {
   bulk_operation_id: string;
-  total_calls: number;
+  expected_total_calls: number;  // Total calls expected from the upload
+  total_calls: number;           // Actually processed calls
   successful_calls: number;
   failed_calls: number;
+  pending_calls: number;         // Calls still pending
+  org_id: string;
+  campaign_id: string;
+  operation_name?: string;       // Name of the operation
 }
 
 export interface BatchCallSummary {
@@ -93,7 +102,8 @@ export interface BatchCallSummary {
     processing: number;
   };
   call_summary: {
-    total_calls: number;
+    expected_total_calls: number;  // Total calls expected from the upload
+    total_calls: number;           // Actually processed calls
     completed_calls: number;
     successful_calls: number;
     failed_calls: number;
@@ -126,8 +136,12 @@ export interface BatchOperationsList {
   operations: Record<string, {
     status: string;
     started_at: string;
-    total_calls: number;
+    expected_total_calls: number;  // Total calls expected from the upload
+    total_calls: number;           // Actually processed calls
     completed_calls: number;
+    successful_calls: number;      // Successfully completed calls
+    failed_calls: number;          // Failed calls
+    pending_calls: number;         // Calls still pending
     is_active: boolean;
   }>;
 }
