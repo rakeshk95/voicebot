@@ -29,9 +29,11 @@ import {
   resumeBatchOperation,
   cancelBatchOperation
 } from '@/lib/batchCallingApi';
+import { authorizedFetch } from '@/lib/api';
 import { BatchCallSummary, BatchOperationsList, BatchCallOperation } from '@/types/batchCalling';
 import { BatchCallUpload } from './BatchCallUpload';
 import { BatchCallOperations } from './BatchCallOperations';
+import { BatchOperationsTable } from './BatchOperationsTable';
 import { BatchCallDetails } from './BatchCallDetails';
 
 export const BatchCallingDashboard: React.FC = () => {
@@ -43,6 +45,8 @@ export const BatchCallingDashboard: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoRefreshActive, setAutoRefreshActive] = useState(false);
+  const [organizations, setOrganizations] = useState<Array<{ id: string; name: string }>>([]);
+  const [campaigns, setCampaigns] = useState<Array<{ id: string; name: string; org_id: string }>>([]);
   const { toast } = useToast();
   
   // Use ref to prevent multiple simultaneous API calls
@@ -59,6 +63,39 @@ export const BatchCallingDashboard: React.FC = () => {
     };
   }, []);
 
+  const fetchOrganizations = async () => {
+    try {
+      const response = await authorizedFetch('/organizations');
+      if (response.ok) {
+        const orgData = await response.json();
+        setOrganizations(orgData);
+      } else {
+        console.error('Failed to fetch organizations:', response.status);
+        setOrganizations([]);
+      }
+    } catch (error) {
+      console.error('Error fetching organizations:', error);
+      setOrganizations([]);
+    }
+  };
+
+  const fetchCampaigns = async () => {
+    try {
+      const response = await authorizedFetch('/campaigns/');
+      if (response.ok) {
+        const campaignData = await response.json();
+        setCampaigns(campaignData);
+      } else {
+        console.error('Failed to fetch campaigns:', response.status);
+        setCampaigns([]);
+      }
+    } catch (error) {
+      console.error('Error fetching campaigns:', error);
+      setCampaigns([]);
+    }
+  };
+
+  // Fetch all data on initial load
   const fetchData = async () => {
     // Prevent multiple simultaneous API calls and enforce cooldown
     const now = Date.now();
@@ -75,9 +112,12 @@ export const BatchCallingDashboard: React.FC = () => {
       setLoading(true);
       setError(null);
       
+      // Fetch all data: organizations, campaigns, and operations
       const [summaryData, operationsData] = await Promise.all([
         getBatchOperationsSummary(),
-        getBatchOperationsList()
+        getBatchOperationsList(),
+        fetchOrganizations(),
+        fetchCampaigns()
       ]);
       
       setSummary(summaryData);
@@ -150,10 +190,10 @@ export const BatchCallingDashboard: React.FC = () => {
         
         setAutoRefreshActive(hasActiveOperations);
         
-        // Only refresh if there are active operations AND we haven't fetched recently
-        if (hasActiveOperations && !isFetchingRef.current) {
-          fetchData();
-        }
+                 // Only refresh if there are active operations AND we haven't fetched recently
+         if (hasActiveOperations && !isFetchingRef.current) {
+           fetchData(); // Fetch operations data for auto-refresh
+         }
       }
     };
     
@@ -208,8 +248,8 @@ export const BatchCallingDashboard: React.FC = () => {
         description: result.message,
       });
 
-      // Refresh data after action
-      await fetchData();
+             // Refresh data after action
+       await fetchData(); // Fetch operations data after action
     } catch (error) {
       toast({
         title: "Error",
@@ -399,18 +439,21 @@ export const BatchCallingDashboard: React.FC = () => {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="operations" className="space-y-4">
-          <BatchCallOperations
-            operations={operations}
-            onOperationSelect={handleOperationSelect}
-            onOperationAction={handleOperationAction}
-            selectedOperation={selectedOperation}
-          />
-        </TabsContent>
+         <TabsContent value="operations" className="space-y-4">
+           <BatchOperationsTable
+             operations={operations}
+             onOperationSelect={handleOperationSelect}
+             onOperationAction={handleOperationAction}
+             selectedOperation={selectedOperation}
+             organizations={organizations}
+             campaigns={campaigns}
+             loading={loading}
+           />
+         </TabsContent>
 
-        <TabsContent value="upload" className="space-y-4">
-          <BatchCallUpload onUploadSuccess={fetchData} />
-        </TabsContent>
+         <TabsContent value="upload" className="space-y-4">
+           <BatchCallUpload onUploadSuccess={fetchData} />
+         </TabsContent>
 
         <TabsContent value="call-details" className="space-y-4">
           <BatchCallDetails 

@@ -143,6 +143,8 @@ export interface BatchOperationsList {
     failed_calls: number;          // Failed calls
     pending_calls: number;         // Calls still pending
     is_active: boolean;
+    org_id?: string;              // Organization ID
+    campaign_id?: string;         // Campaign ID
   }>;
 }
 

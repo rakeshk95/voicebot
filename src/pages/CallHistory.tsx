@@ -127,6 +127,9 @@ const CallHistory = () => {
   const [isCallingInProgress, setIsCallingInProgress] = useState(false);
   const [isExportingDetailed, setIsExportingDetailed] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isFetchingRef = useRef(false);
+  const lastFetchTimeRef = useRef(0);
+  const FETCH_COOLDOWN_MS = 2000; // 2 second cooldown between API calls
 
   const datePresets = [
     { label: 'Today', getValue: () => ({ start: startOfToday(), end: endOfToday() }) },
@@ -189,7 +192,7 @@ const CallHistory = () => {
     const insights = await Promise.all(
       calls.map(async call => {
         try {
-          const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/calls/${call.Sid}/artifacts`, {
+          const response = await fetch(`http://192.168.0.6:8000/api/v1/calls/${call.Sid}/artifacts`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -295,6 +298,18 @@ const CallHistory = () => {
   const fetchCallData = async (pageToFetch: number, targetCampaignId = selectedCampaign, append: boolean = false) => {
     console.log('CallHistory: fetchCallData called with:', { pageToFetch, targetCampaignId, append, selectedCampaign });
     
+    // Prevent multiple simultaneous API calls and enforce cooldown
+    const now = Date.now();
+    if (isFetchingRef.current) {
+      console.log('CallHistory: Already fetching, skipping request');
+      return;
+    }
+    
+    if (now - lastFetchTimeRef.current < FETCH_COOLDOWN_MS) {
+      console.log('CallHistory: Cooldown active, skipping request');
+      return;
+    }
+    
     if (!targetCampaignId) {
       console.log('CallHistory: No targetCampaignId provided');
       toast({
@@ -309,6 +324,7 @@ const CallHistory = () => {
 
 
 
+    isFetchingRef.current = true;
     setIsLoading(true);
     try {
       let formattedStartDate, formattedEndDate;
@@ -324,7 +340,7 @@ const CallHistory = () => {
         formattedEndDate = format(end, "yyyy-MM-dd'T'HH:mm:ss'Z'");
       }
 
-      const apiUrl = new URL(`https://platform.voxiflow.com/backend/api/v1/calls/external/${targetCampaignId}/list`);
+      const apiUrl = new URL(`http://192.168.0.6:8000/api/v1/calls/external/${targetCampaignId}/list`);
       
       apiUrl.searchParams.append('start_date', formattedStartDate);
       apiUrl.searchParams.append('end_date', formattedEndDate);
@@ -435,6 +451,8 @@ const CallHistory = () => {
       setHasMore(false);
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
+      lastFetchTimeRef.current = Date.now();
     }
   };
 
@@ -502,34 +520,41 @@ const CallHistory = () => {
     }
   };
 
-  // Main useEffect to initialize data when component mounts
+  // Single useEffect to handle all initialization and data fetching
   useEffect(() => {
     let isMounted = true;
+    let isInitialized = false;
     
     const initializeData = async () => {
-      if (!isMounted) return;
+      if (!isMounted || isInitialized) return;
       
       console.log('CallHistory: Initializing data with campaignId:', campaignId, 'campaignName:', campaignName);
       
-      if (campaignId && campaignName) {
-        console.log('CallHistory: Using URL params for campaign');
-        // If we have campaign ID and name from URL params, use them directly
-        setSelectedCampaign(campaignId);
-        setSelectedCampaignName(decodeURIComponent(campaignName));
+      try {
+        if (campaignId && campaignName) {
+          console.log('CallHistory: Using URL params for campaign');
+          // If we have campaign ID and name from URL params, use them directly
+          setSelectedCampaign(campaignId);
+          setSelectedCampaignName(decodeURIComponent(campaignName));
+          
+          const end = new Date();
+          const start = new Date();
+          start.setDate(start.getDate() - 2);
+          
+          setStartDate(start);
+          setEndDate(end);
+          
+          // Fetch call data for the specific campaign
+          await fetchCallData(1, campaignId);
+        } else {
+          console.log('CallHistory: No URL params, fetching campaigns');
+          // Fetch campaigns first, then set up default campaign and fetch its data
+          await fetchCampaigns();
+        }
         
-        const end = new Date();
-        const start = new Date();
-        start.setDate(start.getDate() - 2);
-        
-        setStartDate(start);
-        setEndDate(end);
-        
-        // Fetch call data for the specific campaign
-        await fetchCallData(1, campaignId);
-      } else {
-        console.log('CallHistory: No URL params, fetching campaigns');
-        // Fetch campaigns first, then set up default campaign and fetch its data
-        await fetchCampaigns();
+        isInitialized = true;
+      } catch (error) {
+        console.error('Error during initialization:', error);
       }
     };
 
@@ -541,17 +566,24 @@ const CallHistory = () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
       }
+      // Reset refs on unmount
+      isFetchingRef.current = false;
+      lastFetchTimeRef.current = 0;
     };
   }, []); // Empty dependency array - only run once on mount
 
-  // Effect to handle campaign selection and date changes
+  // Separate effect to handle campaign selection and date changes (only after initialization)
   useEffect(() => {
+    // Skip if we're still initializing or if no campaign is selected
+    if (!selectedCampaign) return;
+    
     console.log('CallHistory: Campaign/date effect triggered:', { selectedCampaign, startDate, endDate });
     
-    if (selectedCampaign && startDate && endDate) {
+    // Only fetch if we have both dates set
+    if (startDate && endDate) {
       console.log('CallHistory: Campaign and dates are set, fetching call data for campaign:', selectedCampaign);
       fetchCallData(1, selectedCampaign, false);
-    } else if (selectedCampaign && (startDate === null || endDate === null)) {
+    } else if (startDate === null || endDate === null) {
       console.log('CallHistory: Campaign selected but dates not set, setting default dates');
       const end = new Date();
       const start = new Date();
@@ -559,7 +591,16 @@ const CallHistory = () => {
       setStartDate(start);
       setEndDate(end);
     }
-  }, [selectedCampaign, startDate, endDate]); // Only depend on campaign and dates, not fetching state
+  }, [selectedCampaign]); // Only depend on campaign selection, not dates
+
+  // Separate effect for date changes to prevent excessive API calls
+  useEffect(() => {
+    // Skip if we're still initializing or if no campaign is selected
+    if (!selectedCampaign || !startDate || !endDate) return;
+    
+    console.log('CallHistory: Date change effect triggered, fetching call data');
+    fetchCallData(1, selectedCampaign, false);
+  }, [startDate, endDate]); // Only depend on date changes
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -619,7 +660,7 @@ const CallHistory = () => {
     setIsLoadingTranscription(true);
 
     try {
-      const apiUrl = `https://platform.voxiflow.com/backend/api/v1/calls/${callId}/artifacts`;
+      const apiUrl = `http://192.168.0.6:8000/api/v1/calls/${callId}/artifacts`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -684,9 +725,12 @@ const CallHistory = () => {
       clearTimeout(searchTimeoutRef.current);
     }
     
-    searchTimeoutRef.current = setTimeout(() => {
-      fetchCallData(1, selectedCampaign, false);
-    }, 500);
+    // Only search if we have a campaign selected
+    if (selectedCampaign) {
+      searchTimeoutRef.current = setTimeout(() => {
+        fetchCallData(1, selectedCampaign, false);
+      }, 800); // Increased debounce time to 800ms
+    }
   };
 
   const handlePageChange = (page: number) => {
@@ -696,7 +740,10 @@ const CallHistory = () => {
     if (page < currentPage) {
       setNextCursor(null);
     }
-    fetchCallData(page, selectedCampaign, page > currentPage);
+    // Use setTimeout to respect cooldown
+    setTimeout(() => {
+      fetchCallData(page, selectedCampaign, page > currentPage);
+    }, 100);
   };
 
   const handleCampaignChange = (value: string) => {
@@ -705,7 +752,10 @@ const CallHistory = () => {
     setSelectedCampaignName(selectedCamp?.name || '');
     setNextCursor(null);
     setCurrentPage(1);
-    fetchCallData(1, value, false);
+    // Use setTimeout to respect cooldown
+    setTimeout(() => {
+      fetchCallData(1, value, false);
+    }, 100);
   };
 
   const handleRatingClick = (call: Call) => {
@@ -720,7 +770,7 @@ const CallHistory = () => {
     setIsSubmittingRating(true);
     try {
       const response = await fetch(
-        `https://platform.voxiflow.com/backend/api/v1/calls/${selectedCallForRating.Sid}/rating`,
+        `http://192.168.0.6:8000/api/v1/calls/${selectedCallForRating.Sid}/rating`,
         {
           method: 'POST',
           headers: {
@@ -790,7 +840,7 @@ const CallHistory = () => {
       campaign_id: selectedCampaign
     });
     try {
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/calls/', {
+      const response = await fetch('http://192.168.0.6:8000/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -849,7 +899,7 @@ const CallHistory = () => {
       }
 
       // Updated API endpoint as per user instruction
-      const apiUrl = `https://platform.voxiflow.com/backend/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
+      const apiUrl = `http://192.168.0.6:8000/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -897,7 +947,7 @@ const CallHistory = () => {
     let page = 1;
     const pageSize = 10;
     do {
-      let apiUrl = new URL(`https://platform.voxiflow.com/backend/api/v1/calls/external/${campaignId}/list`);
+      let apiUrl = new URL(`http://192.168.0.6:8000/api/v1/calls/external/${campaignId}/list`);
       apiUrl.searchParams.append('start_date', startDate);
       apiUrl.searchParams.append('end_date', endDate);
       apiUrl.searchParams.append('page_size', pageSize.toString());
@@ -921,7 +971,7 @@ const CallHistory = () => {
 
   // Add this function to fetch artifacts for a call
   const fetchArtifacts = async (callId: string) => {
-    const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/calls/${callId}/artifacts`, {
+    const response = await fetch(`http://192.168.0.6:8000/api/v1/calls/${callId}/artifacts`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         'Content-Type': 'application/json',
@@ -1153,7 +1203,10 @@ const CallHistory = () => {
                     setDurationFilter(value);
                     setNextCursor(null);
                     setCurrentPage(1);
-                    fetchCallData(1, selectedCampaign, false);
+                    // Use setTimeout to respect cooldown
+                    setTimeout(() => {
+                      fetchCallData(1, selectedCampaign, false);
+                    }, 100);
                   }}
                 >
                   <SelectTrigger className="w-[140px] h-8 border-gray-200 text-sm">
@@ -1178,7 +1231,10 @@ const CallHistory = () => {
                     setStatusFilter(value);
                     setNextCursor(null);
                     setCurrentPage(1);
-                    fetchCallData(1, selectedCampaign, false);
+                    // Use setTimeout to respect cooldown
+                    setTimeout(() => {
+                      fetchCallData(1, selectedCampaign, false);
+                    }, 100);
                   }}
                 >
                   <SelectTrigger className="w-[140px] h-8 border-gray-200 text-sm">
@@ -1207,7 +1263,10 @@ const CallHistory = () => {
                       setStatusFilter("all");
                       setNextCursor(null);
                       setCurrentPage(1);
-                      fetchCallData(1, selectedCampaign, false);
+                      // Use setTimeout to respect cooldown
+                      setTimeout(() => {
+                        fetchCallData(1, selectedCampaign, false);
+                      }, 100);
                     }}
                     className="h-8 px-2 border-gray-200 text-sm gap-1"
                   >

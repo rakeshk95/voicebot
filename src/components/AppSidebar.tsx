@@ -154,39 +154,39 @@ export function AppSidebar() {
   return (
     <div className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-sidebar-border flex flex-col z-30">
       {/* Logo Container */}
-      <div className="pt-4 shrink-0">
+      <div className="pt-2 shrink-0">
         <div className="px-6">
           <img 
             src={voxiflowLogo} 
             alt="Voxiflow" 
-            className="w-[180px] h-auto"
+            className="w-[160px] h-auto"
           />
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 mt-4 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 hover:scrollbar-thumb-gray-300">
+      <nav className="flex-1 px-4 mt-2 overflow-hidden">
         {organizedSidebarItems.length > 0 ? (
-          <div className="space-y-8">
+          <div className="space-y-4">
             {organizedSidebarItems.map((section, index) => (
-              <div key={section.section} className="space-y-3">
-                {index > 0 && <Separator className="my-4" />}
+              <div key={section.section} className="space-y-2">
+                {index > 0 && <Separator className="my-2" />}
                 {/* Section Header */}
-                <div className="px-3 py-2">
+                <div className="px-3 py-1">
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     {section.section}
                   </h3>
                 </div>
                 
                 {/* Section Items */}
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {section.items.map((item) => (
                     <NavLink 
                       key={item.title}
                       to={item.url} 
                       className={({ isActive }) =>
                         cn(
-                          "flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 group relative",
+                          "flex items-center px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 group relative",
                           isActive
                             ? "text-primary bg-blue-50 border-r-2 border-primary"
                             : "text-sidebar-foreground hover:text-primary hover:bg-primary/5"
@@ -194,12 +194,12 @@ export function AppSidebar() {
                       }
                     >
                       <item.icon className={cn(
-                        "w-5 h-5 mr-3 transition-colors duration-200",
+                        "w-4 h-4 mr-3 transition-colors duration-200",
                         currentPath === item.url ? "text-primary" : "text-sidebar-muted group-hover:text-primary"
                       )} />
                       {item.title}
                       {currentPath === item.url && (
-                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-primary rounded-l-full" />
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-primary rounded-l-full" />
                       )}
                     </NavLink>
                   ))}
@@ -208,12 +208,12 @@ export function AppSidebar() {
             ))}
           </div>
         ) : (
-          <div className="flex items-center justify-center h-32">
+          <div className="flex items-center justify-center h-24">
             <div className="text-center">
-              <div className="w-8 h-8 text-sidebar-muted mb-2">
+              <div className="w-6 h-6 text-sidebar-muted mb-2">
                 <Shield className="w-full h-full" />
               </div>
-              <p className="text-sm text-sidebar-muted">No accessible items</p>
+              <p className="text-xs text-sidebar-muted">No accessible items</p>
               <p className="text-xs text-sidebar-muted mt-1">Contact administrator for access</p>
             </div>
           </div>

@@ -12,7 +12,7 @@ import {
 } from '@/types/batchCalling';
 
 // API configuration
-const API_BASE_URL = 'https://platform.voxiflow.com/backend/api/v1';
+const API_BASE_URL = 'http://192.168.0.6:8000/api/v1';
 const BATCH_CALLS_BASE_URL = '/bulk-calls';
 
 /**
@@ -271,7 +271,7 @@ export async function getBatchCallDetails(bulkOperationId: string): Promise<Batc
     // According to Swagger docs, the primary endpoint is /bulk-calls/calls/{bulk_operation_id}
     const primaryEndpoint = `${BATCH_CALLS_BASE_URL}/calls/${bulkOperationId}`;
     console.log('Trying primary endpoint:', primaryEndpoint);
-    console.log('Full URL will be:', `https://platform.voxiflow.com/backend${primaryEndpoint}`);
+    console.log('Full URL will be:', `http://192.168.0.6:8000${primaryEndpoint}`);
     
     const response = await authorizedFetch<BatchCallResponse>(primaryEndpoint);
 
@@ -284,7 +284,7 @@ export async function getBatchCallDetails(bulkOperationId: string): Promise<Batc
       console.log('Trying alternative endpoint as fallback...');
       const alternativeEndpoint = `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/calls`;
       console.log('Trying alternative endpoint:', alternativeEndpoint);
-      console.log('Full alternative URL will be:', `https://platform.voxiflow.com/backend${alternativeEndpoint}`);
+      console.log('Full alternative URL will be:', `http://192.168.0.6:8000${alternativeEndpoint}`);
       
       const alternativeResponse = await authorizedFetch<BatchCallResponse>(alternativeEndpoint);
       
@@ -402,7 +402,7 @@ export async function getBatchCallSummary(bulkOperationId: string): Promise<Batc
 export async function testApiConnection(): Promise<boolean> {
   try {
     console.log('Testing API connection...');
-    const response = await fetch('https://platform.voxiflow.com/backend/api/v1/bulk-calls/summary', {
+    const response = await fetch('http://192.168.0.6:8000/api/v1/bulk-calls/summary', {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
@@ -576,7 +576,9 @@ export async function getBatchOperationsList(): Promise<BatchOperationsList> {
             successful_calls: callDetails.successful_calls || 0,
             failed_calls: callDetails.failed_calls || 0,
             pending_calls: callDetails.pending_calls || 0,
-            completed_calls: (callDetails.successful_calls || 0) + (callDetails.failed_calls || 0)
+            completed_calls: (callDetails.successful_calls || 0) + (callDetails.failed_calls || 0),
+            org_id: callDetails.org_id || (operation as any).org_id,
+            campaign_id: callDetails.campaign_id || (operation as any).campaign_id
           };
         } else {
           // Fallback to original operation data if call details fail
@@ -587,7 +589,9 @@ export async function getBatchOperationsList(): Promise<BatchOperationsList> {
             pending_calls: (operation as any).pending_calls || 0,
             completed_calls: (operation as any).completed_calls || 0,
             successful_calls: (operation as any).successful_calls || 0,
-            failed_calls: (operation as any).failed_calls || 0
+            failed_calls: (operation as any).failed_calls || 0,
+            org_id: (operation as any).org_id,
+            campaign_id: (operation as any).campaign_id
           };
         }
         
@@ -604,7 +608,9 @@ export async function getBatchOperationsList(): Promise<BatchOperationsList> {
           pending_calls: (operation as any).pending_calls || 0,
           completed_calls: (operation as any).completed_calls || 0,
           successful_calls: (operation as any).successful_calls || 0,
-          failed_calls: (operation as any).failed_calls || 0
+          failed_calls: (operation as any).failed_calls || 0,
+          org_id: (operation as any).org_id,
+          campaign_id: (operation as any).campaign_id
         };
         totalOperations++;
         if ((operation as any).is_active) {

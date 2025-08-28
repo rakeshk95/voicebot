@@ -422,6 +422,7 @@ const Campaigns = () => {
   // Add refs to prevent unnecessary API calls
   const hasFetchedOrganizations = useRef(false);
   const hasFetchedCampaigns = useRef(false);
+  const isFetchingCampaigns = useRef(false);
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
@@ -495,8 +496,25 @@ const Campaigns = () => {
   useEffect(() => {
     console.log('Campaigns useEffect running - fetching campaigns');
     
+    // Prevent multiple simultaneous API calls
+    if (hasFetchedCampaigns.current) {
+      console.log('Campaigns: Already fetched campaigns, skipping');
+      return;
+    }
+    
+    // Prevent multiple simultaneous API calls
+    if (isFetchingCampaigns.current) {
+      console.log('Campaigns: Already fetching campaigns, skipping');
+      return;
+    }
+    
+    // Don't wait for organizations - campaigns can be fetched independently
+    // Organizations will be used for display purposes only
+    
     const fetchCampaigns = async () => {
       try {
+        isFetchingCampaigns.current = true;
+        setIsLoading(true);
         console.log('Fetching campaigns...');
         console.log('Current organizations count:', organizations.length);
         
@@ -512,7 +530,7 @@ const Campaigns = () => {
         }
 
         // Build API URL with organization filter for non-superusers
-        let campaignUrl = 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
+        let campaignUrl = 'http://192.168.0.6:8000/api/v1/campaigns/';
         if (!isSuperUser && userData?.org_id) {
           campaignUrl += `?org_id=${userData.org_id}`;
           console.log('Campaigns: Non-superuser - filtering by organization:', userData.org_id);
@@ -543,7 +561,7 @@ const Campaigns = () => {
         const formattedCampaigns = data.map((campaign: any) => {
           // Find organization name by org_id
           const organization = organizations.find(org => org.id === campaign.org_id);
-          const orgName = organization ? organization.name : 'Unknown Organization';
+          const orgName = organization ? organization.name : (campaign.org_id ? `Org ${campaign.org_id}` : 'Unknown Organization');
           
           console.log(`Campaign ${campaign.name}: org_id=${campaign.org_id}, org_name=${orgName}`);
           
@@ -570,6 +588,7 @@ const Campaigns = () => {
 
         console.log('Formatted campaigns:', formattedCampaigns);
         setCampaigns(formattedCampaigns);
+        hasFetchedCampaigns.current = true;
       } catch (error) {
         console.error('Error fetching campaigns:', error);
         toast({
@@ -579,19 +598,23 @@ const Campaigns = () => {
         });
       } finally {
         setIsLoading(false);
+        isFetchingCampaigns.current = false;
       }
     };
 
-    // Only fetch campaigns if organizations are loaded or if we haven't fetched campaigns yet
-    if (organizations.length > 0 || campaigns.length === 0) {
-      fetchCampaigns();
-    }
-  }, [organizations]); // Add organizations as dependency
+    fetchCampaigns();
+  }, [organizations, isSuperUser, userData?.org_id]); // Simplified dependencies
 
 
 
   useEffect(() => {
     console.log('Organizations useEffect running - fetching organizations');
+    
+    // Prevent multiple simultaneous API calls
+    if (hasFetchedOrganizations.current) {
+      console.log('Campaigns: Organizations already fetched, skipping');
+      return;
+    }
     
     const fetchOrganizations = async () => {
       try {
@@ -601,11 +624,13 @@ const Campaigns = () => {
         const authToken = localStorage.getItem('authToken');
         if (!authToken) {
           console.error('No auth token found for organizations fetch');
+          setOrganizations([]);
+          hasFetchedOrganizations.current = true;
           return;
         }
         
         // Build organizations API URL with role-based filtering
-        let orgUrl = 'https://platform.voxiflow.com/backend/api/v1/organizations/';
+        let orgUrl = 'http://192.168.0.6:8000/api/v1/organizations/';
         if (!isSuperUser && userData?.org_id) {
           // For non-superusers, only show their organization
           console.log('Campaigns: Non-superuser - setting single organization:', userData.org_id);
@@ -640,7 +665,6 @@ const Campaigns = () => {
         if (Array.isArray(data)) {
           console.log('Setting organizations:', data.length, 'organizations');
           setOrganizations(data);
-          hasFetchedOrganizations.current = true;
         } else {
           console.error('Invalid organizations data format:', data);
           setOrganizations([]);
@@ -653,14 +677,14 @@ const Campaigns = () => {
           variant: "destructive",
         });
         setOrganizations([]);
+      } finally {
+        // Always mark as fetched to prevent infinite loops
+        hasFetchedOrganizations.current = true;
       }
     };
 
-    // Only fetch organizations if we haven't already loaded them
-    if (!hasFetchedOrganizations.current) {
-      fetchOrganizations();
-    }
-  }, []); // Empty dependency array since we use ref to track
+    fetchOrganizations();
+  }, [isSuperUser, userData?.org_id]); // Add proper dependencies
 
   // Reset status filter when campaigns change - but only if it's not already 'all'
   useEffect(() => {
@@ -668,6 +692,15 @@ const Campaigns = () => {
       setSelectedStatusFilter('all');
     }
   }, [campaigns, selectedStatusFilter]);
+
+  // Cleanup refs on component unmount
+  useEffect(() => {
+    return () => {
+      hasFetchedOrganizations.current = false;
+      hasFetchedCampaigns.current = false;
+      isFetchingCampaigns.current = false;
+    };
+  }, []);
 
   const filteredCampaigns = campaigns.filter(campaign => {
     if (!campaign) return false; // Add null check
@@ -700,7 +733,7 @@ const Campaigns = () => {
   const handleEdit = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://192.168.0.6:8000/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -954,8 +987,8 @@ const Campaigns = () => {
       // Remove FormData and Excel template logic for campaign create/edit
       // Send JSON body instead
       const url = editingCampaign 
-        ? `https://platform.voxiflow.com/backend/api/v1/campaigns/${editingCampaign.id}`
-        : 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
+        ? `http://192.168.0.6:8000/api/v1/campaigns/${editingCampaign.id}`
+        : 'http://192.168.0.6:8000/api/v1/campaigns/';
 
       const response = await fetch(url, {
         method: editingCampaign ? 'PUT' : 'POST',
@@ -1046,7 +1079,7 @@ const Campaigns = () => {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
 
     try {
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://192.168.0.6:8000/api/v1/campaigns/${campaign.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1097,7 +1130,7 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaignId}/upload`, {
+      const response = await fetch(`http://192.168.0.6:8000/api/v1/campaigns/${campaignId}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1157,7 +1190,7 @@ const Campaigns = () => {
         file: bulkCallFile.name
       });
 
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/bulk-calls/', {
+      const response = await fetch('http://192.168.0.6:8000/api/v1/bulk-calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1218,7 +1251,7 @@ const Campaigns = () => {
     };
 
     try {
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/calls/', {
+      const response = await fetch('http://192.168.0.6:8000/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1330,7 +1363,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://192.168.0.6:8000/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'

@@ -52,13 +52,15 @@ export function Header() {
   };
 
   return (
-    <div className="absolute top-4 right-4 z-50">
+    <div className="flex justify-end items-center p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-            <Avatar className="h-8 w-8">
+          <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors">
+            <Avatar className="h-10 w-10 border-2 border-border/50">
               <AvatarImage src={userData.avatar} alt={userData.name} />
-              <AvatarFallback>{userData.name.charAt(0).toUpperCase()}</AvatarFallback>
+              <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                {userData.name.charAt(0).toUpperCase()}
+              </AvatarFallback>
             </Avatar>
           </Button>
         </DropdownMenuTrigger>

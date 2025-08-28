@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
   Search, 
   Download, 
@@ -15,7 +16,12 @@ import {
   Database,
   AlertCircle,
   Info,
-  ChevronDown
+  ChevronDown,
+  Filter,
+  Calendar,
+  Clock,
+  User,
+  MessageSquare
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { getBatchCallDetails } from '@/lib/batchCallingApi';
@@ -32,6 +38,9 @@ export const BatchCallDetails: React.FC<BatchCallDetailsProps> = ({ operations }
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'success' | 'error'>('all');
+  const [filterApiType, setFilterApiType] = useState<'all' | 'external' | 'database' | 'local'>('all');
+  const [sortBy, setSortBy] = useState<'created_at' | 'customer_name' | 'processing_duration_ms' | 'call_status'>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const { toast } = useToast();
 
   // Helper function to parse external API response
@@ -72,6 +81,19 @@ export const BatchCallDetails: React.FC<BatchCallDetailsProps> = ({ operations }
     }
   };
 
+  // Helper function to get API type for filtering
+  const getApiType = (call: BatchCallDetail): 'external' | 'database' | 'local' => {
+    const parsedResponse = parseExternalApiResponse(call.external_api_response);
+    
+    if (parsedResponse?.external_api_used) {
+      return 'external';
+    } else if (parsedResponse?.fallback_to_database) {
+      return 'database';
+    } else {
+      return 'local';
+    }
+  };
+
   const fetchCallDetails = async (operationId: string) => {
     try {
       setLoading(true);
@@ -106,16 +128,51 @@ export const BatchCallDetails: React.FC<BatchCallDetailsProps> = ({ operations }
     }
   };
 
-  const filteredCalls = callDetails?.calls?.filter(call => {
-    const matchesSearch = 
-      call.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      call.phone_number.includes(searchTerm) ||
-      call.call_message.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = filterStatus === 'all' || call.call_status === filterStatus;
-    
-    return matchesSearch && matchesStatus;
-  }) || [];
+  // Enhanced filtering and sorting
+  const filteredAndSortedCalls = callDetails?.calls
+    ?.filter(call => {
+      const matchesSearch = 
+        call.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        call.phone_number.includes(searchTerm) ||
+        call.call_message.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        call.id.toString().includes(searchTerm);
+      
+      const matchesStatus = filterStatus === 'all' || call.call_status === filterStatus;
+      const matchesApiType = filterApiType === 'all' || getApiType(call) === filterApiType;
+      
+      return matchesSearch && matchesStatus && matchesApiType;
+    })
+    ?.sort((a, b) => {
+      let aValue: any, bValue: any;
+      
+      switch (sortBy) {
+        case 'created_at':
+          aValue = new Date(a.created_at).getTime();
+          bValue = new Date(b.created_at).getTime();
+          break;
+        case 'customer_name':
+          aValue = a.customer_name.toLowerCase();
+          bValue = b.customer_name.toLowerCase();
+          break;
+        case 'processing_duration_ms':
+          aValue = a.processing_duration_ms;
+          bValue = b.processing_duration_ms;
+          break;
+        case 'call_status':
+          aValue = a.call_status.toLowerCase();
+          bValue = b.call_status.toLowerCase();
+          break;
+        default:
+          aValue = new Date(a.created_at).getTime();
+          bValue = new Date(b.created_at).getTime();
+      }
+      
+      if (sortOrder === 'asc') {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    }) || [];
 
   const exportToCSV = () => {
     if (!callDetails || !callDetails.calls || callDetails.calls.length === 0) {
@@ -137,12 +194,14 @@ export const BatchCallDetails: React.FC<BatchCallDetailsProps> = ({ operations }
       'Fallback to Database',
       'Processing Duration (ms)',
       'Created At',
-      'Completed At'
+      'Completed At',
+      'Call ID',
+      'Internal Call ID'
     ];
 
     const csvContent = [
       headers.join(','),
-      ...filteredCalls.map(call => {
+      ...filteredAndSortedCalls.map(call => {
         const parsedResponse = parseExternalApiResponse(call.external_api_response);
         return [
           call.excel_row,
@@ -154,7 +213,9 @@ export const BatchCallDetails: React.FC<BatchCallDetailsProps> = ({ operations }
           parsedResponse?.fallback_to_database ? 'Yes' : 'No',
           call.processing_duration_ms,
           call.created_at,
-          call.processing_end_time
+          call.processing_end_time,
+          parsedResponse?.call_id || '',
+          parsedResponse?.internal_call_id || ''
         ].join(',');
       })
     ].join('\n');
@@ -214,6 +275,23 @@ export const BatchCallDetails: React.FC<BatchCallDetailsProps> = ({ operations }
       minute: '2-digit',
       second: '2-digit'
     });
+  };
+
+  const handleSort = (column: typeof sortBy) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('desc');
+    }
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterStatus('all');
+    setFilterApiType('all');
+    setSortBy('created_at');
+    setSortOrder('desc');
   };
 
   return (
@@ -278,137 +356,267 @@ export const BatchCallDetails: React.FC<BatchCallDetailsProps> = ({ operations }
             ) : callDetails ? (
               <div className="space-y-6">
                 {/* Summary Stats */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <div className="text-2xl font-bold text-blue-600">{callDetails.total_calls}</div>
-                    <div className="text-sm text-blue-700 font-medium">Total Calls</div>
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="text-center p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="text-xl font-bold text-blue-600">{callDetails.total_calls}</div>
+                    <div className="text-xs text-blue-700 font-medium">Total Calls</div>
                   </div>
-                  <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
-                    <div className="text-2xl font-bold text-green-600">{callDetails.successful_calls}</div>
-                    <div className="text-sm text-green-700 font-medium">Successful</div>
+                  <div className="text-center p-3 bg-green-50 rounded-lg border border-green-200">
+                    <div className="text-xl font-bold text-green-600">{callDetails.successful_calls}</div>
+                    <div className="text-xs text-green-700 font-medium">Successful</div>
                   </div>
-                  <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
-                    <div className="text-2xl font-bold text-red-600">{callDetails.failed_calls}</div>
-                    <div className="text-sm text-red-700 font-medium">Failed</div>
+                  <div className="text-center p-3 bg-red-50 rounded-lg border border-red-200">
+                    <div className="text-xl font-bold text-red-600">{callDetails.failed_calls}</div>
+                    <div className="text-xs text-red-700 font-medium">Failed</div>
                   </div>
-                  <div className="text-center p-4 bg-purple-50 rounded-lg border border-purple-200">
-                    <div className="text-2xl font-bold text-purple-600">
+                  <div className="text-center p-3 bg-purple-50 rounded-lg border border-purple-200">
+                    <div className="text-xl font-bold text-purple-600">
                       {callDetails.calls.filter(call => parseExternalApiResponse(call.external_api_response)?.external_api_used).length}
                     </div>
-                    <div className="text-sm text-purple-700 font-medium">External API</div>
+                    <div className="text-xs text-purple-700 font-medium">External API</div>
                   </div>
                 </div>
 
                 {/* Operation Info */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-gray-50 rounded-lg border">
-                    <h4 className="font-semibold text-gray-800 mb-2">Operation Information</h4>
-                    <div className="space-y-1 text-sm">
-                      <p><span className="font-medium">Operation ID:</span> {callDetails.bulk_operation_id}</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-3 bg-gray-50 rounded-lg border">
+                    <h4 className="font-semibold text-gray-800 mb-1 text-sm">Operation Information</h4>
+                    <div className="space-y-0.5 text-xs">
+                      <p><span className="font-medium">Operation ID:</span> {callDetails.bulk_operation_id.slice(-8)}</p>
                       <p><span className="font-medium">Organization:</span> {callDetails.org_id}</p>
                       <p><span className="font-medium">Campaign:</span> {callDetails.campaign_id}</p>
                     </div>
                   </div>
-                  <div className="p-4 bg-gray-50 rounded-lg border">
-                    <h4 className="font-semibold text-gray-800 mb-2">Performance Metrics</h4>
-                    <div className="space-y-1 text-sm">
+                  <div className="p-3 bg-gray-50 rounded-lg border">
+                    <h4 className="font-semibold text-gray-800 mb-1 text-sm">Performance Metrics</h4>
+                    <div className="space-y-0.5 text-xs">
                       <p><span className="font-medium">Success Rate:</span> {((callDetails.successful_calls / (callDetails.expected_total_calls || callDetails.total_calls || 1)) * 100).toFixed(1)}%</p>
                       <p><span className="font-medium">Failure Rate:</span> {((callDetails.failed_calls / (callDetails.expected_total_calls || callDetails.total_calls || 1)) * 100).toFixed(1)}%</p>
                       <p><span className="font-medium">Avg Duration:</span> {(callDetails.calls.reduce((sum, call) => sum + call.processing_duration_ms, 0) / callDetails.calls.length).toFixed(0)}ms</p>
                     </div>
                   </div>
+                  <div className="p-3 bg-gray-50 rounded-lg border">
+                    <h4 className="font-semibold text-gray-800 mb-1 text-sm">Call Distribution</h4>
+                    <div className="space-y-0.5 text-xs">
+                      <p><span className="font-medium">Total:</span> {callDetails.total_calls}</p>
+                      <p><span className="font-medium">Pending:</span> {callDetails.pending_calls}</p>
+                      <p><span className="font-medium">Expected:</span> {callDetails.expected_total_calls}</p>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Filters and Export */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="relative max-w-sm">
-                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search calls..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-8"
-                      />
+                {/* Enhanced Filters */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Filter className="h-4 w-4" />
+                      Filters & Search
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                      {/* Search */}
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                        <Input
+                          placeholder="Search calls..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-8 h-8 text-sm"
+                        />
+                      </div>
+
+                      {/* Status Filter */}
+                      <Select value={filterStatus} onValueChange={(value: 'all' | 'success' | 'error') => setFilterStatus(value)}>
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="All Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Status</SelectItem>
+                          <SelectItem value="success">Success</SelectItem>
+                          <SelectItem value="error">Error</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      {/* API Type Filter */}
+                      <Select value={filterApiType} onValueChange={(value: 'all' | 'external' | 'database' | 'local') => setFilterApiType(value)}>
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="All API Types" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All API Types</SelectItem>
+                          <SelectItem value="external">External API</SelectItem>
+                          <SelectItem value="database">Database Fallback</SelectItem>
+                          <SelectItem value="local">Local Only</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      {/* Sort By */}
+                      <Select value={sortBy} onValueChange={(value: typeof sortBy) => setSortBy(value)}>
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="created_at">Created Date</SelectItem>
+                          <SelectItem value="customer_name">Customer Name</SelectItem>
+                          <SelectItem value="processing_duration_ms">Duration</SelectItem>
+                          <SelectItem value="call_status">Status</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      {/* Sort Order */}
+                      <Select value={sortOrder} onValueChange={(value: 'asc' | 'desc') => setSortOrder(value)}>
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="desc">Descending</SelectItem>
+                          <SelectItem value="asc">Ascending</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <Select value={filterStatus} onValueChange={(value: 'all' | 'success' | 'error') => setFilterStatus(value)}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="success">Success</SelectItem>
-                        <SelectItem value="error">Error</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={exportToCSV}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Export CSV
-                  </Button>
-                </div>
+
+                    <div className="flex items-center justify-between mt-3">
+                      <Button variant="outline" size="sm" onClick={clearFilters} className="h-8 text-sm">
+                        <Filter className="h-3 w-3 mr-1" />
+                        Clear Filters
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={exportToCSV} className="h-8 text-sm">
+                        <Download className="h-3 w-3 mr-1" />
+                        Export CSV
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
 
                 {/* Results Count */}
                 <div className="text-sm text-muted-foreground">
-                  Showing {filteredCalls.length} of {callDetails.total_calls} calls
+                  Showing {filteredAndSortedCalls.length} of {callDetails.total_calls} calls
                 </div>
 
-                {/* Individual Call Cards */}
-                <div className="space-y-3">
-                  {filteredCalls.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Info className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                      <p className="text-lg font-medium">No calls found</p>
-                      <p className="text-sm">Try adjusting your search or filter criteria.</p>
-                    </div>
-                  ) : (
-                    filteredCalls.map((call) => {
-                      const parsedResponse = parseExternalApiResponse(call.external_api_response);
-                      return (
-                        <div key={call.id} className="p-4 bg-white border rounded-lg hover:shadow-md transition-shadow">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center space-x-3">
-                              <span className="text-lg font-semibold text-gray-900">#{call.excel_row}</span>
-                              <span className="text-lg font-medium text-gray-800">{call.customer_name}</span>
-                              <span className="text-sm text-gray-600 font-mono">{call.phone_number}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Badge className={call.call_status === 'success' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}>
-                                {call.call_status === 'success' ? <CheckCircle className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
-                                {call.call_status.charAt(0).toUpperCase() + call.call_status.slice(1)}
-                              </Badge>
-                              {getExternalApiBadge(call)}
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                            <div>
-                              <span className="font-medium text-gray-700">Message:</span>
-                              <p className="text-gray-600 mt-1">{call.call_message}</p>
-                            </div>
-                            <div>
-                              <span className="font-medium text-gray-700">Processing:</span>
-                              <p className="text-gray-600 mt-1">{formatDuration(call.processing_duration_ms)}</p>
-                              <p className="text-gray-500 text-xs">Created: {formatDateTime(call.created_at)}</p>
-                            </div>
-                            <div>
-                              <span className="font-medium text-gray-700">External API:</span>
-                              {parsedResponse ? (
-                                <div className="text-gray-600 mt-1 space-y-1">
-                                  <p className="text-xs"><span className="font-medium">Call ID:</span> {parsedResponse.call_id}</p>
-                                  <p className="text-xs"><span className="font-medium">Status:</span> {parsedResponse.status}</p>
-                                  <p className="text-xs"><span className="font-medium">Internal ID:</span> {parsedResponse.internal_call_id}</p>
+                {/* Calls Table */}
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="relative">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-gray-50">
+                            <TableHead className="font-semibold cursor-pointer w-12" onClick={() => handleSort('created_at')}>
+                              <div className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                Row
+                                {sortBy === 'created_at' && (
+                                  <ChevronDown className={`h-2 w-2 transition-transform ${sortOrder === 'asc' ? 'rotate-180' : ''}`} />
+                                )}
+                              </div>
+                            </TableHead>
+                            <TableHead className="font-semibold cursor-pointer w-28" onClick={() => handleSort('customer_name')}>
+                              <div className="flex items-center gap-1">
+                                <User className="h-3 w-3" />
+                                Customer
+                                {sortBy === 'customer_name' && (
+                                  <ChevronDown className={`h-2 w-2 transition-transform ${sortOrder === 'asc' ? 'rotate-180' : ''}`} />
+                                )}
+                              </div>
+                            </TableHead>
+                            <TableHead className="font-semibold w-24">Phone</TableHead>
+                            <TableHead className="font-semibold cursor-pointer w-16" onClick={() => handleSort('call_status')}>
+                              <div className="flex items-center gap-1">
+                                Status
+                                {sortBy === 'call_status' && (
+                                  <ChevronDown className={`h-2 w-2 transition-transform ${sortOrder === 'asc' ? 'rotate-180' : ''}`} />
+                                )}
+                              </div>
+                            </TableHead>
+                            <TableHead className="font-semibold w-20">API</TableHead>
+                            <TableHead className="font-semibold cursor-pointer w-16" onClick={() => handleSort('processing_duration_ms')}>
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                Time
+                                {sortBy === 'processing_duration_ms' && (
+                                  <ChevronDown className={`h-2 w-2 transition-transform ${sortOrder === 'asc' ? 'rotate-180' : ''}`} />
+                                )}
+                              </div>
+                            </TableHead>
+                            <TableHead className="font-semibold w-24">Created</TableHead>
+                            <TableHead className="font-semibold w-32">Message</TableHead>
+                            <TableHead className="font-semibold w-24">Details</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredAndSortedCalls.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={9} className="text-center py-8">
+                                <div className="flex flex-col items-center">
+                                  <Info className="h-12 w-12 text-gray-400 mb-4" />
+                                  <p className="text-lg font-medium text-gray-500">No calls found</p>
+                                  <p className="text-sm text-gray-400">Try adjusting your search or filter criteria.</p>
                                 </div>
-                              ) : (
-                                <p className="text-gray-500 text-xs mt-1">No external API data</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            filteredAndSortedCalls.map((call) => {
+                              const parsedResponse = parseExternalApiResponse(call.external_api_response);
+                              return (
+                                <TableRow key={call.id} className="hover:bg-gray-50">
+                                  <TableCell className="font-mono text-xs w-12">
+                                    #{call.excel_row}
+                                  </TableCell>
+                                  <TableCell className="w-28">
+                                    <div className="font-medium truncate text-sm" title={call.customer_name}>
+                                      {call.customer_name}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs w-24">
+                                    {call.phone_number}
+                                  </TableCell>
+                                  <TableCell className="w-16">
+                                    {getStatusBadge(call.call_status)}
+                                  </TableCell>
+                                  <TableCell className="w-20">
+                                    {getExternalApiBadge(call)}
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs w-16">
+                                    {formatDuration(call.processing_duration_ms)}
+                                  </TableCell>
+                                  <TableCell className="text-xs w-24">
+                                    <div className="truncate" title={formatDateTime(call.created_at)}>
+                                      {new Date(call.created_at).toLocaleDateString('en-US', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="w-32">
+                                    <div className="truncate text-xs" title={call.call_message}>
+                                      {call.call_message}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-xs w-24">
+                                    {parsedResponse ? (
+                                      <div className="space-y-0.5">
+                                        <div className="truncate" title={parsedResponse.call_id || 'N/A'}>
+                                          <span className="font-medium">ID:</span> {parsedResponse.call_id || 'N/A'}
+                                        </div>
+                                        <div className="truncate" title={parsedResponse.status || 'N/A'}>
+                                          <span className="font-medium">Status:</span> {parsedResponse.status || 'N/A'}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-500">No external API data</span>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             ) : (
               <div className="text-center py-8 text-muted-foreground">

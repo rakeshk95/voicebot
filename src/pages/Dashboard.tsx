@@ -289,7 +289,7 @@ interface Campaign {
 const Dashboard = () => {
   const { userPermissions, userRole, hasPermission } = usePermissions();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -318,6 +318,9 @@ const Dashboard = () => {
   
   // Ref to track if initialization has already run
   const hasInitializedRef = useRef(false);
+  
+  // Ref to prevent multiple organization fetches
+  const organizationsFetchedRef = useRef(false);
   
   const userData = getUserData();
   const isSuperAdmin = userPermissions?.admin;
@@ -372,49 +375,45 @@ const Dashboard = () => {
     // Prevent multiple calls
     if (filterDataLoading || isFilterDataLoaded) {
       console.log('Dashboard: Filter data already loading or loaded, skipping...');
-      return;
+      return Promise.resolve();
     }
     
     try {
       setFilterDataLoading(true);
       console.log('Dashboard: Starting fetchFilterData...', { isSuperUser, userData: userData?.org_id });
       
-      // Fetch organizations
-      if (isSuperUser) {
-        console.log('Dashboard: About to fetch organizations for superuser...');
-        try {
-          console.log('Dashboard: Calling organizations API directly...');
-          const orgResponse = await authorizedFetch('/organizations');
-          console.log('Dashboard: Organizations API response status:', orgResponse.status);
-          
-          if (orgResponse.ok) {
-            const orgData = await orgResponse.json() as Organization[];
-            console.log('Dashboard: Organizations fetched for superuser:', orgData);
-            if (orgData && orgData.length > 0) {
-              setOrganizations(orgData);
-            } else {
-              console.log('Dashboard: No organizations returned from API for superuser');
-              setOrganizations([]);
+      // Fetch organizations for all users
+      console.log('Dashboard: About to fetch organizations...');
+      try {
+        console.log('Dashboard: Calling organizations API...');
+        const orgResponse = await authorizedFetch('/organizations');
+        console.log('Dashboard: Organizations API response status:', orgResponse.status);
+        
+        if (orgResponse.ok) {
+          const orgData = await orgResponse.json() as Organization[];
+          console.log('Dashboard: Organizations fetched:', orgData);
+          if (orgData && orgData.length > 0) {
+            setOrganizations(orgData);
+            
+            // For non-superusers, set their organization as the default filter if available
+            if (!isSuperUser && userData?.org_id) {
+              const userOrg = orgData.find(org => org.id === userData.org_id);
+              if (userOrg) {
+                console.log('Dashboard: Setting user organization as default filter:', userData.org_id);
+                setFilters(prev => ({ ...prev, org_id: userData.org_id }));
+              }
             }
           } else {
-            const errorText = await orgResponse.text();
-            console.error('Dashboard: Failed to fetch organizations for superuser:', orgResponse.status, errorText);
+            console.log('Dashboard: No organizations returned from API');
             setOrganizations([]);
           }
-        } catch (error) {
-          console.error('Dashboard: Error fetching organizations for superuser:', error);
-          // For superusers, if API fails, show empty state
+        } else {
+          const errorText = await orgResponse.text();
+          console.error('Dashboard: Failed to fetch organizations:', orgResponse.status, errorText);
           setOrganizations([]);
         }
-      } else if (userData?.org_id) {
-        // Regular user (non-superuser) - only show their organization
-        console.log('Dashboard: Setting user organization for non-superuser:', userData.org_id);
-        const orgName = userData.org_name || userData.user_name || 'My Organization';
-        setOrganizations([{ id: userData.org_id, name: orgName }]);
-        // For non-superusers, set their organization as the default filter
-        setFilters(prev => ({ ...prev, org_id: userData.org_id }));
-      } else {
-        console.log('Dashboard: No user data or org_id available');
+      } catch (error) {
+        console.error('Dashboard: Error fetching organizations:', error);
         setOrganizations([]);
       }
 
@@ -456,24 +455,20 @@ const Dashboard = () => {
     } finally {
       setFilterDataLoading(false);
     }
+    
+    return Promise.resolve();
   };
 
-  // Force organizations to load for superusers if they're missing
+  // Single, consolidated organizations loader - prevents multiple API calls
   useEffect(() => {
-    if (isSuperUser && userData && organizations.length === 0 && !filterDataLoading) {
-      console.log('Dashboard: Superuser detected with no organizations - forcing load...');
-      setIsFilterDataLoaded(false);
-      fetchFilterData();
-    }
-  }, [isSuperUser, userData, organizations.length, filterDataLoading]);
-
-  // Simple organizations loader - only check if superuser or not
-  useEffect(() => {
-    console.log('Dashboard: Organizations useEffect triggered with:', { isSuperUser, userData: !!userData });
-    
-    const loadOrganizations = async () => {
-      if (isSuperUser) {
-        console.log('Dashboard: Superuser detected - loading organizations...');
+    // Only load organizations if we have userData and haven't loaded them yet
+    if (userData && organizations.length === 0 && !filterDataLoading && !isFilterDataLoaded && !organizationsFetchedRef.current) {
+      console.log('Dashboard: Loading organizations (single useEffect)...');
+      
+      const loadOrganizations = async () => {
+        // Set flag to prevent multiple fetches
+        organizationsFetchedRef.current = true;
+        
         try {
           console.log('Dashboard: Calling organizations API...');
           const orgResponse = await authorizedFetch('/organizations');
@@ -483,51 +478,37 @@ const Dashboard = () => {
             const orgData = await orgResponse.json() as Organization[];
             console.log('Dashboard: Organizations loaded successfully:', orgData);
             setOrganizations(orgData);
+            
+            // For non-superusers, set their organization as the default filter if available
+            if (!isSuperUser && userData?.org_id) {
+              const userOrg = orgData.find(org => org.id === userData.org_id);
+              if (userOrg) {
+                console.log('Dashboard: Setting user organization as default filter:', userData.org_id);
+                setFilters(prev => ({ ...prev, org_id: userData.org_id }));
+              }
+            }
           } else {
             const errorText = await orgResponse.text();
             console.error('Dashboard: Organizations API error:', orgResponse.status, errorText);
+            setOrganizations([]);
           }
         } catch (error) {
           console.error('Dashboard: Organizations fetch error:', error);
-        }
-      } else if (userData?.org_id) {
-        // Regular user - set their organization
-        console.log('Dashboard: Regular user - setting organization:', userData.org_id);
-        setOrganizations([{ id: userData.org_id, name: userData.user_name || 'My Organization' }]);
-        setFilters(prev => ({ ...prev, org_id: userData.org_id }));
-      }
-    };
-
-    // Call immediately if userData exists
-    if (userData) {
-      loadOrganizations();
-    } else {
-      console.log('Dashboard: No userData, skipping organizations load');
-    }
-  }, [isSuperUser, userData]);
-
-  // Force organizations to load when component mounts
-  useEffect(() => {
-    if (userData && organizations.length === 0) {
-      console.log('Dashboard: Component mounted with no organizations - forcing load...');
-      const loadOrganizations = async () => {
-        if (isSuperUser) {
-          try {
-            console.log('Dashboard: Force loading organizations...');
-            const orgResponse = await authorizedFetch('/organizations');
-            if (orgResponse.ok) {
-              const orgData = await orgResponse.json() as Organization[];
-              console.log('Dashboard: Force loaded organizations:', orgData);
-              setOrganizations(orgData);
-            }
-          } catch (error) {
-            console.error('Dashboard: Force load organizations error:', error);
-          }
+          setOrganizations([]);
         }
       };
+      
       loadOrganizations();
     }
-  }, [userData, organizations.length, isSuperUser]);
+  }, [userData, organizations.length, filterDataLoading, isFilterDataLoaded, isSuperUser]);
+
+  // Cleanup refs on unmount
+  useEffect(() => {
+    return () => {
+      organizationsFetchedRef.current = false;
+      hasInitializedRef.current = false;
+    };
+  }, []);
 
   // Debug user data and permissions (only in development)
   if (process.env.NODE_ENV === 'development') {
@@ -542,29 +523,7 @@ const Dashboard = () => {
     console.log('Dashboard: hasInitializedRef.current:', hasInitializedRef.current);
   }
 
-  // Immediate organizations load for superusers
-  if (isSuperUser && userData && organizations.length === 0) {
-    console.log('Dashboard: Immediate organizations load triggered...');
-    // Use setTimeout to avoid calling setState during render
-    setTimeout(() => {
-      const loadOrganizations = async () => {
-        try {
-          console.log('Dashboard: Immediate loading organizations...');
-          const orgResponse = await authorizedFetch('/organizations');
-          if (orgResponse.ok) {
-            const orgData = await orgResponse.json() as Organization[];
-            console.log('Dashboard: Immediate loaded organizations:', orgData);
-            setOrganizations(orgData);
-          }
-        } catch (error) {
-          console.error('Dashboard: Immediate load organizations error:', error);
-        }
-      };
-      loadOrganizations();
-    }, 0);
-  }
-
-  // Simple dashboard initialization
+  // Simplified dashboard initialization
   useEffect(() => {
     let isMounted = true;
     
@@ -575,15 +534,16 @@ const Dashboard = () => {
       isSuperUser
     });
     
-    // Simple condition: if user data exists and not initialized yet
-    if (userData && !hasInitializedRef.current && isMounted) {
+    // Initialize if user data exists and not initialized yet
+    if (userData && !hasInitialized && isMounted) {
       console.log('Dashboard: Initializing dashboard...');
       hasInitializedRef.current = true;
       
-      // Fetch campaigns and then dashboard
-      fetchCampaigns().then(() => {
-        console.log('Dashboard: Campaigns loaded, now fetching dashboard...');
+      // Fetch filter data first, then dashboard
+      fetchFilterData().then(() => {
+        console.log('Dashboard: Filter data loaded, now fetching dashboard...');
         fetchDashboard();
+        setHasInitialized(true);
       });
     } else {
       console.log('Dashboard: Skipping initialization - conditions not met');
@@ -592,23 +552,7 @@ const Dashboard = () => {
     return () => {
       isMounted = false;
     };
-  }, [userData]); // Simplified dependencies
-
-  // Dashboard fetch effect - only runs after filters are loaded
-  useEffect(() => {
-    let isMounted = true;
-    
-    // Only fetch dashboard when filters are loaded and we haven't initialized yet
-    if (isFilterDataLoaded && !hasInitialized && isMounted) {
-      console.log('Dashboard: Filters loaded, fetching dashboard...');
-      fetchDashboard();
-      setHasInitialized(true);
-    }
-    
-    return () => {
-      isMounted = false;
-    };
-  }, [isFilterDataLoaded, hasInitialized]);
+  }, [userData, hasInitialized]); // Include hasInitialized in dependencies
 
   // Refresh dashboard when user organization changes (only for non-superuser users)
   useEffect(() => {
@@ -698,7 +642,7 @@ const Dashboard = () => {
 
       // Use the new comprehensive dashboard endpoint
       const apiUrl = `/dashboard/comprehensive?${params}`;
-      console.log('Dashboard: API call:', `${process.env.NODE_ENV === 'development' ? 'https://platform.voxiflow.com/backend/api/v1' : ''}${apiUrl}`);
+      console.log('Dashboard: API call:', `${process.env.NODE_ENV === 'development' ? 'http://192.168.0.6:8000/api/v1' : ''}${apiUrl}`);
       
       const response = await authorizedFetch(apiUrl);
       
@@ -823,20 +767,45 @@ const Dashboard = () => {
     }
   };
 
-  // Loading skeleton
-  if (loading) {
+
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Failed to Load Dashboard</h2>
+        <p className="text-gray-600 mb-4">{error}</p>
+        <Button onClick={handleRefresh} variant="outline">
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Try Again
+        </Button>
+      </div>
+    );
+  }
+
+  // Show loading state when loading is true OR when metrics is not available but we're still loading
+  if (loading || (!metrics && !error)) {
+    console.log('Dashboard: Showing loading state', { loading, hasMetrics: !!metrics, hasError: !!error });
     return (
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <Skeleton className="h-8 w-64" />
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-64" />
+          </div>
           <Skeleton className="h-10 w-32" />
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {[...Array(4)].map((_, i) => (
             <Card key={i}>
-              <CardContent className="p-6">
-                <Skeleton className="h-20 w-full" />
+              <CardHeader>
+                <Skeleton className="h-5 w-24" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-4 w-32" />
               </CardContent>
             </Card>
           ))}
@@ -854,33 +823,6 @@ const Dashboard = () => {
             </Card>
           ))}
         </div>
-      </div>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Failed to Load Dashboard</h2>
-        <p className="text-gray-600 mb-4">{error}</p>
-        <Button onClick={handleRefresh} variant="outline">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Try Again
-        </Button>
-      </div>
-    );
-  }
-
-  // Don't render anything if metrics is not available
-  if (!metrics) {
-    console.log('Dashboard: metrics is null/undefined');
-    return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <AlertCircle className="h-16 w-16 text-gray-400 mb-4" />
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">No Data Available</h2>
-        <p className="text-gray-600">Dashboard data is not available at the moment.</p>
       </div>
     );
   }
@@ -996,26 +938,7 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header with filters */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Call Center Dashboard</h1>
-          <p className="text-gray-600 mt-1">
-            {/* Status indicators hidden for cleaner look */}
-          </p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={refreshAllData}
-            disabled={loading || refreshing}
-            className="h-10"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading || refreshing ? 'animate-spin' : ''}`} />
-            Refresh All
-          </Button>
-        </div>
-      </div>
+
 
       {/* Filters */}
       <Card className="p-4">
@@ -1205,198 +1128,55 @@ const Dashboard = () => {
             </Select>
           </div>
 
-          {/* Filter Refresh Button */}
-          <div className="flex items-end gap-2">
-            <Button
-              onClick={async () => {
-                console.log('Dashboard: Manual organizations refresh clicked...');
-                setFilterDataLoading(true);
-                
-                try {
-                  console.log('Dashboard: Making manual organizations API call...');
-                  const orgResponse = await authorizedFetch('/organizations');
-                  console.log('Dashboard: Manual organizations API response status:', orgResponse.status);
-                  
-                  if (orgResponse.ok) {
-                    const orgData = await orgResponse.json() as Organization[];
-                    console.log('Dashboard: Manual organizations fetch successful:', orgData);
-                    setOrganizations(orgData);
-                    
-                    // Also refresh campaigns after organizations are updated
-                    if (orgData.length > 0) {
-                      console.log('Dashboard: Refreshing campaigns after organizations update...');
-                      await fetchCampaigns();
-                    }
-                    
-                    // Refresh dashboard data with current filters
-                    console.log('Dashboard: Refreshing dashboard after organizations update...');
-                    await fetchDashboard();
-                    
-                    // Reset filter data loaded flag to ensure fresh data
-                    setIsFilterDataLoaded(false);
-                    setTimeout(() => setIsFilterDataLoaded(true), 100);
-                    
-                    toast({
-                      title: "Success",
-                      description: "Organizations and related data refreshed successfully",
-                      variant: "default",
-                    });
-                  } else {
-                    const errorText = await orgResponse.text();
-                    console.error('Dashboard: Manual organizations API error:', orgResponse.status, errorText);
-                    toast({
-                      title: "Error",
-                      description: `Failed to fetch organizations: ${orgResponse.status}`,
-                      variant: "destructive",
-                    });
-                  }
-                } catch (error) {
-                  console.error('Dashboard: Manual organizations fetch error:', error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to refresh organizations data",
-                    variant: "destructive",
-                  });
-                } finally {
-                  setFilterDataLoading(false);
-                }
-              }}
-              variant="outline"
-              size="sm"
-              disabled={filterDataLoading}
-              className="h-10"
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${filterDataLoading ? 'animate-spin' : ''}`} />
-              Test Orgs API
-            </Button>
-            
-            <Button
-              onClick={async () => {
-                console.log('Dashboard: Manual dashboard fetch clicked...');
-                setLoading(true);
-                
-                try {
-                  // Refresh all filter data first
-                  console.log('Dashboard: Refreshing filter data...');
-                  await fetchFilterData();
-                  
-                  // Then refresh dashboard data
-                  console.log('Dashboard: Refreshing dashboard data...');
-                  await fetchDashboard();
-                  
-                  toast({
-                    title: "Success",
-                    description: "Dashboard data refreshed successfully",
-                    variant: "default",
-                  });
-                } catch (error) {
-                  console.error('Dashboard: Manual refresh error:', error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to refresh dashboard data",
-                    variant: "destructive",
-                  });
-                } finally {
-                  setLoading(false);
-                }
-              }}
-              variant="outline"
-              size="sm"
-              className="h-10"
-              title="Test dashboard API and refresh all data"
-              disabled={loading}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Test Dashboard
-            </Button>
-            
-            <Button
-              onClick={async () => {
-                console.log('Dashboard: Manual campaigns fetch clicked...');
-                setFilterDataLoading(true);
-                
-                try {
-                  // Refresh campaigns data
-                  console.log('Dashboard: Refreshing campaigns...');
-                  await fetchCampaigns();
-                  
-                  // Also refresh dashboard to show updated campaign data
-                  console.log('Dashboard: Refreshing dashboard after campaigns update...');
-                  await fetchDashboard();
-                  
-                  toast({
-                    title: "Success",
-                    description: "Campaigns data refreshed successfully",
-                    variant: "default",
-                  });
-                } catch (error) {
-                  console.error('Dashboard: Manual campaigns refresh error:', error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to refresh campaigns data",
-                    variant: "destructive",
-                  });
-                } finally {
-                  setFilterDataLoading(false);
-                }
-              }}
-              variant="outline"
-              size="sm"
-              className="h-10"
-              title="Test campaigns API and refresh data"
-              disabled={filterDataLoading}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${filterDataLoading ? 'animate-spin' : ''}`} />
-              Test Campaigns
-            </Button>
-            
-            <Button
-              onClick={async () => {
-                console.log('Dashboard: Resetting filters and refreshing all data...');
-                setLoading(true);
-                
-                try {
-                  // Reset filters
-                  setFilters({
-                    org_id: 'all',
-                    campaign_id: 'all',
-                    days: filters.days // Keep the same time period
-                  });
-                  
-                  // Refresh filter data
-                  console.log('Dashboard: Refreshing filter data after reset...');
-                  await fetchFilterData();
-                  
-                  // Fetch all data from API
-                  console.log('Dashboard: Fetching all data from API after reset...');
-                  await fetchDashboard();
-                  
-                  toast({
-                    title: "Success",
-                    description: "Filters reset and data refreshed successfully",
-                    variant: "default",
-                  });
-                } catch (error) {
-                  console.error('Dashboard: Reset filters error:', error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to reset filters and refresh data",
-                    variant: "destructive",
-                  });
-                } finally {
-                  setLoading(false);
-                }
-              }}
-              variant="outline"
-              size="sm"
-              className="h-10"
-              title="Reset filters to show all data and refresh"
-              disabled={loading}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Reset Filters
-            </Button>
-          </div>
+                     {/* Filter Refresh Button */}
+           <div className="flex items-end gap-2">
+             <Button
+               onClick={async () => {
+                 console.log('Dashboard: Resetting filters and refreshing all data...');
+                 setLoading(true);
+                 
+                 try {
+                   // Reset filters
+                   setFilters({
+                     org_id: 'all',
+                     campaign_id: 'all',
+                     days: filters.days // Keep the same time period
+                   });
+                   
+                   // Refresh filter data
+                   console.log('Dashboard: Refreshing filter data after reset...');
+                   await fetchFilterData();
+                   
+                   // Fetch all data from API
+                   console.log('Dashboard: Fetching all data from API after reset...');
+                   await fetchDashboard();
+                   
+                   toast({
+                     title: "Success",
+                     description: "Filters reset and data refreshed successfully",
+                     variant: "default",
+                   });
+                 } catch (error) {
+                   console.error('Dashboard: Reset filters error:', error);
+                   toast({
+                     title: "Error",
+                     description: "Failed to reset filters and refresh data",
+                     variant: "destructive",
+                   });
+                 } finally {
+                   setLoading(false);
+                 }
+               }}
+               variant="outline"
+               size="sm"
+               className="h-10"
+               title="Reset filters to show all data and refresh"
+               disabled={loading}
+             >
+               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+               Reset Filters
+             </Button>
+           </div>
         </div>
       </Card>
 
