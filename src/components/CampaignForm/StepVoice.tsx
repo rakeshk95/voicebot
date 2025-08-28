@@ -26,7 +26,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
   const [language, setLanguage] = useState('all');
   const [gender, setGender] = useState('all');
   const [type, setType] = useState('all');
-  const [provider, setProvider] = useState('all');
+  const [provider, setProvider] = useState('11labs');
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -59,7 +59,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
       })
       .then((data) => {
         console.log('StepVoice: Voices data received:', data);
-        console.log('StepVoice: Number of voices:', data?.length || 0);
+        console.log('StepVoice: Number of voices:', Array.isArray(data) ? data.length : 0);
         setVoices(data as any[]);
         setLoading(false);
       })
@@ -123,8 +123,8 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
   // Improved filtering logic with better data structure handling
   const filteredVoices = voices.filter((voice: any) => {
     console.log('StepVoice: Filtering voice:', voice);
-    // Filter by provider source (skip if "all" is selected)
-    if (provider === 'elevenlabs' && voice.source !== 'eleven_labs') {
+    // Filter by provider source
+    if (provider === '11labs' && voice.source !== 'eleven_labs') {
       console.log('StepVoice: Filtering out voice due to provider mismatch:', voice.source);
       return false;
     }
@@ -132,7 +132,6 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
       console.log('StepVoice: Filtering out voice due to provider mismatch:', voice.source);
       return false;
     }
-    // If provider is "all", don't filter by source
     
     // Apply other filters
     const matchesSearch = search === '' || (voice.name || '').toLowerCase().includes(search.toLowerCase());
@@ -234,8 +233,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
               <SelectValue placeholder="Provider" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Providers</SelectItem>
-              <SelectItem value="elevenlabs">Eleven Labs</SelectItem>
+              <SelectItem value="11labs">Eleven Labs</SelectItem>
               <SelectItem value="cartesia">Cartesia</SelectItem>
             </SelectContent>
           </Select>
@@ -283,7 +281,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
             className="ml-2 px-3 h-8 text-sm rounded bg-gray-100 border border-gray-300 hover:bg-gray-200 transition"
             onClick={() => {
               setSearch('');
-              setProvider('all');
+              setProvider('11labs');
               setLanguage('all');
               setGender('all');
               setType('all');
@@ -300,7 +298,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
         <div className="mb-3 px-2 text-sm text-gray-600">
           Showing {indexOfFirstVoice + 1}-{Math.min(indexOfLastVoice, filteredVoices.length)} of {filteredVoices.length} voices
           {search && ` matching "${search}"`}
-          {provider && provider !== 'all' && ` from ${provider === 'elevenlabs' ? 'Eleven Labs' : 'Cartesia'}`}
+          {` from ${provider === '11labs' ? 'Eleven Labs' : 'Cartesia'}`}
           {language && language !== 'all' && ` in ${language.toUpperCase()}`}
           {gender && gender !== 'all' && ` (${gender.charAt(0).toUpperCase() + gender.slice(1)})`}
           {type && type !== 'all' && ` - ${type.charAt(0).toUpperCase() + type.slice(1)}`}
@@ -389,7 +387,8 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
                             form.setValue('tts.voice_id', voiceId);
                             form.setValue('tts.language', voice.language || '');
                             form.setValue('tts.gender', voice.gender || '');
-                            form.setValue('tts.vendor', provider === 'elevenlabs' ? '11labs' : provider);
+                            console.log('StepVoice: Setting TTS vendor to:', provider, 'for provider:', provider);
+                            form.setValue('tts.vendor', provider);
                           }}
                         />
                         <span className="ml-2 text-xs text-gray-600">Use voice</span>

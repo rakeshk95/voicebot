@@ -178,8 +178,8 @@ const defaultValues: CampaignFormValues = {
     provider: "nova-2"
   },
   llm: {
-    provider: "OPENAI",
-    model: "gpt-4o"
+    provider: "AZURE",
+    model: "gpt-4.1"
   },
   telephonic_provider: "czentrix",
   telephony_config: {
@@ -303,7 +303,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
   useEffect(() => {
     async function fetchOrganizations() {
       try {
-        const response = await fetch('http://192.168.29.119:8000/api/v1/organizations', {
+        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -326,7 +326,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
     if (mode === 'edit' && params.id) {
       (async () => {
         try {
-          const response = await fetch(`http://192.168.29.119:8000/api/v1/campaigns/${params.id}`, {
+          const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${params.id}`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -407,8 +407,8 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
           initialMessage: campaignData.llm?.initialMessage || '',
           useProxyLlm: campaignData.llm?.useProxyLlm || false,
           UseStructuredPrompt: campaignData.llm?.UseStructuredPrompt || false,
-          provider: campaignData.llm?.provider || 'OPENAI',
-          model: campaignData.llm?.model || 'gpt-4o',
+          provider: "AZURE",
+          model: "gpt-4.1",
           temperature: campaignData.llm?.temperature || '0.5',
           maxCallDuration: campaignData.llm?.maxCallDuration || '300',
           useEmbeddings: campaignData.llm?.useEmbeddings || false,
@@ -514,8 +514,8 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
           initialMessage: data.llm?.initialMessage || "",
           useProxyLlm: data.llm?.useProxyLlm || false,
           UseStructuredPrompt: data.llm?.UseStructuredPrompt || false,
-          provider: data.llm?.provider || "OPENAI",
-          model: data.llm?.model || "gpt-4o",
+          provider: "AZURE",
+          model: "gpt-4.1",
           temperature: data.llm?.temperature || "0.5",
           maxCallDuration: data.llm?.maxCallDuration || "300",
           useEmbeddings: data.llm?.useEmbeddings || false,
@@ -580,8 +580,8 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
       console.log('LLM data from form:', data.llm); // Debug: verify LLM data
       console.log('LLM model value:', data.llm?.model); // Debug: verify LLM model
       const url = mode === 'edit' && params.id
-        ? `http://192.168.29.119:8000/api/v1/campaigns/${params.id}`
-        : 'http://192.168.29.119:8000/api/v1/campaigns/';
+        ? `https://platform.voxiflow.com/backend/api/v1/campaigns/${params.id}`
+        : 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
       const response = await fetch(url, {
         method: mode === 'edit' ? 'PUT' : 'POST',
         headers: {
