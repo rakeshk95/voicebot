@@ -642,7 +642,7 @@ const Dashboard = () => {
 
       // Use the new comprehensive dashboard endpoint
       const apiUrl = `/dashboard/comprehensive?${params}`;
-      console.log('Dashboard: API call:', `${process.env.NODE_ENV === 'development' ? 'http://192.168.0.6:8000/api/v1' : ''}${apiUrl}`);
+      console.log('Dashboard: API call:', `${process.env.NODE_ENV === 'development' ? 'https://platform.voxiflow.com/backend/api/v1' : ''}${apiUrl}`);
       
       const response = await authorizedFetch(apiUrl);
       

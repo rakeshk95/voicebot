@@ -12,7 +12,7 @@ import {
 } from '@/types/batchCalling';
 
 // API configuration
-const API_BASE_URL = 'http://192.168.0.6:8000/api/v1';
+const API_BASE_URL = 'https://platform.voxiflow.com/backend/api/v1';
 const BATCH_CALLS_BASE_URL = '/bulk-calls';
 
 /**
@@ -271,7 +271,7 @@ export async function getBatchCallDetails(bulkOperationId: string): Promise<Batc
     // According to Swagger docs, the primary endpoint is /bulk-calls/calls/{bulk_operation_id}
     const primaryEndpoint = `${BATCH_CALLS_BASE_URL}/calls/${bulkOperationId}`;
     console.log('Trying primary endpoint:', primaryEndpoint);
-    console.log('Full URL will be:', `http://192.168.0.6:8000${primaryEndpoint}`);
+    console.log('Full URL will be:', `https://platform.voxiflow.com/backend${primaryEndpoint}`);
     
     const response = await authorizedFetch<BatchCallResponse>(primaryEndpoint);
 
@@ -284,7 +284,7 @@ export async function getBatchCallDetails(bulkOperationId: string): Promise<Batc
       console.log('Trying alternative endpoint as fallback...');
       const alternativeEndpoint = `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/calls`;
       console.log('Trying alternative endpoint:', alternativeEndpoint);
-      console.log('Full alternative URL will be:', `http://192.168.0.6:8000${alternativeEndpoint}`);
+      console.log('Full alternative URL will be:', `https://platform.voxiflow.com/backend${alternativeEndpoint}`);
       
       const alternativeResponse = await authorizedFetch<BatchCallResponse>(alternativeEndpoint);
       
@@ -402,7 +402,7 @@ export async function getBatchCallSummary(bulkOperationId: string): Promise<Batc
 export async function testApiConnection(): Promise<boolean> {
   try {
     console.log('Testing API connection...');
-    const response = await fetch('http://192.168.0.6:8000/api/v1/bulk-calls/summary', {
+    const response = await fetch('https://platform.voxiflow.com/backend/api/v1/bulk-calls/summary', {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
