@@ -125,8 +125,11 @@ export const BatchCallOperations: React.FC<BatchCallOperationsProps> = ({
         {Object.entries(operations.operations).map(([operationId, operation]) => {
           const isSelected = selectedOperation === operationId;
           
-          const progressPercentage = (operation.expected_total_calls || operation.total_calls) > 0 
-            ? (operation.completed_calls / (operation.expected_total_calls || operation.total_calls)) * 100 
+          // Calculate progress percentage using actual total (completed calls or total calls, whichever is higher)
+          const completed = operation.completed_calls || 0;
+          const actualTotal = Math.max(completed, operation.total_calls || operation.expected_total_calls || 0);
+          const progressPercentage = actualTotal > 0 
+            ? (completed / actualTotal) * 100
             : 0;
 
           return (
@@ -163,7 +166,7 @@ export const BatchCallOperations: React.FC<BatchCallOperationsProps> = ({
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Progress</span>
                     <span className="font-medium">
-                      {operation.completed_calls} / {operation.total_calls || operation.expected_total_calls || 0} calls
+                      {operation.completed_calls} / {Math.max(operation.completed_calls, operation.total_calls || operation.expected_total_calls || 0)} calls
                     </span>
                   </div>
                   <Progress value={progressPercentage} className="h-2" />

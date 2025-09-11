@@ -1,0 +1,760 @@
+/**
+ * Enhanced RabbitMQ-based Batch Calling API Service
+ * Handles all batch calling operations using the new RabbitMQ endpoints
+ * with comprehensive monitoring, caching, and control features
+ */
+
+import { cacheService, CacheKeys, cacheHelpers } from './cacheService';
+
+// API Configuration
+const BACKGROUND_SERVER_URL = 'http://13.200.143.144:9000';
+const MAIN_API_URL = 'https://platform.voxiflow.com/backend';
+
+// Types for RabbitMQ API responses
+export interface RabbitMQBulkCallResponse {
+  status: string;
+  message: string;
+  batch_id: string;
+  total_calls: number;
+  campaign_id: string;
+  org_id: string;
+  user_id: string;
+  excel_file: string;
+  channels: number;
+  sleep_seconds: number;
+  timestamp: string;
+}
+
+export interface QueueStatsResponse {
+  status: string;
+  data: {
+    pending_calls: number;
+    completed_calls: number;
+    error_calls: number;
+  };
+  timestamp: string;
+}
+
+export interface WorkerStatusResponse {
+  status: string;
+  data: {
+    worker_count: number;
+    workers: Array<{
+      pid: number;
+      status: string;
+      memory_mb: number;
+      cpu_percent: number;
+      create_time: string;
+    }>;
+  };
+  timestamp: string;
+}
+
+export interface RabbitMQStatusResponse {
+  status: string;
+  message: string;
+  timestamp: string;
+  queues: {
+    call_batch_queue: string;
+    call_result_queue: string;
+    call_error_queue: string;
+  };
+}
+
+export interface DatabaseStatusResponse {
+  status: string;
+  data: {
+    database_connected: boolean;
+    total_records: number;
+    recent_records: Array<{
+      id: number;
+      campaign_id: string;
+      phone_number: string;
+      call_status: string;
+      created_at: string;
+    }>;
+  };
+  timestamp: string;
+}
+
+export interface HealthCheckResponse {
+  status: string;
+  checks: {
+    rabbitmq: string;
+    database: string;
+    worker: string;
+  };
+  timestamp: string;
+}
+
+export interface WorkerControlResponse {
+  status: string;
+  message: string;
+}
+
+export interface StopCampaignResponse {
+  status: string;
+  message: string;
+  campaign_id: string;
+  org_id: string;
+  user_id: string;
+  actions_taken: string[];
+  timestamp: string;
+}
+
+export interface StopBatchResponse {
+  status: string;
+  message: string;
+  bulk_operation_id: string;
+  campaign_id: string;
+  org_id: string;
+  user_id: string;
+  total_calls_in_batch: number;
+  actions_taken: string[];
+  timestamp: string;
+}
+
+export interface AbortAllResponse {
+  status: string;
+  message: string;
+  actions_taken: string[];
+  timestamp: string;
+}
+
+export interface SystemMetricsResponse {
+  status: string;
+  data: {
+    cpu_usage: number;
+    memory_usage: number;
+    disk_usage: number;
+    network_io: {
+      bytes_sent: number;
+      bytes_received: number;
+    };
+    active_connections: number;
+  };
+  timestamp: string;
+}
+
+export interface QueueHealthResponse {
+  status: string;
+  data: {
+    queue_depth: number;
+    processing_rate: number;
+    error_rate: number;
+    avg_processing_time: number;
+    last_processed: string;
+  };
+  timestamp: string;
+}
+
+export interface WorkerMetricsResponse {
+  status: string;
+  data: {
+    total_workers: number;
+    active_workers: number;
+    idle_workers: number;
+    failed_workers: number;
+    avg_processing_time: number;
+    total_processed: number;
+    workers: Array<{
+      id: string;
+      status: 'active' | 'idle' | 'failed' | 'stopped';
+      last_activity: string;
+      processed_count: number;
+      error_count: number;
+      memory_usage: number;
+      cpu_usage: number;
+    }>;
+  };
+  timestamp: string;
+}
+
+// Batch calling request interface
+export interface BatchCallRequest {
+  file: File;
+  campaign_id: string;
+  org_id: string;
+  user_id: string;
+  sleep_seconds?: number;
+  channels?: number;
+}
+
+/**
+ * Get authorization headers
+ */
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('authToken');
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  };
+};
+
+/**
+ * Get form data headers (without Content-Type for multipart)
+ */
+const getFormDataHeaders = () => {
+  const token = localStorage.getItem('authToken');
+  return {
+    'Authorization': `Bearer ${token}`
+  };
+};
+
+/**
+ * Handle API errors
+ */
+const handleApiError = async (response: Response) => {
+  if (!response.ok) {
+    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.detail || errorData.message || errorMessage;
+    } catch (e) {
+      // If response is not JSON, use the status text
+    }
+    throw new Error(errorMessage);
+  }
+  return response;
+};
+
+/**
+ * RabbitMQ Batch Calling API Service
+ */
+export class RabbitMQBatchApiService {
+  
+  /**
+   * Upload bulk calls to RabbitMQ queue
+   */
+  static async uploadBulkCalls(request: BatchCallRequest): Promise<RabbitMQBulkCallResponse> {
+    const formData = new FormData();
+    formData.append('file', request.file);
+    formData.append('campaign_id', request.campaign_id);
+    formData.append('org_id', request.org_id);
+    formData.append('user_id', request.user_id);
+    formData.append('sleep_seconds', String(request.sleep_seconds || 10));
+    formData.append('channels', String(request.channels || 1));
+
+    const response = await fetch(
+      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/rabbitmq-bulk-calls`,
+      {
+        method: 'POST',
+        headers: getFormDataHeaders(),
+        body: formData
+      }
+    );
+
+    await handleApiError(response);
+    const result = await response.json();
+    
+    // Invalidate batch cache after new upload
+    cacheHelpers.invalidateBatchCache();
+    
+    return result;
+  }
+
+  /**
+   * Get queue statistics (with cache)
+   */
+  static async getQueueStats(): Promise<QueueStatsResponse> {
+    return cacheHelpers.getOrFetch(
+      CacheKeys.QUEUE_STATS,
+      async () => {
+        const response = await fetch(
+          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/queue-stats`,
+          { headers: getAuthHeaders() }
+        );
+        await handleApiError(response);
+        return response.json();
+      },
+      10000 // 10 second cache
+    );
+  }
+
+  /**
+   * Get worker status (with cache)
+   */
+  static async getWorkerStatus(): Promise<WorkerStatusResponse> {
+    return cacheHelpers.getOrFetch(
+      CacheKeys.WORKER_STATUS,
+      async () => {
+        const response = await fetch(
+          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/worker-status`,
+          { headers: getAuthHeaders() }
+        );
+        await handleApiError(response);
+        return response.json();
+      },
+      15000 // 15 second cache
+    );
+  }
+
+  /**
+   * Get RabbitMQ status (with cache)
+   */
+  static async getRabbitMQStatus(): Promise<RabbitMQStatusResponse> {
+    return cacheHelpers.getOrFetch(
+      CacheKeys.RABBITMQ_STATUS,
+      async () => {
+        const response = await fetch(
+          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/rabbitmq-status`,
+          { headers: getAuthHeaders() }
+        );
+        await handleApiError(response);
+        return response.json();
+      },
+      20000 // 20 second cache
+    );
+  }
+
+  /**
+   * Get database status (with cache)
+   */
+  static async getDatabaseStatus(): Promise<DatabaseStatusResponse> {
+    return cacheHelpers.getOrFetch(
+      CacheKeys.DATABASE_STATUS,
+      async () => {
+        const response = await fetch(
+          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/database-status`,
+          { headers: getAuthHeaders() }
+        );
+        await handleApiError(response);
+        return response.json();
+      },
+      30000 // 30 second cache
+    );
+  }
+
+  /**
+   * Get system health check (with cache)
+   */
+  static async getHealthCheck(): Promise<HealthCheckResponse> {
+    return cacheHelpers.getOrFetch(
+      CacheKeys.HEALTH_STATUS,
+      async () => {
+        const response = await fetch(
+          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/health`,
+          { headers: getAuthHeaders() }
+        );
+        await handleApiError(response);
+        return response.json();
+      },
+      5000 // 5 second cache
+    );
+  }
+
+  /**
+   * Control worker (pause, resume, restart)
+   */
+  static async controlWorker(action: 'pause' | 'resume' | 'restart'): Promise<WorkerControlResponse> {
+    const formData = new FormData();
+    formData.append('action', action);
+
+    const response = await fetch(
+      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/worker-control`,
+      {
+        method: 'POST',
+        headers: getFormDataHeaders(),
+        body: formData
+      }
+    );
+
+    await handleApiError(response);
+    const result = await response.json();
+    
+    // Invalidate worker status cache after control action
+    cacheService.delete(CacheKeys.WORKER_STATUS);
+    
+    return result;
+  }
+
+  /**
+   * Stop campaign
+   */
+  static async stopCampaign(campaignId: string, orgId: string, userId: string): Promise<StopCampaignResponse> {
+    const formData = new FormData();
+    formData.append('campaign_id', campaignId);
+    formData.append('org_id', orgId);
+    formData.append('user_id', userId);
+
+    const response = await fetch(
+      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/stop-campaign`,
+      {
+        method: 'POST',
+        headers: getFormDataHeaders(),
+        body: formData
+      }
+    );
+
+    await handleApiError(response);
+    const result = await response.json();
+    
+    // Invalidate all batch-related cache after stopping campaign
+    cacheHelpers.invalidateBatchCache();
+    
+    return result;
+  }
+
+  /**
+   * Stop specific batch
+   */
+  static async stopBatch(bulkOperationId: string): Promise<StopBatchResponse> {
+    const formData = new FormData();
+    formData.append('bulk_operation_id', bulkOperationId);
+
+    const response = await fetch(
+      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/stop-batch`,
+      {
+        method: 'POST',
+        headers: getFormDataHeaders(),
+        body: formData
+      }
+    );
+
+    await handleApiError(response);
+    const result = await response.json();
+    
+    // Invalidate batch-specific cache
+    cacheService.delete(CacheKeys.BATCH_OPERATION(bulkOperationId));
+    cacheService.delete(CacheKeys.BATCH_CALLS(bulkOperationId));
+    cacheHelpers.invalidateBatchCache();
+    
+    return result;
+  }
+
+  /**
+   * Emergency stop all operations
+   */
+  static async abortAllOperations(): Promise<AbortAllResponse> {
+    const response = await fetch(
+      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/abort-all`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders()
+      }
+    );
+
+    await handleApiError(response);
+    const result = await response.json();
+    
+    // Clear all batch-related cache after emergency stop
+    cacheHelpers.invalidateBatchCache();
+    
+    return result;
+  }
+
+  /**
+   * Get batch operation status from database (for completed operations)
+   */
+  static async getBatchOperationStatus(batchId: string): Promise<any> {
+    return cacheHelpers.getOrFetch(
+      CacheKeys.BATCH_OPERATION(batchId),
+      async () => {
+        // This would typically call the main API server for database status
+        const response = await fetch(
+          `${MAIN_API_URL}/api/v1/bulk-calls/operations/${batchId}/db-status`,
+          { headers: getAuthHeaders() }
+        );
+        await handleApiError(response);
+        return response.json();
+      },
+      10000 // 10 second cache
+    );
+  }
+
+  /**
+   * Get batch calls from database
+   */
+  static async getBatchCalls(batchId: string): Promise<any> {
+    return cacheHelpers.getOrFetch(
+      CacheKeys.BATCH_CALLS(batchId),
+      async () => {
+        const response = await fetch(
+          `${MAIN_API_URL}/api/v1/bulk-calls/calls/${batchId}`,
+          { headers: getAuthHeaders() }
+        );
+        await handleApiError(response);
+        return response.json();
+      },
+      15000 // 15 second cache
+    );
+  }
+
+  /**
+   * Force refresh all cache (useful for manual refresh)
+   */
+  static async refreshAllCache(): Promise<void> {
+    cacheHelpers.invalidateBatchCache();
+    cacheHelpers.invalidateCampaignCache();
+    cacheHelpers.invalidateOrganizationCache();
+    cacheHelpers.invalidateCallCache();
+  }
+
+  /**
+   * Get system metrics (CPU, memory, disk, network)
+   */
+  static async getSystemMetrics(): Promise<SystemMetricsResponse> {
+    return cacheHelpers.getOrFetch(
+      CacheKeys.SYSTEM_METRICS,
+      async () => {
+        const response = await fetch(
+          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/system-metrics`,
+          { headers: getAuthHeaders() }
+        );
+        await handleApiError(response);
+        return response.json();
+      },
+      5000 // 5 second cache
+    );
+  }
+
+  /**
+   * Get queue health metrics
+   */
+  static async getQueueHealth(): Promise<QueueHealthResponse> {
+    return cacheHelpers.getOrFetch(
+      CacheKeys.QUEUE_HEALTH,
+      async () => {
+        const response = await fetch(
+          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/queue-health`,
+          { headers: getAuthHeaders() }
+        );
+        await handleApiError(response);
+        return response.json();
+      },
+      3000 // 3 second cache
+    );
+  }
+
+  /**
+   * Get detailed worker metrics
+   */
+  static async getWorkerMetrics(): Promise<WorkerMetricsResponse> {
+    return cacheHelpers.getOrFetch(
+      CacheKeys.WORKER_METRICS,
+      async () => {
+        const response = await fetch(
+          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/worker-metrics`,
+          { headers: getAuthHeaders() }
+        );
+        await handleApiError(response);
+        return response.json();
+      },
+      10000 // 10 second cache
+    );
+  }
+
+  /**
+   * Pause all workers
+   */
+  static async pauseAllWorkers(): Promise<WorkerControlResponse> {
+    const response = await fetch(
+      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/pause-all-workers`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders()
+      }
+    );
+
+    await handleApiError(response);
+    const result = await response.json();
+    
+    // Invalidate worker-related cache
+    cacheService.delete(CacheKeys.WORKER_STATUS);
+    cacheService.delete(CacheKeys.WORKER_METRICS);
+    
+    return result;
+  }
+
+  /**
+   * Resume all workers
+   */
+  static async resumeAllWorkers(): Promise<WorkerControlResponse> {
+    const response = await fetch(
+      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/resume-all-workers`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders()
+      }
+    );
+
+    await handleApiError(response);
+    const result = await response.json();
+    
+    // Invalidate worker-related cache
+    cacheService.delete(CacheKeys.WORKER_STATUS);
+    cacheService.delete(CacheKeys.WORKER_METRICS);
+    
+    return result;
+  }
+
+  /**
+   * Restart all workers
+   */
+  static async restartAllWorkers(): Promise<WorkerControlResponse> {
+    const response = await fetch(
+      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/restart-all-workers`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders()
+      }
+    );
+
+    await handleApiError(response);
+    const result = await response.json();
+    
+    // Invalidate all worker-related cache
+    cacheService.delete(CacheKeys.WORKER_STATUS);
+    cacheService.delete(CacheKeys.WORKER_METRICS);
+    cacheHelpers.invalidateBatchCache();
+    
+    return result;
+  }
+
+  /**
+   * Scale workers (add or remove workers)
+   */
+  static async scaleWorkers(count: number): Promise<WorkerControlResponse> {
+    const formData = new FormData();
+    formData.append('worker_count', count.toString());
+
+    const response = await fetch(
+      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/scale-workers`,
+      {
+        method: 'POST',
+        headers: getFormDataHeaders(),
+        body: formData
+      }
+    );
+
+    await handleApiError(response);
+    const result = await response.json();
+    
+    // Invalidate worker-related cache
+    cacheService.delete(CacheKeys.WORKER_STATUS);
+    cacheService.delete(CacheKeys.WORKER_METRICS);
+    
+    return result;
+  }
+
+  /**
+   * Get comprehensive system status with enhanced metrics
+   */
+  static async getSystemStatus() {
+    try {
+      const [health, queueStats, workerStatus, rabbitmqStatus, dbStatus, systemMetrics, queueHealth, workerMetrics] = await Promise.all([
+        this.getHealthCheck(),
+        this.getQueueStats(),
+        this.getWorkerStatus(),
+        this.getRabbitMQStatus(),
+        this.getDatabaseStatus(),
+        this.getSystemMetrics().catch(() => null),
+        this.getQueueHealth().catch(() => null),
+        this.getWorkerMetrics().catch(() => null)
+      ]);
+
+      return {
+        health,
+        queueStats,
+        workerStatus,
+        rabbitmqStatus,
+        dbStatus,
+        systemMetrics,
+        queueHealth,
+        workerMetrics,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error getting system status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get real-time monitoring data (no cache)
+   */
+  static async getRealTimeMonitoring() {
+    try {
+      const [queueStats, workerStatus, queueHealth, workerMetrics] = await Promise.all([
+        fetch(`${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/queue-stats`, { headers: getAuthHeaders() }).then(r => r.json()),
+        fetch(`${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/worker-status`, { headers: getAuthHeaders() }).then(r => r.json()),
+        fetch(`${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/queue-health`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/worker-metrics`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null)
+      ]);
+
+      return {
+        queueStats,
+        workerStatus,
+        queueHealth,
+        workerMetrics,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error getting real-time monitoring:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Emergency stop all operations with force
+   */
+  static async emergencyStopAll(): Promise<AbortAllResponse> {
+    const response = await fetch(
+      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/emergency-stop`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders()
+      }
+    );
+
+    await handleApiError(response);
+    const result = await response.json();
+    
+    // Clear all cache after emergency stop
+    cacheHelpers.invalidateBatchCache();
+    cacheService.delete(CacheKeys.WORKER_STATUS);
+    cacheService.delete(CacheKeys.WORKER_METRICS);
+    cacheService.delete(CacheKeys.QUEUE_STATS);
+    cacheService.delete(CacheKeys.QUEUE_HEALTH);
+    
+    return result;
+  }
+
+  /**
+   * Get operation performance analytics
+   */
+  static async getOperationAnalytics(bulkOperationId: string): Promise<any> {
+    return cacheHelpers.getOrFetch(
+      CacheKeys.OPERATION_ANALYTICS(bulkOperationId),
+      async () => {
+        const response = await fetch(
+          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/operation-analytics/${bulkOperationId}`,
+          { headers: getAuthHeaders() }
+        );
+        await handleApiError(response);
+        return response.json();
+      },
+      30000 // 30 second cache
+    );
+  }
+
+  /**
+   * Get system alerts and warnings
+   */
+  static async getSystemAlerts(): Promise<any> {
+    return cacheHelpers.getOrFetch(
+      CacheKeys.SYSTEM_ALERTS,
+      async () => {
+        const response = await fetch(
+          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/system-alerts`,
+          { headers: getAuthHeaders() }
+        );
+        await handleApiError(response);
+        return response.json();
+      },
+      10000 // 10 second cache
+    );
+  }
+}
+
+export default RabbitMQBatchApiService;

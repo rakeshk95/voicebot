@@ -698,7 +698,7 @@ const Dashboard = () => {
       }
       setIsApiCallInProgress(false);
       setLoading(false);
-      setCallDetailsLoading(false);
+      setCallDetailsLoading(false);https://platform.voxiflow.com/backend
       setFilterDataLoading(false);
     };
   }, [filterDebounceTimer]);

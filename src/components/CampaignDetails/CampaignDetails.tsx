@@ -8,9 +8,12 @@ import { Campaign, Organization } from "@/types/campaign";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MessageCircle, Variable, Database, Tag, Globe, Mic, Volume2, Clock, Hourglass, Play } from 'lucide-react';
+import { MessageCircle, Variable, Database, Tag, Globe, Mic, Volume2, Clock, Hourglass, Play, History, Edit3 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+import CampaignVersionHistory from './CampaignVersionHistory';
+import CampaignUpdateDialog from './CampaignUpdateDialog';
 
 interface CampaignDetailsProps {
   campaign: Campaign | null;
@@ -26,144 +29,203 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
   const [loadingVoices, setLoadingVoices] = useState(false);
   const { toast } = useToast();
   const [isPlaying, setIsPlaying] = useState(false);
+  
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
 
   useEffect(() => {
-    console.log('Campaign data in CampaignDetails:', campaign);
-    console.log('LLM data:', campaign?.llm);
-    console.log('PromptJson data:', campaign?.llm?.promptJson);
     if (playingUrl && audioRef.current) {
-      console.log('Setting audio src and loading:', playingUrl);
       audioRef.current.src = playingUrl;
       audioRef.current.load();
       audioRef.current.play().then(() => {
         setIsPlaying(true);
-        console.log('Audio started playing');
-      }).catch((err) => {
-        setIsPlaying(false);
-        console.error('Audio play error:', err);
+      }).catch((error) => {
+        console.error('Error playing audio:', error);
+        toast({
+          title: "Error",
+          description: "Failed to play audio",
+          variant: "destructive"
+        });
       });
     }
-  }, [campaign, playingUrl]);
+  }, [playingUrl, toast]);
 
-  // Stop playing indicator when audio ends or errors
+  // Load organizations
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const handleEnded = () => { setIsPlaying(false); console.log('Audio ended'); };
-    const handleError = () => { setIsPlaying(false); console.log('Audio error'); };
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('pause', handleEnded);
-    audio.addEventListener('error', handleError);
-    return () => {
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('pause', handleEnded);
-      audio.removeEventListener('error', handleError);
+    const loadOrganizations = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/v1/organizations', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setOrganizations(data);
+        }
+      } catch (error) {
+        console.error('Error loading organizations:', error);
+      }
     };
-  }, [audioRef.current]);
-
-  // Get user data and check role
-  const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-  const isSuperUser = userData?.role_name === 'superuser';
-  
-  // Fetch organizations for display
-  useEffect(() => {
-    if (!isSuperUser && userData?.org_id) {
-      // For non-superusers, only show their organization
-      console.log('CampaignDetails: Non-superuser - setting single organization:', userData.org_id);
-      setOrganizations([{ id: userData.org_id, name: userData.user_name || userData.org_name || 'My Organization' }]);
-      return;
-    }
-    
-    // For superusers, fetch all organizations
-    console.log('CampaignDetails: Superuser - fetching all organizations');
-    fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        'Content-Type': 'application/json'
-      },
-    })
-      .then(res => res.json())
-      .then(data => setOrganizations(data))
-      .catch(() => setOrganizations([]));
-  }, [isSuperUser, userData?.org_id]);
-
-  // Fetch voices for display
-  useEffect(() => {
-    setLoadingVoices(true);
-    fetch('https://platform.voxiflow.com/backend/api/v1/voices?voice_ids=XopCoWNooN3d7LfWZyX5,p9aflnsbBe1o0aDeQa97,2bNrEsM0omyhLiEyOwqY,f91ab3e6-5071-4e15-b016-cde6f2bcd222', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        'accept': 'application/json',
-      },
-    })
-      .then(res => res.json())
-      .then(data => setVoices(data))
-      .catch(() => setVoices([]))
-      .finally(() => setLoadingVoices(false));
+    loadOrganizations();
   }, []);
+
+  // Load voices
+  const loadVoices = async () => {
+    setLoadingVoices(true);
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/voices', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setVoices(data);
+      }
+    } catch (error) {
+      console.error('Error loading voices:', error);
+    } finally {
+      setLoadingVoices(false);
+    }
+  };
 
   const form = useForm({
     defaultValues: {
+      campaign_id: campaign?.id || '',
       name: campaign?.name || '',
       direction: campaign?.direction || 'OUTBOUND',
       state: campaign?.state || 'TRIAL',
       org_id: campaign?.org_id || '',
-      tts: {
-        gender: campaign?.tts?.gender || 'female',
-        language: campaign?.tts?.language || 'hindi',
-        voice_id: campaign?.tts?.voice_id || ''
-      },
-      telephonic_provider: campaign?.telephonic_provider || '',
+      tts: campaign?.tts || { gender: 'female', language: 'hindi', voice_id: 'hi-IN-AnanyaNeural' },
+      stt: (campaign as any)?.stt || { vendor: 'deepgram', provider: 'nova-2' },
+      telephonic_provider: campaign?.telephonic_provider || 'czentrix',
+      telephony_config: (campaign as any)?.telephony_config || { channels: 1, max_concurrent_calls: 1, call_timeout: 30 },
       knowledge_base: campaign?.knowledge_base || { url: '', file: null },
-      post_call_actions: campaign?.post_call_actions || { categories: {}, data_extracted: {} }
+      post_call_actions: campaign?.post_call_actions,
+      callback_endpoint: (campaign as any)?.callback_endpoint || '',
+      llm: campaign?.llm || {
+        provider: 'AZURE',
+        model: 'gpt-4.1',
+        temperature: '0.5',
+        maxCallDuration: '300',
+        useEmbeddings: false,
+        prompt: '',
+        promptJson: {
+          skeleton: 'Simple output format.',
+          promptVariables: {},
+          knowledgeBase: { url: '', file: null },
+          nodes: {},
+          context: '',
+          botStateDefinitions: {},
+          language: 'hindi',
+          mermaidGraph: 'initial_message -->|edge| node1\nnode1 -->|edge| node2'
+        }
+      }
     }
   });
 
-  // Add useEffect to reset playback state on dialog open/close
-  useEffect(() => {
-    if (!campaign) {
-      setPlayingUrl(null);
-      setIsPlaying(false);
+  const steps = [
+    'Name',
+    'Speech & Call',
+    'Voice',
+    'Flow',
+    'Telephony',
+    'Post Call Actions',
+  ];
+
+  const handleStepChange = (step: number) => {
+    setCurrentStep(step);
+  };
+
+  const handlePlayAudio = (url: string) => {
+    if (isPlaying && playingUrl === url) {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
       }
-      console.log('Dialog closed, audio state reset');
+      setIsPlaying(false);
+      setPlayingUrl(null);
     } else {
-      console.log('Dialog opened for campaign', campaign.name);
+      setPlayingUrl(url);
     }
-  }, [campaign]);
+  };
 
-  if (!campaign) return null;
+  const handleStopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setIsPlaying(false);
+    setPlayingUrl(null);
+  };
+
+  const getOrganizationName = (orgId: string) => {
+    const org = organizations.find(o => o.id === orgId);
+    return org ? org.name : orgId;
+  };
+
+  const getVoiceName = (voiceId: string) => {
+    const voice = voices.find(v => v.voice_id === voiceId);
+    return voice ? voice.name : voiceId;
+  };
+
+  if (!campaign) {
+    return (
+      <div className="p-6 text-center">
+        <p className="text-gray-500">No campaign selected</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <audio ref={audioRef} style={{ display: 'block' }} onError={() => toast({ title: 'Playback Error', description: 'Unable to play the audio.', variant: 'destructive' })} />
-      {/* Step Indicator */}
-      <div className="bg-white rounded-lg p-3 border shadow-sm">
-        <div className="flex justify-between">
-          {['Name', 'Speech and Call', 'Voice', 'Flow', 'Telephony', 'Post Call Actions'].map((step, index) => (
+      {/* Header */}
+            <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">{campaign.name}</h2>
+          <p className="text-sm text-gray-500">Campaign ID: {campaign.id}</p>
+                </div>
+        <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+            onClick={() => setShowVersionHistory(true)}
+            className="flex items-center gap-2"
+                >
+            <History className="h-4 w-4" />
+            Version History
+                </Button>
+          <CampaignUpdateDialog campaign={campaign} />
+              </div>
+            </div>
+
+      {/* Stepper */}
+      <div className="flex items-center space-x-4">
+        {steps.map((step, index) => (
+          <div key={step} className="flex items-center">
             <div
-              key={step}
-              className={`flex flex-col items-center ${
-                currentStep === index + 1 ? 'text-primary' : 'text-gray-400'
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                currentStep === index + 1
+                  ? 'bg-blue-600 text-white'
+                  : currentStep > index + 1
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-200 text-gray-600'
               }`}
-              onClick={() => setCurrentStep(index + 1)}
-              style={{ cursor: 'pointer' }}
             >
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center mb-1 transition-colors duration-200 ${
-                currentStep === index + 1 
-                  ? 'bg-primary text-white shadow-sm' 
-                  : index + 1 < currentStep 
-                    ? 'bg-primary/20 text-primary'
-                    : 'bg-gray-100'
-              }`}>
                 {index + 1}
               </div>
-              <span className="text-xs font-medium">{step}</span>
+            <span className={`ml-2 text-sm ${
+              currentStep === index + 1 ? 'text-blue-600 font-medium' : 'text-gray-500'
+            }`}>
+              {step}
+            </span>
+            {index < steps.length - 1 && (
+              <div className={`w-8 h-0.5 mx-4 ${
+                currentStep > index + 1 ? 'bg-green-600' : 'bg-gray-200'
+              }`} />
+            )}
             </div>
           ))}
-        </div>
       </div>
 
       <Form {...form}>
@@ -176,11 +238,11 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
                   <div className="p-4 space-y-4 min-h-[400px]">
                     <div>
                       <div className="text-sm font-medium text-gray-700 mb-1">Campaign Name</div>
-                      <Input value={campaign?.name || ''} disabled className="h-9 bg-white text-gray-900" />
+                      <Input value={campaign.name} disabled className="h-9 bg-white text-gray-900" />
                     </div>
                     <div>
                       <div className="text-sm font-medium text-gray-700 mb-1">State</div>
-                      <Select disabled value={campaign?.state || ''}>
+                      <Select disabled value={campaign.state}>
                             <SelectTrigger className="h-9 bg-white text-gray-900">
                               <SelectValue />
                             </SelectTrigger>
@@ -192,66 +254,75 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
                         </Select>
                     </div>
                     <div>
-                      <div className="text-sm font-medium text-gray-700 mb-1">Organization</div>
-                      <Select disabled value={campaign?.org_id || ''}>
+                      <div className="text-sm font-medium text-gray-700 mb-1">Direction</div>
+                      <Select disabled value={campaign.direction}>
                         <SelectTrigger className="h-9 bg-white text-gray-900">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {organizations.map((org) => (
-                            <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
-                          ))}
+                          <SelectItem value="INBOUND">Inbound</SelectItem>
+                          <SelectItem value="OUTBOUND">Outbound</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-700 mb-1">Organization</div>
+                      <Input value={getOrganizationName(campaign.org_id)} disabled className="h-9 bg-white text-gray-900" />
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Step 2: Speech and Call */}
+              {/* Step 2: Speech & Call */}
               {currentStep === 2 && (
-                <div className="flex flex-col md:flex-row gap-8">
-                  {/* Speech Section */}
-                  <div className="flex-1 bg-blue-50/40 rounded p-6 border border-blue-100 flex flex-col gap-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="icon-animate bg-blue-100 p-1 rounded-full"><Mic className="w-5 h-5 text-blue-600" /></span>
-                      <h4 className="font-extrabold text-lg text-blue-900 tracking-tight">Speech</h4>
+                <div className="bg-white rounded-lg border shadow-sm">
+                  <div className="p-4 space-y-4 min-h-[400px]">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-1">Allow Interruptions</div>
+                        <Select disabled value={(campaign as any).allow_interruption ? 'true' : 'false'}>
+                          <SelectTrigger className="h-9 bg-white text-gray-900">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="true">Yes</SelectItem>
+                            <SelectItem value="false">No</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-1">Ambient Sound</div>
+                        <Select disabled value={campaign.speech_setting?.ambient_sound?.status ? 'true' : 'false'}>
+                          <SelectTrigger className="h-9 bg-white text-gray-900">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="true">Enabled</SelectItem>
+                            <SelectItem value="false">Disabled</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-4 pl-6">
-                      <div className="flex items-center gap-2">
-                        <Mic className="w-4 h-4 text-blue-400" />
-                        <span className="text-blue-700 font-medium">Allow Interruptions:</span>
-                        <span className="ml-2 text-sm font-semibold">{campaign?.speech_setting?.interruption?.status ? 'Yes' : 'No'}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Volume2 className="w-4 h-4 text-blue-400" />
-                        <span className="text-blue-700 font-medium">Ambient Status:</span>
-                        <span className="ml-2 text-sm font-semibold">{campaign?.speech_setting?.ambient_sound?.status ? 'On' : 'Off'}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-blue-700 font-medium">Sound:</span>
-                        <span className="ml-2 text-sm font-semibold">{campaign?.speech_setting?.ambient_sound?.sound || '-'}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-blue-700 font-medium">Volume:</span>
-                        <span className="ml-2 text-sm font-semibold">{campaign?.speech_setting?.ambient_sound?.volume || '-'}</span>
-                      </div>
-                    </div>
+                    {campaign.speech_setting?.ambient_sound?.status && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-sm font-medium text-gray-700 mb-1">Sound Type</div>
+                          <Input value={campaign.speech_setting.ambient_sound.sound} disabled className="h-9 bg-white text-gray-900" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-700 mb-1">Volume</div>
+                          <Input value={campaign.speech_setting.ambient_sound.volume} disabled className="h-9 bg-white text-gray-900" />
                   </div>
-                  {/* Call Section */}
-                  <div className="flex-1 bg-blue-50/40 rounded p-6 border border-blue-100 flex flex-col gap-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="icon-animate bg-blue-100 p-1 rounded-full"><Clock className="w-5 h-5 text-blue-600" /></span>
-                      <h4 className="font-extrabold text-lg text-blue-900 tracking-tight">Call</h4>
                     </div>
-                    <div className="flex flex-col gap-4 pl-6">
-                      <div className="flex items-center gap-2">
-                        <span className="text-blue-700 font-medium">Max idle reminder:</span>
-                        <span className="ml-2 text-sm font-semibold">{campaign?.max_idle_reminder || '-'}</span>
+                    )}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-1">Max Idle Reminder</div>
+                        <Input value={campaign.max_idle_reminder} disabled className="h-9 bg-white text-gray-900" />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-blue-700 font-medium">Max idle duration:</span>
-                        <span className="ml-2 text-sm font-semibold">{campaign?.max_idle_duration || '-'}</span>
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-1">Max Idle Duration</div>
+                        <Input value={campaign.max_idle_duration} disabled className="h-9 bg-white text-gray-900" />
                       </div>
                     </div>
                   </div>
@@ -260,216 +331,154 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
 
               {/* Step 3: Voice */}
               {currentStep === 3 && (
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-2">
-                  {loadingVoices ? (
-                    <div className="p-2 text-center text-gray-500">Loading voices...</div>
-                  ) : (
-                    <table className="w-full min-w-[700px] max-w-full bg-white border border-gray-200 rounded shadow-sm text-sm">
-                      <thead>
-                        <tr className="bg-blue-700 text-white">
-                          <th className="px-2 py-2 text-left font-semibold"> </th>
-                          <th className="px-2 py-2 text-left font-semibold">Name</th>
-                          <th className="px-2 py-2 text-left font-semibold">Voice Type</th>
-                          <th className="px-2 py-2 text-left font-semibold">Gender</th>
-                          <th className="px-2 py-2 text-left font-semibold">Country</th>
-                          <th className="px-2 py-2 text-left font-semibold">Language</th>
-                          <th className="px-2 py-2 text-left font-semibold"> </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {voices.filter((voice: any) => campaign?.tts?.voice_id === voice.voice_id).map((voice: any, idx: number) => {
-                          const country = voice.locale ? (voice.locale.split('-')[1] || '-') : '-';
-                          const languageLabel = voice.language ? voice.language.toUpperCase() : '-';
-                          const previewUrl = voice.lang_preview_url || voice.main_preview_url;
-                          return (
-                            <tr key={voice.voice_id || idx} className="border-b last:border-b-0 bg-blue-50 transition-colors">
-                              <td className="px-2 py-2">
-                                <button
-                                  type="button"
-                                  className="w-8 h-8 flex items-center justify-center rounded-full bg-orange-500 relative"
-                                  title="Play"
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    console.log('Play button clicked', previewUrl);
-                                    if (previewUrl) {
-                                      if (audioRef.current) {
-                                        audioRef.current.pause();
-                                        audioRef.current.currentTime = 0;
-                                      }
-                                      setPlayingUrl(previewUrl);
-                                    } else {
-                                      toast({ title: 'No Preview Available', description: 'No audio preview is available for this voice.', variant: 'destructive' });
-                                    }
-                                  }}
-                                >
-                                  <Play className={`w-4 h-4 text-white transition-transform ${isPlaying ? 'animate-spin' : ''}`} />
-                                  {isPlaying && <span className="absolute -right-10 text-xs text-blue-600 font-semibold">Playing...</span>}
-                                </button>
-                              </td>
-                              <td className="px-2 py-2 flex items-center gap-2">
-                                <span className="font-bold text-gray-800">{voice.name}</span>
-                                <Badge className="ml-2 bg-blue-600 text-white">Selected</Badge>
-                              </td>
-                              <td className="px-2 py-2">
-                                <span className="text-blue-500 font-medium">{voice.main_accent || '-'}</span>
-                              </td>
-                              <td className="px-2 py-2 capitalize text-gray-700">{voice.gender || '-'}</td>
-                              <td className="px-2 py-2">{country}</td>
-                              <td className="px-2 py-2">{languageLabel}</td>
-                              <td className="px-2 py-2 text-center">
-                                <span className="ml-2 text-xs text-blue-700 font-semibold">Use voice</span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  )}
+                <div className="bg-white rounded-lg border shadow-sm">
+                  <div className="p-4 space-y-4 min-h-[400px]">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-1">Gender</div>
+                        <Input value={campaign.tts?.gender} disabled className="h-9 bg-white text-gray-900" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-1">Language</div>
+                        <Input value={campaign.tts?.language} disabled className="h-9 bg-white text-gray-900" />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-700 mb-1">Voice ID</div>
+                      <Input value={campaign.tts?.voice_id} disabled className="h-9 bg-white text-gray-900" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-700 mb-1">Voice Name</div>
+                      <Input value={getVoiceName(campaign.tts?.voice_id || '')} disabled className="h-9 bg-white text-gray-900" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-700 mb-1">Vendor</div>
+                      <Input value={(campaign.tts as any)?.vendor} disabled className="h-9 bg-white text-gray-900" />
+                    </div>
+                  </div>
                 </div>
               )}
 
               {/* Step 4: Flow */}
               {currentStep === 4 && (
-                <div className="space-y-4">
-                  <Tabs value={activeFlowTab} onValueChange={(value: any) => setActiveFlowTab(value)}>
-                    <TabsList className="grid w-full grid-cols-3">
-                      <TabsTrigger value="context">
-                        <MessageCircle className="w-4 h-4 mr-2" />
-                        Context
-                      </TabsTrigger>
-                      <TabsTrigger value="variables">
-                        <Variable className="w-4 h-4 mr-2" />
-                        Variables
-                      </TabsTrigger>
-                      <TabsTrigger value="knowledgeBase">
-                        <Database className="w-4 h-4 mr-2" />
-                        Knowledge Base
-                      </TabsTrigger>
+                <div className="bg-white rounded-lg border shadow-sm">
+                  <div className="p-4 space-y-4 min-h-[400px]">
+                    <Tabs value={activeFlowTab} onValueChange={(value: any) => setActiveFlowTab(value)} className="w-full">
+                      <TabsList className="grid w-full grid-cols-5 bg-gray-100 p-1 rounded-md">
+                        <TabsTrigger value="context" className="text-sm">Context</TabsTrigger>
+                        <TabsTrigger value="graph" className="text-sm">Graph</TabsTrigger>
+                        <TabsTrigger value="responses" className="text-sm">Responses</TabsTrigger>
+                        <TabsTrigger value="variables" className="text-sm">Variables</TabsTrigger>
+                        <TabsTrigger value="knowledgeBase" className="text-sm">Knowledge Base</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="context" className="space-y-4 mt-4">
-                      <FormItem>
-                        <FormLabel className="text-sm font-medium text-gray-700">Context</FormLabel>
-                        <div className="relative">
+                      <div className="mt-4">
+                        <TabsContent value="context">
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium text-gray-700">Context</Label>
                           <Textarea
-                            value={campaign?.llm?.promptJson?.context || ''}
-                            className="min-h-[200px] bg-white w-full text-gray-900"
+                              value={campaign.llm?.promptJson?.context || ''}
                             disabled
-                            readOnly
+                              className="min-h-[200px] bg-white text-gray-900"
+                              placeholder="Enter conversation context..."
                           />
-                          {!campaign?.llm?.promptJson?.context && (
-                            <div className="text-sm text-gray-500 italic p-4 bg-white rounded-md">
-                              No context defined
-                            </div>
-                          )}
                         </div>
-                      </FormItem>
                     </TabsContent>
 
-                    <TabsContent value="variables" className="space-y-4 mt-4">
-                      <div className="space-y-4">
-                        <Label className="text-sm font-medium text-gray-700">Prompt Variables</Label>
-                        {campaign?.llm?.promptJson?.promptVariables ? (
-                          Object.entries(campaign.llm.promptJson.promptVariables).length > 0 ? (
-                            Object.entries(campaign.llm.promptJson.promptVariables).map(([key, value], index) => (
+                        <TabsContent value="responses">
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium text-gray-700">Responses</Label>
+                            {(campaign.llm?.promptJson as any)?.responses && Object.keys((campaign.llm.promptJson as any).responses).length > 0 ? (
+                              <div className="space-y-2">
+                                {Object.entries((campaign.llm.promptJson as any).responses).map(([key, value], index) => (
                               <div key={index} className="grid grid-cols-2 gap-4">
-                                <Input value={key} disabled className="bg-white text-gray-900" readOnly />
-                                <Input 
-                                  value={typeof value === 'string' ? value : JSON.stringify(value)} 
-                                  disabled 
-                                  className="bg-white text-gray-900" 
-                                  readOnly 
-                                />
+                                    <Input value={key} disabled className="bg-white text-gray-900" />
+                                    <Input value={value as string} disabled className="bg-white text-gray-900" />
+                                  </div>
+                                ))}
                               </div>
-                            ))
-                          ) : (
-                            <div className="text-sm text-gray-500 italic p-4 bg-white rounded-md">
-                              No variables defined
-                            </div>
-                          )
-                        ) : (
-                          <div className="text-sm text-gray-500 italic p-4 bg-white rounded-md">
-                            No variables defined
+                            ) : (
+                              <p className="text-gray-500 text-sm">No responses defined</p>
+                            )}
                           </div>
+                        </TabsContent>
+
+                        <TabsContent value="variables">
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium text-gray-700">Variables</Label>
+                            {campaign.llm?.promptJson?.promptVariables && Object.keys(campaign.llm.promptJson.promptVariables).length > 0 ? (
+                              <div className="space-y-2">
+                                {Object.entries(campaign.llm.promptJson.promptVariables).map(([key, value], index) => (
+                                  <div key={index} className="grid grid-cols-2 gap-4">
+                                    <Input value={key} disabled className="bg-white text-gray-900" />
+                                    <Input value={value as string} disabled className="bg-white text-gray-900" />
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-gray-500 text-sm">No variables defined</p>
                         )}
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="knowledgeBase" className="space-y-4 mt-4">
-                      <FormItem>
-                        <FormLabel className="text-sm font-medium text-gray-700">Knowledge Base URL</FormLabel>
-                        <Input
-                          value={campaign?.knowledge_base?.url || ''}
-                          disabled
-                          className="bg-white text-gray-900"
-                          readOnly
-                        />
-                      </FormItem>
-                      {campaign?.knowledge_base?.file && (
-                        <div className="mt-4">
-                          <Label className="text-sm font-medium text-gray-700">Attached File</Label>
-                          <div className="mt-2 p-3 bg-white rounded-md border">
-                            File attached
+                        <TabsContent value="knowledgeBase">
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium text-gray-700">Knowledge Base URL</Label>
+                            <Input value={campaign.knowledge_base?.url || ''} disabled className="bg-white text-gray-900" />
                           </div>
+                        </TabsContent>
+
+                        <TabsContent value="graph">
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium text-gray-700">Mermaid Graph</Label>
+                            <Textarea
+                              value={(campaign.llm?.promptJson as any)?.mermaidGraph || ''}
+                              disabled
+                              className="min-h-[200px] bg-white text-gray-900"
+                              placeholder="Mermaid graph definition..."
+                            />
+                          </div>
+                        </TabsContent>
                         </div>
-                      )}
-                    </TabsContent>
                   </Tabs>
+                  </div>
                 </div>
               )}
 
               {/* Step 5: Telephony */}
               {currentStep === 5 && (
-                <div className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="direction"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-medium text-gray-700">Direction</FormLabel>
-                        <Select disabled value={field.value}>
-                          <FormControl>
-                            <SelectTrigger className="h-9 bg-white text-gray-900">
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="INBOUND">Inbound</SelectItem>
-                            <SelectItem value="OUTBOUND">Outbound</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="telephonic_provider"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-medium text-gray-700">Telephony Provider</FormLabel>
-                        <Select disabled value={field.value}>
-                          <FormControl>
-                            <SelectTrigger className="h-9 bg-white text-gray-900">
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="czentrix">Czentrix</SelectItem>
-                            <SelectItem value="exotel">Exotel</SelectItem>
-                            <SelectItem value="twilio">Twilio</SelectItem>
-                            <SelectItem value="servotel">ServoTel</SelectItem>
-                            <SelectItem value="plivo">Plivo</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
+                <div className="bg-white rounded-lg border shadow-sm">
+                  <div className="p-4 space-y-4 min-h-[400px]">
+                    <div>
+                      <div className="text-sm font-medium text-gray-700 mb-1">Telephonic Provider</div>
+                      <Input value={campaign.telephonic_provider} disabled className="h-9 bg-white text-gray-900" />
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-1">Channels</div>
+                        <Input value={(campaign as any).telephony_config?.channels} disabled className="h-9 bg-white text-gray-900" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-1">Max Concurrent Calls</div>
+                        <Input value={(campaign as any).telephony_config?.max_concurrent_calls} disabled className="h-9 bg-white text-gray-900" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-1">Call Timeout</div>
+                        <Input value={(campaign as any).telephony_config?.call_timeout} disabled className="h-9 bg-white text-gray-900" />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-700 mb-1">Callback Endpoint</div>
+                      <Input value={(campaign as any).callback_endpoint || ''} disabled className="h-9 bg-white text-gray-900" />
+                    </div>
+                  </div>
                 </div>
               )}
 
               {/* Step 6: Post Call Actions */}
               {currentStep === 6 && (
-                <div className="space-y-6">
+                <div className="bg-white rounded-lg border shadow-sm">
+                  <div className="p-4 space-y-4 min-h-[400px]">
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Categories</h3>
                     <div className="space-y-4">
@@ -506,6 +515,7 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
                           </div>
                         ))
                       }
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -514,6 +524,24 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
           </div>
         </form>
       </Form>
+
+      {/* Audio Player */}
+      <audio
+        ref={audioRef}
+        onEnded={() => {
+          setIsPlaying(false);
+          setPlayingUrl(null);
+        }}
+        onPause={() => setIsPlaying(false)}
+        onPlay={() => setIsPlaying(true)}
+      />
+
+      {/* Version History Dialog */}
+      {showVersionHistory && (
+        <CampaignVersionHistory
+          campaignId={campaign.id}
+        />
+      )}
     </div>
   );
 };

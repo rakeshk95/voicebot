@@ -151,18 +151,17 @@ const StepPostCall = ({
             </Button>
           </div>
           {/* Editable input for system prompt (always shown) */}
-          <FormField
-            control={form.control}
-            name="post_call_actions.categories.system_prompt"
-            render={({ field }) => (
-              <FormItem className="mb-2">
-                <FormLabel className="text-xs text-gray-500">System Prompt (Categories)</FormLabel>
-                <FormControl>
-                  <Input {...field} className="h-9 text-sm" placeholder="Enter system prompt for categories" />
-                </FormControl>
-              </FormItem>
-            )}
-          />
+          <FormItem className="mb-2">
+            <FormLabel className="text-xs text-gray-500">System Prompt (Categories)</FormLabel>
+            <FormControl>
+              <Input 
+                value={categoriesSystemPrompt}
+                onChange={(e) => setCategoriesSystemPrompt(e.target.value)}
+                className="h-9 text-sm" 
+                placeholder="Enter system prompt for categories" 
+              />
+            </FormControl>
+          </FormItem>
           {/* Editable key-value pairs for categories */}
           {categorization.map((pair, idx) => (
             <div key={idx} className="flex gap-3 items-center">
@@ -236,18 +235,17 @@ const StepPostCall = ({
             </Button>
           </div>
           {/* Editable input for system prompt (always shown) */}
-          <FormField
-            control={form.control}
-            name="post_call_actions.data_extracted.system_prompt"
-            render={({ field }) => (
-              <FormItem className="mb-2">
-                <FormLabel className="text-xs text-gray-500">System Prompt (Data Extraction)</FormLabel>
-                <FormControl>
-                  <Input {...field} className="h-9 text-sm" placeholder="Enter system prompt for data extraction" />
-                </FormControl>
-              </FormItem>
-            )}
-          />
+          <FormItem className="mb-2">
+            <FormLabel className="text-xs text-gray-500">System Prompt (Data Extraction)</FormLabel>
+            <FormControl>
+              <Input 
+                value={dataExtractionSystemPrompt}
+                onChange={(e) => setDataExtractionSystemPrompt(e.target.value)}
+                className="h-9 text-sm" 
+                placeholder="Enter system prompt for data extraction" 
+              />
+            </FormControl>
+          </FormItem>
           {/* Editable key-value pairs for data extraction */}
           {dataExtractionFields.map((pair, idx) => (
             <div key={idx} className="flex gap-3 items-center">

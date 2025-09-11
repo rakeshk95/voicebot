@@ -305,8 +305,11 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
                 ) : (
                   filteredOperations.map(([operationId, operation]) => {
                     const isSelected = selectedOperation === operationId;
-                    const progressPercentage = (operation.expected_total_calls || operation.total_calls) > 0 
-                      ? (operation.completed_calls / (operation.expected_total_calls || operation.total_calls)) * 100 
+                    // Calculate progress percentage using actual total (completed calls or total calls, whichever is higher)
+                    const completed = operation.completed_calls || 0;
+                    const actualTotal = Math.max(completed, operation.total_calls || operation.expected_total_calls || 0);
+                    const progressPercentage = actualTotal > 0 
+                      ? (completed / actualTotal) * 100
                       : 0;
                     
                     const orgName = organizations.find(org => org.id === operation.org_id)?.name || 'N/A';
@@ -354,7 +357,7 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
                         <TableCell>
                           <div className="space-y-1">
                             <div className="text-sm font-medium">
-                              {operation.completed_calls} / {operation.expected_total_calls || operation.total_calls || 0}
+                              {operation.completed_calls} / {Math.max(operation.completed_calls, operation.total_calls || operation.expected_total_calls || 0)}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {operation.successful_calls} successful, {operation.failed_calls} failed

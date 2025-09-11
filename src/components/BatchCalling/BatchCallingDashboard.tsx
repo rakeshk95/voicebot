@@ -18,7 +18,8 @@ import {
   FileSpreadsheet,
   Users,
   Phone,
-  Info
+  Info,
+  Activity
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { 
@@ -35,6 +36,8 @@ import { BatchCallUpload } from './BatchCallUpload';
 import { BatchCallOperations } from './BatchCallOperations';
 import { BatchOperationsTable } from './BatchOperationsTable';
 import { BatchCallDetails } from './BatchCallDetails';
+import { SystemMonitoring } from './SystemMonitoring';
+import { RabbitMQIntegrationTest } from './RabbitMQIntegrationTest';
 
 export const BatchCallingDashboard: React.FC = () => {
   const [summary, setSummary] = useState<BatchCallSummary | null>(null);
@@ -67,7 +70,7 @@ export const BatchCallingDashboard: React.FC = () => {
     try {
       const response = await authorizedFetch('/organizations');
       if (response.ok) {
-        const orgData = await response.json();
+        const orgData = await response.json() as Array<{ id: string; name: string }>;
         setOrganizations(orgData);
       } else {
         console.error('Failed to fetch organizations:', response.status);
@@ -83,7 +86,7 @@ export const BatchCallingDashboard: React.FC = () => {
     try {
       const response = await authorizedFetch('/campaigns/');
       if (response.ok) {
-        const campaignData = await response.json();
+        const campaignData = await response.json() as Array<{ id: string; name: string; org_id: string }>;
         setCampaigns(campaignData);
       } else {
         console.error('Failed to fetch campaigns:', response.status);
@@ -424,7 +427,7 @@ export const BatchCallingDashboard: React.FC = () => {
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="operations" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="operations" className="flex items-center space-x-2">
             <BarChart3 className="h-4 w-4" />
             <span>Operations</span>
@@ -432,6 +435,14 @@ export const BatchCallingDashboard: React.FC = () => {
           <TabsTrigger value="upload" className="flex items-center space-x-2">
             <Upload className="h-4 w-4" />
             <span>New Operation</span>
+          </TabsTrigger>
+          <TabsTrigger value="monitoring" className="flex items-center space-x-2">
+            <Activity className="h-4 w-4" />
+            <span>Monitoring</span>
+          </TabsTrigger>
+          <TabsTrigger value="test" className="flex items-center space-x-2">
+            <CheckCircle className="h-4 w-4" />
+            <span>Integration Test</span>
           </TabsTrigger>
           <TabsTrigger value="call-details" className="flex items-center space-x-2">
             <FileSpreadsheet className="h-4 w-4" />
@@ -455,6 +466,14 @@ export const BatchCallingDashboard: React.FC = () => {
            <BatchCallUpload onUploadSuccess={fetchData} />
          </TabsContent>
 
+         <TabsContent value="monitoring" className="space-y-4">
+           <SystemMonitoring refreshInterval={10000} autoRefresh={true} />
+         </TabsContent>
+
+         <TabsContent value="test" className="space-y-4">
+           <RabbitMQIntegrationTest />
+         </TabsContent>
+
         <TabsContent value="call-details" className="space-y-4">
           <BatchCallDetails 
             operations={
@@ -470,7 +489,11 @@ export const BatchCallingDashboard: React.FC = () => {
                     successful_calls: op.successful_calls || 0,
                     failed_calls: op.failed_calls || 0,
                     pending_calls: op.pending_calls || (op.total_calls - op.completed_calls),
-                    progress_percentage: op.expected_total_calls > 0 ? (op.completed_calls / op.expected_total_calls) * 100 : 0,
+                    progress_percentage: (() => {
+                      const completed = op.completed_calls || 0;
+                      const actualTotal = Math.max(completed, op.total_calls || op.expected_total_calls || 0);
+                      return actualTotal > 0 ? (completed / actualTotal) * 100 : 0;
+                    })(),
                     error: null,
                     is_active: op.is_active,
                     call_statuses: undefined

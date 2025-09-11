@@ -15,7 +15,7 @@ import { cacheService, CacheKeys, cacheHelpers } from './cacheService';
 
 // API configuration
 const API_BASE_URL = 'https://platform.voxiflow.com/backend/api/v1';
-const BACKGROUND_SERVER_URL = 'http://localhost:9000';
+const BACKGROUND_SERVER_URL = 'http://13.200.143.144:9000';
 const BATCH_CALLS_BASE_URL = '/bulk-calls';
 
 /**
@@ -121,56 +121,6 @@ export async function startBatchCall(request: BatchCallStartRequest): Promise<Ba
     return result;
   } catch (error) {
     console.error('Failed to start batch call:', error);
-    throw error;
-  }
-}
-
-/**
- * Start a new batch call operation using RabbitMQ
- */
-export async function startBatchCallWithRabbitMQ(request: BatchCallStartRequest): Promise<BatchCallStartResponse> {
-  try {
-    // Validate input parameters
-    if (!request.file || !(request.file instanceof File)) {
-      throw new Error('Invalid file: file must be a valid File object');
-    }
-    
-    if (!request.campaign_id || typeof request.campaign_id !== 'string' || request.campaign_id.trim() === '') {
-      throw new Error('Invalid campaign_id: must be a non-empty string');
-    }
-    
-    if (!request.org_id || typeof request.org_id !== 'string' || request.org_id.trim() === '') {
-      throw new Error('Invalid org_id: must be a non-empty string');
-    }
-    
-    if (!request.user_id || typeof request.user_id !== 'string' || request.user_id.trim() === '') {
-      throw new Error('Invalid user_id: must be a non-empty string');
-    }
-
-    // Convert BatchCallStartRequest to BatchCallRequest for RabbitMQ service
-    const rabbitMQRequest: BatchCallRequest = {
-      file: request.file,
-      campaign_id: request.campaign_id.trim(),
-      org_id: request.org_id.trim(),
-      user_id: request.user_id.trim(),
-      sleep_seconds: request.sleep_seconds || 100,
-      channels: request.channels || 1
-    };
-
-    // Use RabbitMQ service to upload bulk calls
-    const result = await RabbitMQBatchApiService.uploadBulkCalls(rabbitMQRequest);
-    
-    // Convert RabbitMQ response to BatchCallStartResponse format
-    const response: BatchCallStartResponse = {
-      bulk_operation_id: result.batch_id,
-      message: result.message,
-      status: result.status,
-      note: `RabbitMQ batch operation started successfully`
-    };
-
-    return response;
-  } catch (error) {
-    console.error('Failed to start RabbitMQ batch call:', error);
     throw error;
   }
 }
@@ -921,85 +871,4 @@ export function getStatusColorClass(status: string): string {
     default:
       return 'text-gray-600 bg-gray-100 border-gray-200';
   }
-}
-
-// ============================================================================
-// RabbitMQ System Monitoring Functions
-// ============================================================================
-
-/**
- * Get system monitoring data
- */
-export async function getSystemMonitoring() {
-  return RabbitMQBatchApiService.getSystemStatus();
-}
-
-/**
- * Get real-time monitoring data
- */
-export async function getRealTimeMonitoring() {
-  return RabbitMQBatchApiService.getRealTimeMonitoring();
-}
-
-/**
- * Get system metrics
- */
-export async function getSystemMetrics() {
-  return RabbitMQBatchApiService.getSystemMetrics();
-}
-
-/**
- * Get queue health metrics
- */
-export async function getQueueHealth() {
-  return RabbitMQBatchApiService.getQueueHealth();
-}
-
-/**
- * Get worker metrics
- */
-export async function getWorkerMetrics() {
-  return RabbitMQBatchApiService.getWorkerMetrics();
-}
-
-/**
- * Get system alerts
- */
-export async function getSystemAlerts() {
-  return RabbitMQBatchApiService.getSystemAlerts();
-}
-
-/**
- * Pause all workers
- */
-export async function pauseAllWorkers() {
-  return RabbitMQBatchApiService.pauseAllWorkers();
-}
-
-/**
- * Resume all workers
- */
-export async function resumeAllWorkers() {
-  return RabbitMQBatchApiService.resumeAllWorkers();
-}
-
-/**
- * Restart all workers
- */
-export async function restartAllWorkers() {
-  return RabbitMQBatchApiService.restartAllWorkers();
-}
-
-/**
- * Scale workers
- */
-export async function scaleWorkers(count: number) {
-  return RabbitMQBatchApiService.scaleWorkers(count);
-}
-
-/**
- * Emergency stop all operations
- */
-export async function emergencyStopAll() {
-  return RabbitMQBatchApiService.emergencyStopAll();
 }

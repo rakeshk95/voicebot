@@ -47,7 +47,7 @@ const Analytics = () => {
     { month: 'Feb', calls: 13200, success: 11220, revenue: 142000 },
     { month: 'Mar', calls: 15800, success: 13560, revenue: 168001 },
     { month: 'Apr', calls: 14600, success: 12580, revenue: 156000 },
-    { month: 'May', calls: 16900, success: 14720, revenue: 189000 },
+    { month: 'May', calls: 16900, success: 14720, revenue: 183001 },
     { month: 'Jun', calls: 18200, success: 15860, revenue: 205000 },
   ];
 

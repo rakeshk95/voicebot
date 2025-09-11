@@ -14,6 +14,7 @@ export interface Campaign {
   direction: 'INBOUND' | 'OUTBOUND';
   state: 'TRIAL' | 'ACTIVE' | 'INACTIVE';
   org_id: string;
+  created_by?: string;
   tts?: {
     gender: string;
     language: string;

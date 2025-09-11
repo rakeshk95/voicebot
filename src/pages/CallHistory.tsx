@@ -531,25 +531,25 @@ const CallHistory = () => {
       console.log('CallHistory: Initializing data with campaignId:', campaignId, 'campaignName:', campaignName);
       
       try {
-        if (campaignId && campaignName) {
-          console.log('CallHistory: Using URL params for campaign');
-          // If we have campaign ID and name from URL params, use them directly
-          setSelectedCampaign(campaignId);
-          setSelectedCampaignName(decodeURIComponent(campaignName));
-          
-          const end = new Date();
-          const start = new Date();
-          start.setDate(start.getDate() - 2);
-          
-          setStartDate(start);
-          setEndDate(end);
-          
-          // Fetch call data for the specific campaign
-          await fetchCallData(1, campaignId);
-        } else {
-          console.log('CallHistory: No URL params, fetching campaigns');
-          // Fetch campaigns first, then set up default campaign and fetch its data
-          await fetchCampaigns();
+      if (campaignId && campaignName) {
+        console.log('CallHistory: Using URL params for campaign');
+        // If we have campaign ID and name from URL params, use them directly
+        setSelectedCampaign(campaignId);
+        setSelectedCampaignName(decodeURIComponent(campaignName));
+        
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - 2);
+        
+        setStartDate(start);
+        setEndDate(end);
+        
+        // Fetch call data for the specific campaign
+        await fetchCallData(1, campaignId);
+      } else {
+        console.log('CallHistory: No URL params, fetching campaigns');
+        // Fetch campaigns first, then set up default campaign and fetch its data
+        await fetchCampaigns();
         }
         
         isInitialized = true;
@@ -720,15 +720,15 @@ const CallHistory = () => {
     setNextCursor(null);
     setCurrentPage(1);
     
-    // Clear any existing timeout
+    // Clear search
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
     
     // Only search if we have a campaign selected
     if (selectedCampaign) {
-      searchTimeoutRef.current = setTimeout(() => {
-        fetchCallData(1, selectedCampaign, false);
+    searchTimeoutRef.current = setTimeout(() => {
+      fetchCallData(1, selectedCampaign, false);
       }, 800); // Increased debounce time to 800ms
     }
   };
@@ -742,7 +742,7 @@ const CallHistory = () => {
     }
     // Use setTimeout to respect cooldown
     setTimeout(() => {
-      fetchCallData(page, selectedCampaign, page > currentPage);
+    fetchCallData(page, selectedCampaign, page > currentPage);
     }, 100);
   };
 
@@ -754,7 +754,7 @@ const CallHistory = () => {
     setCurrentPage(1);
     // Use setTimeout to respect cooldown
     setTimeout(() => {
-      fetchCallData(1, value, false);
+    fetchCallData(1, value, false);
     }, 100);
   };
 
@@ -849,7 +849,7 @@ const CallHistory = () => {
         body: JSON.stringify({
           to_number: call.To,
           dynamic_variables: {
-              customer_name: providedName || call.CallerName,
+              customer_name: call.To,
           },
           metadata: {},
           campaign_id: selectedCampaign
@@ -1205,7 +1205,7 @@ const CallHistory = () => {
                     setCurrentPage(1);
                     // Use setTimeout to respect cooldown
                     setTimeout(() => {
-                      fetchCallData(1, selectedCampaign, false);
+                    fetchCallData(1, selectedCampaign, false);
                     }, 100);
                   }}
                 >
@@ -1233,7 +1233,7 @@ const CallHistory = () => {
                     setCurrentPage(1);
                     // Use setTimeout to respect cooldown
                     setTimeout(() => {
-                      fetchCallData(1, selectedCampaign, false);
+                    fetchCallData(1, selectedCampaign, false);
                     }, 100);
                   }}
                 >
@@ -1265,7 +1265,7 @@ const CallHistory = () => {
                       setCurrentPage(1);
                       // Use setTimeout to respect cooldown
                       setTimeout(() => {
-                        fetchCallData(1, selectedCampaign, false);
+                      fetchCallData(1, selectedCampaign, false);
                       }, 100);
                     }}
                     className="h-8 px-2 border-gray-200 text-sm gap-1"
@@ -1520,19 +1520,19 @@ const CallHistory = () => {
                           }
                           
                           if (!categoryData || Object.keys(categoryData).length === 0) {
-                            return <div className="text-gray-500 text-sm">No category data available.</div>;
-                          }
+                              return <div className="text-gray-500 text-sm">No category data available.</div>;
+                            }
                           
-                          return (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {Object.entries(categoryData).map(([key, value]) => (
-                                <div key={key} className="bg-blue-50 p-4 rounded-lg flex flex-col">
-                                  <div className="font-semibold text-blue-800 mb-1 text-sm">{key}</div>
-                                  <div className="text-gray-700 text-sm break-words">{String(value)}</div>
-                                </div>
-                              ))}
-                            </div>
-                          );
+                            return (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {Object.entries(categoryData).map(([key, value]) => (
+                                  <div key={key} className="bg-blue-50 p-4 rounded-lg flex flex-col">
+                                    <div className="font-semibold text-blue-800 mb-1 text-sm">{key}</div>
+                                    <div className="text-gray-700 text-sm break-words">{String(value)}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
                         })()}
                       </CardContent>
                     </Card>
@@ -1563,23 +1563,23 @@ const CallHistory = () => {
                           }
                           
                           if (!extractedDataObj || Object.keys(extractedDataObj).length === 0) {
-                            return <div className="text-gray-500 text-sm">No extracted data available.</div>;
-                          }
+                              return <div className="text-gray-500 text-sm">No extracted data available.</div>;
+                            }
                           
-                          return (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {Object.entries(extractedDataObj).map(([key, value]) => (
-                                <div key={key} className="bg-green-50 p-4 rounded-lg flex flex-col">
-                                  <div className="font-semibold text-green-800 mb-1 text-sm">
-                                    {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                  </div>
+                            return (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {Object.entries(extractedDataObj).map(([key, value]) => (
+                                  <div key={key} className="bg-green-50 p-4 rounded-lg flex flex-col">
+                                    <div className="font-semibold text-green-800 mb-1 text-sm">
+                                      {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                    </div>
                                   <div className="text-gray-700 text-sm break-words">
                                     {value === null || value === undefined ? 'Not Available' : String(value)}
                                   </div>
-                                </div>
-                              ))}
-                            </div>
-                          );
+                                  </div>
+                                ))}
+                              </div>
+                            );
                         })()}
                       </CardContent>
                     </Card>

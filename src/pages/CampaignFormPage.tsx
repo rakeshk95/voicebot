@@ -15,6 +15,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { toast } from '@/components/ui/use-toast';
+import { CampaignVersion, getCurrentVersion, getCampaignVersions, getCampaignVersion } from '@/lib/campaignVersioningApi';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 
 // --- Schema and default values (copied from Campaigns.tsx) ---
 const campaignFormSchema = z.object({
@@ -76,6 +80,8 @@ const campaignFormSchema = z.object({
       }).optional(),
       nodes: z.record(z.any()).optional(),
       context: z.string().optional(),
+      responses: z.record(z.any()).optional(),
+      variables: z.record(z.any()).optional(),
       botStateDefinitions: z.record(z.any()).optional(),
       language: z.string().optional(),
       mermaidGraph: z.string().optional()
@@ -141,6 +147,8 @@ type CampaignFormValues = {
       };
       nodes?: Record<string, any>;
       context?: string;
+      responses?: Record<string, any>;
+      variables?: Record<string, any>;
       botStateDefinitions?: Record<string, any>;
       language?: string;
       mermaidGraph?: string;
@@ -240,6 +248,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
   // --- StepFlow and PostCall state ---
   const [activeFlowTab, setActiveFlowTab] = useState<'context' | 'graph' | 'responses' | 'variables' | 'knowledgeBase'>('context');
   const [contextValue, setContextValue] = useState('');
+  const [initialMessage, setInitialMessage] = useState('');
   const [responses, setResponses] = useState<KeyValuePair[]>([]);
   const [variables, setVariables] = useState<KeyValuePair[]>([]);
   const [categorization, setCategorization] = useState<KeyValuePair[]>([]);
@@ -249,6 +258,13 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
   const [dataExtractionSystemPrompt, setDataExtractionSystemPrompt] = useState('');
   // --- Persist system prompt for categories ---
   const [categoriesSystemPrompt, setCategoriesSystemPrompt] = useState('');
+  
+  // --- Version management state ---
+  const [currentVersion, setCurrentVersion] = useState<CampaignVersion | null>(null);
+  const [availableVersions, setAvailableVersions] = useState<CampaignVersion[]>([]);
+  const [selectedVersion, setSelectedVersion] = useState<string>('');
+  const [loadingVersion, setLoadingVersion] = useState(false);
+  const [loadingVersions, setLoadingVersions] = useState(false);
 
   // --- Form ---
   const form = useForm<CampaignFormValues>({
@@ -282,6 +298,16 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
     form.setValue('post_call_actions.categories.system_prompt', String(categoriesSystemPrompt || ''));
   }, [categoriesSystemPrompt]);
 
+  // --- Sync contextValue to llm.prompt in form state ---
+  React.useEffect(() => {
+    form.setValue('llm.prompt', String(contextValue || ''));
+  }, [contextValue]);
+
+  // --- Sync initialMessage to llm.initialMessage in form state ---
+  React.useEffect(() => {
+    form.setValue('llm.initialMessage', String(initialMessage || ''));
+  }, [initialMessage]);
+
   // --- Sync variables to llm.promptJson.promptVariables in form state ---
   React.useEffect(() => {
     const promptVariablesObj = variables.reduce((acc, pair) => {
@@ -299,11 +325,278 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
     });
   }, [variables]);
 
+  // --- Version management functions ---
+  const loadCurrentVersion = async (campaignId: string) => {
+    setLoadingVersion(true);
+    try {
+      const version = await getCurrentVersion(campaignId);
+      setCurrentVersion(version);
+      setSelectedVersion(version.version);
+    } catch (error) {
+      toast({
+        title: "Version Loading Error",
+        description: `Failed to load current version: ${error.message}`,
+        variant: "destructive",
+      });
+      
+      // If versioning is not available, create a mock version from campaign data
+      const mockVersion = {
+        id: campaignId,
+        name: campaignData?.name || '',
+        version: '1',
+        state: campaignData?.state || 'DRAFT',
+        created_at: new Date().toISOString(),
+        created_by: 'system',
+        llm: {
+          ...campaignData?.llm,
+          prompt: campaignData?.llm?.promptJson?.context || ''
+        },
+        tts: campaignData?.tts,
+        speech_setting: campaignData?.speech_setting,
+        telephonic_provider: campaignData?.telephonic_provider,
+        knowledge_base: campaignData?.knowledge_base,
+        post_call_actions: campaignData?.post_call_actions,
+      };
+      setCurrentVersion(mockVersion);
+      setSelectedVersion('1');
+    } finally {
+      setLoadingVersion(false);
+    }
+  };
+
+  const loadAvailableVersions = async (campaignId: string) => {
+    setLoadingVersions(true);
+    try {
+      const versions = await getCampaignVersions(campaignId);
+      setAvailableVersions(versions);
+    } catch (error) {
+      toast({
+        title: "Versions Loading Error",
+        description: `Failed to load available versions: ${error.message}`,
+        variant: "destructive",
+      });
+      
+      setAvailableVersions([]);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
+  // Helper function to clean and validate data
+  const cleanData = (data: any, defaultValue: any = null) => {
+    if (data === null || data === undefined || data === '') {
+      return defaultValue;
+    }
+    if (typeof data === 'object' && Object.keys(data).length === 0) {
+      return defaultValue;
+    }
+    return data;
+  };
+
+  const handleVersionChange = async (versionNumber: string) => {
+    if (!params.id) return;
+    
+    setSelectedVersion(versionNumber);
+    setLoadingVersion(true);
+    
+    try {
+      const version = await getCampaignVersion(params.id, versionNumber);
+      setCurrentVersion(version);
+      
+      // Update form with version data
+      if (version) {
+        
+        // Basic fields
+        form.setValue('campaign_id', version.id || '');
+        form.setValue('name', version.name || '');
+        form.setValue('state', version.state as 'TRIAL' | 'ACTIVE' | 'INACTIVE' || 'TRIAL');
+        form.setValue('direction', version.direction as 'INBOUND' | 'OUTBOUND' || 'OUTBOUND');
+        form.setValue('org_id', version.org_id || '');
+        form.setValue('telephonic_provider', version.telephonic_provider || '');
+        
+        // TTS fields
+        if (version.tts) {
+          form.setValue('tts', {
+            gender: version.tts.gender || 'female',
+            language: version.tts.language || 'hindi',
+            voice_id: version.tts.voice_id || '',
+            vendor: version.tts.vendor || '11labs',
+            transfer_call: version.tts.transfer_call || false
+          });
+        }
+        
+        // STT fields
+        form.setValue('stt', {
+          vendor: 'deepgram',
+          provider: 'nova-2'
+        });
+        
+        // LLM fields - comprehensive mapping with proper null handling
+        if (version.llm) {
+          const llmData = {
+            initialMessage: version.llm.initialMessage || '',
+            useProxyLlm: version.llm.useProxyLlm || false,
+            UseStructuredPrompt: version.llm.UseStructuredPrompt || false,
+            provider: version.llm.provider || 'AZURE',
+            model: version.llm.model || 'gpt-4.1',
+            temperature: version.llm.temperature || '0.5',
+            maxCallDuration: version.llm.maxCallDuration || '300',
+            useEmbeddings: version.llm.useEmbeddings || false,
+            prompt: version.llm.prompt || '',
+            promptJson: {
+              skeleton: version.llm.promptJson?.skeleton || 'Simple output format.',
+              promptVariables: version.llm.promptJson?.promptVariables || {},
+              knowledgeBase: version.knowledge_base || { url: '', file: null },
+              nodes: version.llm.promptJson?.nodes || {},
+              context: version.llm.prompt || '',
+              responses: version.llm.promptJson?.responses || {},
+              variables: version.llm.promptJson?.variables || {}
+            }
+          };
+          
+          form.setValue('llm', llmData);
+        } else {
+          // Reset LLM data if not present
+          form.setValue('llm', {
+            initialMessage: '',
+            useProxyLlm: false,
+            UseStructuredPrompt: false,
+            provider: 'AZURE',
+            model: 'gpt-4.1',
+            temperature: '0.5',
+            maxCallDuration: '300',
+            useEmbeddings: false,
+            prompt: '',
+            promptJson: {
+              skeleton: 'Simple output format.',
+              promptVariables: {},
+              knowledgeBase: { url: '', file: null },
+              nodes: {},
+              context: '',
+              responses: {},
+              variables: {}
+            }
+          });
+        }
+        
+        // Knowledge base
+        if (version.knowledge_base) {
+          form.setValue('knowledge_base', {
+            url: version.knowledge_base.url || '',
+            file: null
+          });
+        }
+        
+        // Post call actions - handle empty values properly
+        if (version.post_call_actions) {
+          const categories = version.post_call_actions.categories || { system_prompt: '', fields: {} };
+          const dataExtracted = version.post_call_actions.data_extracted || { system_prompt: '', fields: {} };
+          
+          form.setValue('post_call_actions', {
+            categories: {
+              system_prompt: categories.system_prompt || '',
+              fields: categories.fields || {}
+            },
+            data_extracted: {
+              system_prompt: dataExtracted.system_prompt || '',
+              fields: dataExtracted.fields || {}
+            }
+          });
+          
+          // Update state variables for post-call actions
+          if (categories.fields && Object.keys(categories.fields).length > 0) {
+            const categorization = Object.entries(categories.fields).map(([key, value]) => ({
+              key,
+              value: value as string
+            }));
+            setCategorization(categorization);
+          } else {
+            setCategorization([]);
+          }
+          
+          if (dataExtracted.fields && Object.keys(dataExtracted.fields).length > 0) {
+            const dataExtractionFields = Object.entries(dataExtracted.fields).map(([key, value]) => ({
+              key,
+              value: value as string
+            }));
+            setDataExtractionFields(dataExtractionFields);
+          } else {
+            setDataExtractionFields([]);
+          }
+          
+          // Update system prompts
+          setCategoriesSystemPrompt(categories.system_prompt || '');
+          setDataExtractionSystemPrompt(dataExtracted.system_prompt || '');
+        } else {
+          // Reset post-call actions if not present
+          form.setValue('post_call_actions', {
+            categories: {
+              system_prompt: '',
+              fields: {}
+            },
+            data_extracted: {
+              system_prompt: '',
+              fields: {}
+            }
+          });
+          setCategorization([]);
+          setDataExtractionFields([]);
+          setCategoriesSystemPrompt('');
+          setDataExtractionSystemPrompt('');
+        }
+        
+        // Telephony config
+        form.setValue('telephony_config', {
+          channels: 1,
+          max_concurrent_calls: 1,
+          call_timeout: 30
+        });
+        
+        // Update speech settings state
+        if (version.speech_setting) {
+          setAllowInterruptions(version.speech_setting.interruption?.status || false);
+          setAmbientStatus(version.speech_setting.ambient_sound?.status || false);
+          setSound(version.speech_setting.ambient_sound?.sound || 'office');
+          setVolume(Number(version.speech_setting.ambient_sound?.volume || 0.1));
+        }
+        
+        // Update call settings
+        setMaxIdleReminder(version.max_idle_reminder || 3);
+        setMaxIdleDuration(version.max_idle_duration || 5);
+        
+        // Update context value for the form
+        setContextValue(version.llm?.prompt || '');
+        
+        // Update initial message
+        setInitialMessage(version.llm?.initialMessage || '');
+        
+        // Update variables from promptJson
+        if (version.llm?.promptJson?.promptVariables && Object.keys(version.llm.promptJson.promptVariables).length > 0) {
+          const variables = Object.entries(version.llm.promptJson.promptVariables).map(([key, value]) => ({
+            key,
+            value: value as string
+          }));
+          setVariables(variables);
+        } else {
+          setVariables([]);
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load version data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingVersion(false);
+    }
+  };
+
   // --- Fetch organizations ---
   useEffect(() => {
     async function fetchOrganizations() {
       try {
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+        const response = await fetch('http://localhost:8000/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -320,6 +613,14 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
     }
     fetchOrganizations();
   }, []);
+
+  // --- Load versions when in edit mode ---
+  useEffect(() => {
+    if (mode === 'edit' && params.id) {
+      loadCurrentVersion(params.id);
+      loadAvailableVersions(params.id);
+    }
+  }, [mode, params.id]);
 
   // --- Fetch campaign data for edit mode ---
   useEffect(() => {
@@ -426,6 +727,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         }
       });
       setContextValue(campaignData.llm?.promptJson?.context || '');
+      setInitialMessage(campaignData.llm?.initialMessage || '');
       const promptVarsFromAPI = campaignData.llm?.promptJson?.promptVariables || {};
       setVariables(Object.entries(promptVarsFromAPI).map(([key, value]) => ({ key, value: value as string })));
       setCategorization(Object.entries(categories.fields || {}).map(([key, value]) => ({ key, value: value as string })));
@@ -484,6 +786,11 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         if (pair.key) categorizationObj[pair.key] = pair.value;
       });
       form.setValue('post_call_actions.categories.fields', categorizationObj);
+      
+      // Update form with current state values for system prompts
+      form.setValue('post_call_actions.categories.system_prompt', categoriesSystemPrompt);
+      form.setValue('post_call_actions.data_extracted.system_prompt', dataExtractionSystemPrompt);
+      
       // Now get the latest values
       data = form.getValues();
       let createdBy = undefined;
@@ -492,13 +799,14 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         createdBy = userData.id ? Number(userData.id) : undefined;
       } catch {}
       // Always send post_call_actions in the required format
+      // Use state variables for system prompts as they contain the actual user input
       const postCallActions = {
         data_extracted: {
-          system_prompt: data.post_call_actions?.data_extracted?.system_prompt || '',
+          system_prompt: dataExtractionSystemPrompt || data.post_call_actions?.data_extracted?.system_prompt || '',
           fields: data.post_call_actions?.data_extracted?.fields || {}
         },
         categories: {
-          system_prompt: data.post_call_actions?.categories?.system_prompt || '',
+          system_prompt: categoriesSystemPrompt || data.post_call_actions?.categories?.system_prompt || '',
           fields: data.post_call_actions?.categories?.fields || {}
         }
       };
@@ -511,7 +819,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         state: data.state || "",
         version: "0",
         llm: {
-          initialMessage: data.llm?.initialMessage || "",
+          initialMessage: initialMessage || data.llm?.initialMessage || "",
           useProxyLlm: data.llm?.useProxyLlm || false,
           UseStructuredPrompt: data.llm?.UseStructuredPrompt || false,
           provider: "AZURE",
@@ -519,7 +827,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
           temperature: data.llm?.temperature || "0.5",
           maxCallDuration: data.llm?.maxCallDuration || "300",
           useEmbeddings: data.llm?.useEmbeddings || false,
-          prompt: data.llm?.prompt || "",
+          prompt: contextValue || data.llm?.prompt || "",
           promptJson: {
             skeleton: "Simple output format.",
             promptVariables: variables.reduce((acc, v) => {
@@ -576,9 +884,6 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         updated_at: new Date().toISOString(),
         ...(mode === 'edit' && params.id ? { id: params.id } : {})
       };
-      console.log('Campaign create/edit payload:', requestData); // Debug: verify campaign_id in payload
-      console.log('LLM data from form:', data.llm); // Debug: verify LLM data
-      console.log('LLM model value:', data.llm?.model); // Debug: verify LLM model
       const url = mode === 'edit' && params.id
         ? `https://platform.voxiflow.com/backend/api/v1/campaigns/${params.id}`
         : 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
@@ -658,6 +963,77 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
             ))}
           </div>
         </div>
+
+        {/* Version Selector - Only show in edit mode */}
+        {mode === 'edit' && (
+          <div className="bg-white border-b border-gray-200 px-6 py-4">
+            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    {currentVersion ? (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-blue-600 border-blue-600">
+                            Version {currentVersion.version}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            {new Date(currentVersion.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Created by: {currentVersion.created_by}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        {loadingVersion ? 'Loading version...' : 'No version data available'}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    {/* Version Selector Dropdown */}
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm font-medium text-gray-700">Edit Version:</Label>
+                      <Select
+                        value={selectedVersion}
+                        onValueChange={handleVersionChange}
+                        disabled={loadingVersion || loadingVersions}
+                      >
+                        <SelectTrigger className="w-40 h-8 text-sm">
+                          <SelectValue placeholder="Select version" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableVersions.length > 0 ? (
+                            availableVersions.map((version) => (
+                              <SelectItem key={version.version} value={version.version}>
+                                <div className="flex items-center gap-2">
+                                  <span>v{version.version}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(version.created_at).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="no-versions" disabled>
+                              No versions available
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      {loadingVersion && (
+                        <div className="text-xs text-muted-foreground">Loading...</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Card Container */}
         <div className="bg-white rounded-lg border shadow-sm">
           <div className="p-6">
@@ -856,7 +1232,6 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
                             });
                           } else {
                             const errors = form.formState.errors;
-                            console.log('Validation errors:', errors);
                             alert(JSON.stringify(errors, null, 2));
                             let missingFields = Object.keys(errors).map(key => {
                               switch (key) {

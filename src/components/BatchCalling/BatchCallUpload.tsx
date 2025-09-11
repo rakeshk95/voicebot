@@ -24,7 +24,13 @@ import {
   Play,
   X
 } from 'lucide-react';
-import { startBatchCall, pollOperationStatus, calculateCallStatusCounts, getStatusColorClass } from '@/lib/batchCallingApi';
+import { 
+  startBatchCall, 
+  startBatchCallWithRabbitMQ,
+  pollOperationStatus, 
+  calculateCallStatusCounts, 
+  getStatusColorClass 
+} from '@/lib/batchCallingApi';
 import { BatchCallStartRequest, BatchCallOperation } from '@/types/batchCalling';
 import { Campaign } from '@/types/campaign';
 import { authorizedFetch } from '@/lib/api';
@@ -45,6 +51,7 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
   const [apiError, setApiError] = useState<string | null>(null);
   const [lastStatusCheck, setLastStatusCheck] = useState<Date | null>(null);
   const [statusSource, setStatusSource] = useState<'memory' | 'database' | 'capabilities' | null>(null);
+  const [useRabbitMQ, setUseRabbitMQ] = useState(true); // Toggle between RabbitMQ and legacy API
   const { toast } = useToast();
   
   // Use refs to track polling state and prevent multiple calls
@@ -307,7 +314,10 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
         return;
       }
 
-      const response = await startBatchCall(request);
+      // Use RabbitMQ API if enabled, otherwise use legacy API
+      const response = useRabbitMQ 
+        ? await startBatchCallWithRabbitMQ(request)
+        : await startBatchCall(request);
       
       toast({
         title: "Upload Successful",
@@ -798,6 +808,39 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
                 </Button>
               </div>
             )}
+            {/* API Selection */}
+            <div className="space-y-2">
+              <Label>API Backend</Label>
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name="api-backend"
+                    checked={useRabbitMQ}
+                    onChange={() => setUseRabbitMQ(true)}
+                    className="text-blue-600"
+                  />
+                  <span className="text-sm font-medium">RabbitMQ (Recommended)</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name="api-backend"
+                    checked={!useRabbitMQ}
+                    onChange={() => setUseRabbitMQ(false)}
+                    className="text-blue-600"
+                  />
+                  <span className="text-sm font-medium">Legacy API</span>
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {useRabbitMQ 
+                  ? "Using enhanced RabbitMQ backend with real-time monitoring and advanced controls"
+                  : "Using legacy API backend for compatibility"
+                }
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="org_id">Organization *</Label>
@@ -844,19 +887,20 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
                 )}
               </div>
 
-                             <div className="space-y-2">
-                 <Label htmlFor="channels">Number of Channels *</Label>
-                 <Input
-                   id="channels"
-                   type="number"
-                   min="1"
-                   value={formData.channels}
-                   onChange={(e) => handleInputChange('channels', e.target.value)}
-                   placeholder="1"
-                   className="w-full"
-                 />
-                 <p className="text-xs text-muted-foreground">Number of parallel channels for processing calls (minimum 1)</p>
-               </div>
+              <div className="space-y-2">
+                <Label htmlFor="channels">Number of Channels *</Label>
+                <Input
+                  id="channels"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={formData.channels}
+                  onChange={(e) => handleInputChange('channels', e.target.value)}
+                  placeholder="1"
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">Number of parallel channels for processing calls (1-100)</p>
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="sleep_seconds">Delay Between Calls (seconds) *</Label>
@@ -882,12 +926,12 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
               {uploading ? (
                 <>
                   <RefreshCw className="h-5 w-5 mr-3 animate-spin" />
-                  Starting Batch Operation...
+                  Starting {useRabbitMQ ? 'RabbitMQ' : 'Legacy'} Batch Operation...
                 </>
               ) : (
                 <>
                   <Upload className="h-5 w-5 mr-3" />
-                  Start Batch Operation
+                  Start {useRabbitMQ ? 'RabbitMQ' : 'Legacy'} Batch Operation
                 </>
               )}
             </Button>

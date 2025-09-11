@@ -424,6 +424,7 @@ const Campaigns = () => {
   const hasFetchedCampaigns = useRef(false);
   const isFetchingCampaigns = useRef(false);
 
+
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
     defaultValues: {
@@ -515,8 +516,6 @@ const Campaigns = () => {
       try {
         isFetchingCampaigns.current = true;
         setIsLoading(true);
-        console.log('Fetching campaigns...');
-        console.log('Current organizations count:', organizations.length);
         
         const authToken = localStorage.getItem('authToken');
         if (!authToken) {
@@ -555,13 +554,17 @@ const Campaigns = () => {
         }
 
         const data = await response.json();
-        console.log('Campaigns API data:', data);
         
         // Format campaigns with organization names if available
+        console.log('Available organizations:', organizations);
+        console.log('Campaigns data:', data);
+        
         const formattedCampaigns = data.map((campaign: any) => {
           // Find organization name by org_id
           const organization = organizations.find(org => org.id === campaign.org_id);
           let orgName = 'Unknown Organization';
+          
+          console.log(`Campaign ${campaign.name}: org_id=${campaign.org_id}, found org:`, organization);
           
           if (organization) {
             orgName = organization.name;
@@ -570,11 +573,12 @@ const Campaigns = () => {
             if (!isSuperUser && userData?.org_id === campaign.org_id) {
               orgName = userData.org_name || userData.user_name || `Org ${campaign.org_id}`;
             } else {
+              // For superusers or when organization is not found, show org_id
               orgName = `Org ${campaign.org_id}`;
             }
           }
           
-          console.log(`Campaign ${campaign.name}: org_id=${campaign.org_id}, org_name=${orgName}`);
+          console.log(`Final org name for ${campaign.name}: ${orgName}`);
           
           return {
             id: campaign.id,
@@ -597,7 +601,6 @@ const Campaigns = () => {
           };
         });
 
-        console.log('Formatted campaigns:', formattedCampaigns);
         setCampaigns(formattedCampaigns);
         hasFetchedCampaigns.current = true;
       } catch (error) {
@@ -605,7 +608,7 @@ const Campaigns = () => {
         toast({
           title: "Error",
           description: error instanceof Error ? error.message : "Failed to load campaigns. Please try again.",
-          variant: "destructive",
+          variant: "destructive"
         });
       } finally {
         setIsLoading(false);
@@ -614,7 +617,7 @@ const Campaigns = () => {
     };
 
     fetchCampaigns();
-  }, [organizations, isSuperUser, userData?.org_id]); // Simplified dependencies
+  }, [organizations, isSuperUser, userData?.org_id]); // Re-fetch campaigns when organizations change
 
 
 
@@ -670,7 +673,11 @@ const Campaigns = () => {
         
         if (Array.isArray(data)) {
           console.log('Setting organizations:', data.length, 'organizations');
+          console.log('Organizations data:', data);
           setOrganizations(data);
+          
+          // Reset campaigns fetched flag so campaigns are re-fetched with proper org names
+          hasFetchedCampaigns.current = false;
           
           // For non-superusers, set their organization as the default filter
           if (!isSuperUser && userData?.org_id) {
@@ -954,8 +961,6 @@ const Campaigns = () => {
             promptJson: {
               skeleton: "Simple output format.",
               promptVariables,
-              knowledgeBase: data.knowledge_base,
-              nodes: {},
               context: contextValue || "",
               botStateDefinitions: {},
               language: data.tts?.language || "hindi",
@@ -2091,6 +2096,30 @@ const Campaigns = () => {
               View and manage campaign details and configuration
             </DialogDescription>
           </DialogHeader>
+          <div className="bg-red-100 p-4 mb-4 rounded">
+            <h3 className="font-bold text-red-800">DEBUG: Campaign Details Component</h3>
+            <p>Campaign ID: {viewingCampaign?.id}</p>
+            <p>Campaign Name: {viewingCampaign?.name}</p>
+            <p>Component should render below this debug box</p>
+          </div>
+          
+          {/* Simple Test Component */}
+          <div className="bg-green-100 p-4 mb-4 rounded border-2 border-green-400">
+            <h3 className="font-bold text-green-800 mb-2">✅ SIMPLE TEST COMPONENT</h3>
+            <p>This should be visible if the dialog is working</p>
+            <p>Campaign ID: {viewingCampaign?.id}</p>
+            <p>Campaign Name: {viewingCampaign?.name}</p>
+            <button 
+              onClick={() => {
+                console.log('Test button clicked!');
+                alert('Test button works!');
+              }}
+              className="mt-2 px-4 py-2 bg-green-500 text-white rounded"
+            >
+              Test Button
+            </button>
+          </div>
+          
           <CampaignDetails campaign={viewingCampaign} />
         </DialogContent>
       </Dialog>
