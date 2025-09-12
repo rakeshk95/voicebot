@@ -2096,30 +2096,6 @@ const Campaigns = () => {
               View and manage campaign details and configuration
             </DialogDescription>
           </DialogHeader>
-          <div className="bg-red-100 p-4 mb-4 rounded">
-            <h3 className="font-bold text-red-800">DEBUG: Campaign Details Component</h3>
-            <p>Campaign ID: {viewingCampaign?.id}</p>
-            <p>Campaign Name: {viewingCampaign?.name}</p>
-            <p>Component should render below this debug box</p>
-          </div>
-          
-          {/* Simple Test Component */}
-          <div className="bg-green-100 p-4 mb-4 rounded border-2 border-green-400">
-            <h3 className="font-bold text-green-800 mb-2">✅ SIMPLE TEST COMPONENT</h3>
-            <p>This should be visible if the dialog is working</p>
-            <p>Campaign ID: {viewingCampaign?.id}</p>
-            <p>Campaign Name: {viewingCampaign?.name}</p>
-            <button 
-              onClick={() => {
-                console.log('Test button clicked!');
-                alert('Test button works!');
-              }}
-              className="mt-2 px-4 py-2 bg-green-500 text-white rounded"
-            >
-              Test Button
-            </button>
-          </div>
-          
           <CampaignDetails campaign={viewingCampaign} />
         </DialogContent>
       </Dialog>

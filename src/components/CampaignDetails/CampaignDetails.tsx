@@ -17,14 +17,16 @@ import CampaignUpdateDialog from './CampaignUpdateDialog';
 
 interface CampaignDetailsProps {
   campaign: Campaign | null;
+  onUpdate?: (updatedCampaign: Campaign) => void;
 }
 
-const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
+const CampaignDetails = ({ campaign, onUpdate }: CampaignDetailsProps) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [activeFlowTab, setActiveFlowTab] = useState<'context' | 'graph' | 'responses' | 'variables' | 'knowledgeBase'>('context');
   const [playingUrl, setPlayingUrl] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [loadingOrganizations, setLoadingOrganizations] = useState(true);
   const [voices, setVoices] = useState<any[]>([]);
   const [loadingVoices, setLoadingVoices] = useState(false);
   const { toast } = useToast();
@@ -52,18 +54,24 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
   // Load organizations
   useEffect(() => {
     const loadOrganizations = async () => {
+      setLoadingOrganizations(true);
       try {
-        const response = await fetch('http://localhost:8000/api/v1/organizations', {
+        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`
           }
         });
         if (response.ok) {
           const data = await response.json();
+          console.log('Organizations loaded:', data);
           setOrganizations(data);
+        } else {
+          console.error('Failed to load organizations:', response.status, response.statusText);
         }
       } catch (error) {
         console.error('Error loading organizations:', error);
+      } finally {
+        setLoadingOrganizations(false);
       }
     };
     loadOrganizations();
@@ -73,7 +81,7 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
   const loadVoices = async () => {
     setLoadingVoices(true);
     try {
-      const response = await fetch('http://localhost:8000/api/v1/voices', {
+      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/voices', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         }
@@ -160,7 +168,13 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
   };
 
   const getOrganizationName = (orgId: string) => {
+    if (loadingOrganizations) {
+      return 'Loading...';
+    }
+    console.log('Looking for organization:', orgId);
+    console.log('Available organizations:', organizations);
     const org = organizations.find(o => o.id === orgId);
+    console.log('Found organization:', org);
     return org ? org.name : orgId;
   };
 
@@ -195,7 +209,7 @@ const CampaignDetails = ({ campaign }: CampaignDetailsProps) => {
             <History className="h-4 w-4" />
             Version History
                 </Button>
-          <CampaignUpdateDialog campaign={campaign} />
+          <CampaignUpdateDialog campaign={campaign} onUpdate={onUpdate || (() => {})} />
               </div>
             </div>
 
