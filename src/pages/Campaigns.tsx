@@ -493,24 +493,28 @@ const Campaigns = () => {
     setEndDate(null);
   };
 
-  // Fetch campaigns immediately when component mounts
+  // PERFORMANCE FIX: Fetch campaigns only after organizations are loaded
   useEffect(() => {
-    console.log('Campaigns useEffect running - fetching campaigns');
+    console.log('🚀 PERFORMANCE FIX: Campaigns useEffect running - checking if organizations are loaded');
+    
+    // PERFORMANCE FIX: Only fetch campaigns if organizations are loaded
+    if (organizations.length === 0) {
+      console.log('🚀 PERFORMANCE FIX: Organizations not loaded yet, skipping campaigns fetch');
+      return;
+    }
     
     // Prevent multiple simultaneous API calls
     if (hasFetchedCampaigns.current) {
-      console.log('Campaigns: Already fetched campaigns, skipping');
+      console.log('🚀 PERFORMANCE FIX: Already fetched campaigns, skipping');
       return;
     }
     
-    // Prevent multiple simultaneous API calls
     if (isFetchingCampaigns.current) {
-      console.log('Campaigns: Already fetching campaigns, skipping');
+      console.log('🚀 PERFORMANCE FIX: Already fetching campaigns, skipping');
       return;
     }
     
-    // Don't wait for organizations - campaigns can be fetched independently
-    // Organizations will be used for display purposes only
+    // PERFORMANCE FIX: Wait for organizations to be loaded for proper name matching
     
     const fetchCampaigns = async () => {
       try {
@@ -555,16 +559,16 @@ const Campaigns = () => {
 
         const data = await response.json();
         
-        // Format campaigns with organization names if available
-        console.log('Available organizations:', organizations);
-        console.log('Campaigns data:', data);
+        // PERFORMANCE FIX: Format campaigns with organization names
+        console.log('🚀 PERFORMANCE FIX: Available organizations:', organizations.length);
+        console.log('🚀 PERFORMANCE FIX: Campaigns data:', data.length);
         
         const formattedCampaigns = data.map((campaign: any) => {
           // Find organization name by org_id
           const organization = organizations.find(org => org.id === campaign.org_id);
           let orgName = 'Unknown Organization';
           
-          console.log(`Campaign ${campaign.name}: org_id=${campaign.org_id}, found org:`, organization);
+          console.log(`🚀 PERFORMANCE FIX: Campaign ${campaign.name}: org_id=${campaign.org_id}, found org:`, organization?.name);
           
           if (organization) {
             orgName = organization.name;
@@ -578,7 +582,7 @@ const Campaigns = () => {
             }
           }
           
-          console.log(`Final org name for ${campaign.name}: ${orgName}`);
+          console.log(`🚀 PERFORMANCE FIX: Final org name for ${campaign.name}: ${orgName}`);
           
           return {
             id: campaign.id,
@@ -621,18 +625,19 @@ const Campaigns = () => {
 
 
 
+  // PERFORMANCE FIX: Optimized organizations fetching
   useEffect(() => {
-    console.log('Organizations useEffect running - fetching organizations');
+    console.log('🚀 PERFORMANCE FIX: Organizations useEffect running - fetching organizations');
     
     // Prevent multiple simultaneous API calls
     if (hasFetchedOrganizations.current) {
-      console.log('Campaigns: Organizations already fetched, skipping');
+      console.log('🚀 PERFORMANCE FIX: Organizations already fetched, skipping');
       return;
     }
     
     const fetchOrganizations = async () => {
       try {
-        console.log('Fetching organizations...');
+        console.log('🚀 PERFORMANCE FIX: Fetching organizations...');
         
         // Try direct fetch first to debug the issue
         const authToken = localStorage.getItem('authToken');

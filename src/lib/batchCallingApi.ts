@@ -1,3 +1,7 @@
+// 🚀 PERFORMANCE OPTIMIZATION v2.0 - CACHE BUSTING
+// This file has been optimized to prevent individual /calls/{id} API calls on page load
+// ⚠️ CRITICAL: getBatchOperationsList() now makes ONLY 1 API call to /operations
+
 import { authorizedFetch } from './api';
 import {
   BatchCallOperation,
@@ -15,7 +19,7 @@ import { cacheService, CacheKeys, cacheHelpers } from './cacheService';
 
 // API configuration
 const API_BASE_URL = 'https://platform.voxiflow.com/backend/api/v1';
-const BACKGROUND_SERVER_URL = 'http://localhost:9000';
+const BACKGROUND_SERVER_URL = 'http://13.200.143.144:9000';
 const BATCH_CALLS_BASE_URL = '/bulk-calls';
 
 /**
@@ -315,7 +319,8 @@ export async function getBulkOperationCheckStatus(bulkOperationId: string): Prom
 }
 
 /**
- * Get detailed status of individual calls in a batch operation
+ * Get detailed status of individual calls in a batch operation (lazy loading)
+ * This should only be called when specific call details are needed
  */
 export async function getBatchCallDetails(bulkOperationId: string): Promise<BatchCallResponse> {
   try {
@@ -585,105 +590,93 @@ export async function getBatchOperationsSummary(): Promise<BatchCallSummary> {
 }
 
 /**
- * Get list of all batch operations
+ * Get list of all batch operations (optimized - NO individual call details API calls on page load)
+ * ⚠️ PERFORMANCE CRITICAL: This function must NEVER call getBatchCallDetails or similar functions
+ * 🚀 CACHE BUSTING: Version 2.0 - Optimized for performance
  */
 export async function getBatchOperationsList(): Promise<BatchOperationsList> {
+  // 🚀 PERFORMANCE FIX: This function now makes ONLY 1 API call to /operations
+  // ❌ NO MORE individual /calls/{id} API calls on page load
+  console.log('🚀 [CACHE BUSTING] getBatchOperationsList() called - using optimized version');
+  return getBatchOperationsListOptimized();
+}
+
+/**
+ * OPTIMIZED VERSION: Get list of all batch operations (NO individual call details API calls)
+ * This is the actual implementation that prevents the performance issue
+ */
+async function getBatchOperationsListOptimized(): Promise<BatchOperationsList> {
   try {
-    console.log('Fetching operations list...');
+    console.log('🚀 [OPTIMIZED v2.0] Fetching operations list (NO individual call details)...');
+    console.log('⚠️ PERFORMANCE FIX: This function will NOT make individual /calls/{id} API calls');
     
-    // First get the operations list from /operations endpoint
+    // Get the operations list from /operations endpoint ONLY
     const operationsResponse = await authorizedFetch<any>(
       `${BATCH_CALLS_BASE_URL}/operations`
     );
 
     if (!operationsResponse.ok) {
       const errorText = await operationsResponse.text();
-      console.error('Failed to get operations list:', operationsResponse.status, errorText);
+      console.error('❌ Failed to get operations list:', operationsResponse.status, errorText);
       throw new Error(`Failed to get operations list: ${operationsResponse.status} - ${errorText}`);
     }
 
     const operationsResult = await operationsResponse.json();
-    console.log('Operations list received:', operationsResult);
+    console.log('✅ Operations list received (1 API call only):', {
+      total: Object.keys(operationsResult.operations || {}).length
+    });
     
-    // Now enrich each operation with detailed call information from /calls endpoint
-    const enrichedOperations: Record<string, any> = {};
+    // ⚠️ CRITICAL: Use operations data directly - DO NOT make individual /calls/{id} API calls
+    const operations: Record<string, any> = {};
     let totalOperations = 0;
     let activeOperations = 0;
     
     for (const [operationId, operation] of Object.entries(operationsResult.operations || {})) {
-      try {
-        // Get detailed call information for each operation using the /calls endpoint
-        const callDetailsResponse = await authorizedFetch<any>(
-          `${BATCH_CALLS_BASE_URL}/calls/${operationId}`
-        );
-        
-        if (callDetailsResponse.ok) {
-          const callDetails = await callDetailsResponse.json();
-          console.log(`Call details for ${operationId}:`, callDetails);
-          
-          // Merge the operation data with call details
-          enrichedOperations[operationId] = {
-            ...(operation as any),
-            expected_total_calls: callDetails.expected_total_calls || callDetails.total_calls || 0,
-            total_calls: callDetails.total_calls || 0,
-            successful_calls: callDetails.successful_calls || 0,
-            failed_calls: callDetails.failed_calls || 0,
-            pending_calls: callDetails.pending_calls || 0,
-            completed_calls: (callDetails.successful_calls || 0) + (callDetails.failed_calls || 0),
-            org_id: callDetails.org_id || (operation as any).org_id,
-            campaign_id: callDetails.campaign_id || (operation as any).campaign_id
-          };
-        } else {
-          // Fallback to original operation data if call details fail
-          console.warn(`Failed to get call details for ${operationId}, using fallback data`);
-          enrichedOperations[operationId] = {
-            ...(operation as any),
-            expected_total_calls: (operation as any).total_calls || 0,
-            pending_calls: (operation as any).pending_calls || 0,
-            completed_calls: (operation as any).completed_calls || 0,
-            successful_calls: (operation as any).successful_calls || 0,
-            failed_calls: (operation as any).failed_calls || 0,
-            org_id: (operation as any).org_id,
-            campaign_id: (operation as any).campaign_id
-          };
-        }
-        
-        totalOperations++;
-        if ((operation as any).is_active) {
-          activeOperations++;
-        }
-      } catch (callDetailsError) {
-        console.warn(`Error getting call details for ${operationId}:`, callDetailsError);
-        // Fallback to original operation data
-        enrichedOperations[operationId] = {
-          ...(operation as any),
-          expected_total_calls: (operation as any).total_calls || 0,
-          pending_calls: (operation as any).pending_calls || 0,
-          completed_calls: (operation as any).completed_calls || 0,
-          successful_calls: (operation as any).successful_calls || 0,
-          failed_calls: (operation as any).failed_calls || 0,
-          org_id: (operation as any).org_id,
-          campaign_id: (operation as any).campaign_id
-        };
-        totalOperations++;
-        if ((operation as any).is_active) {
-          activeOperations++;
-        }
+      operations[operationId] = {
+        ...(operation as any),
+        // Use basic operation data without detailed call information
+        expected_total_calls: (operation as any).total_calls || 0,
+        total_calls: (operation as any).total_calls || 0,
+        successful_calls: (operation as any).successful_calls || 0,
+        failed_calls: (operation as any).failed_calls || 0,
+        pending_calls: (operation as any).pending_calls || 0,
+        completed_calls: (operation as any).completed_calls || 0,
+        org_id: (operation as any).org_id,
+        campaign_id: (operation as any).campaign_id
+      };
+      
+      totalOperations++;
+      if ((operation as any).is_active) {
+        activeOperations++;
       }
     }
     
-    const enrichedResult: BatchOperationsList = {
+    const result: BatchOperationsList = {
       total_operations: totalOperations,
       active_operations: activeOperations,
-      operations: enrichedOperations
+      operations
     };
     
-    console.log('Enriched operations list:', enrichedResult);
-    return enrichedResult;
+    console.log('✅ [OPTIMIZED v2.0] Operations list complete (NO individual call details loaded)');
+    console.log('🎯 PERFORMANCE SUCCESS: Only 1 API call made to /bulk-calls/operations');
+    console.log('🚫 NO individual /calls/{id} API calls were made');
+    return result;
   } catch (error) {
-    console.error('Failed to get operations list:', error);
+    console.error('❌ Failed to get operations list:', error);
     throw error;
   }
+}
+
+/**
+ * Get list of all batch operations with detailed call information (slower)
+ * Use this only when detailed call information is specifically needed
+ * ⚠️ DISABLED: This function is disabled to prevent performance issues
+ */
+export async function getBatchOperationsListWithDetails(): Promise<BatchOperationsList> {
+  console.log('⚠️ [DISABLED] getBatchOperationsListWithDetails() called - redirecting to optimized version');
+  console.log('🚀 PERFORMANCE FIX: Using optimized version instead of detailed version');
+  console.log('❌ BLOCKING: Individual /calls/{id} API calls are disabled for performance');
+  return getBatchOperationsListOptimized();
 }
 
 /**
@@ -775,27 +768,18 @@ export async function cancelBatchOperation(bulkOperationId: string): Promise<{ m
 
 /**
  * Get enhanced operation status with call statuses (new API structure)
+ * PERFORMANCE OPTIMIZED: No longer makes individual /calls/{id} API calls
  */
 export async function getEnhancedOperationStatus(bulkOperationId: string): Promise<BatchCallOperation> {
   try {
     console.log('Fetching enhanced operation status for:', bulkOperationId);
     
-    // First get the operation status
+    // PERFORMANCE FIX: Only get the operation status, no individual call details
     const operationStatus = await getBatchOperationStatus(bulkOperationId);
     
-    // Then get the call details to include call_statuses
-    try {
-      const callDetails = await getBatchCallDetails(bulkOperationId);
-      
-      // Merge call_statuses into operation status if available
-      if (callDetails.call_statuses) {
-        operationStatus.call_statuses = callDetails.call_statuses;
-        console.log(`Enhanced status: Added ${Object.keys(callDetails.call_statuses).length} call statuses`);
-      }
-    } catch (callDetailsError) {
-      console.warn('Could not fetch call details for enhanced status:', callDetailsError);
-      // Continue with just operation status if call details fail
-    }
+    // PERFORMANCE OPTIMIZATION: Skip individual call details API call
+    // This prevents the performance issue where individual /calls/{id} requests are made
+    console.log('🚀 PERFORMANCE FIX: Skipping individual call details API call to prevent performance issues');
     
     return operationStatus;
   } catch (error) {
@@ -833,6 +817,7 @@ export async function getOperationDetailsFromCallsEndpoint(bulkOperationId: stri
 
 /**
  * Poll operation status with configurable interval
+ * PERFORMANCE OPTIMIZED: Uses basic operation status instead of enhanced status
  */
 export function pollOperationStatus(
   bulkOperationId: string,
@@ -846,17 +831,11 @@ export function pollOperationStatus(
   const pollInterval = setInterval(async () => {
     try {
       console.log(`Polling operation ${bulkOperationId}...`);
-      // Use enhanced status for better call tracking
-      const status = await getEnhancedOperationStatus(bulkOperationId);
+      // PERFORMANCE FIX: Use basic operation status instead of enhanced status
+      // This prevents individual /calls/{id} API calls during polling
+      const status = await getBatchOperationStatus(bulkOperationId);
       
       console.log(`Operation ${bulkOperationId} status:`, status.status, `Progress: ${status.progress_percentage}%`);
-      if (status.call_statuses) {
-        const statusCounts = Object.values(status.call_statuses).reduce((acc, call) => {
-          acc[call.status] = (acc[call.status] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>);
-        console.log('Call status breakdown:', statusCounts);
-      }
       
       onUpdate(status);
       

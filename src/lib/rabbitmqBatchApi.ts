@@ -7,7 +7,8 @@
 import { cacheService, CacheKeys, cacheHelpers } from './cacheService';
 
 // API Configuration
-const BACKGROUND_SERVER_URL = 'http://13.200.143.144:9000';
+// FIXED: Route through main HTTPS API to avoid mixed content errors
+const BACKGROUND_SERVER_URL = 'https://platform.voxiflow.com/backend/api/v1/rabbitmq-bulk-calls';
 const MAIN_API_URL = 'https://platform.voxiflow.com/backend';
 
 // Types for RabbitMQ API responses
@@ -236,7 +237,7 @@ export class RabbitMQBatchApiService {
     formData.append('channels', String(request.channels || 1));
 
     const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/rabbitmq-bulk-calls`,
+      `${BACKGROUND_SERVER_URL}/rabbitmq-bulk-calls`,
       {
         method: 'POST',
         headers: getFormDataHeaders(),
@@ -261,7 +262,7 @@ export class RabbitMQBatchApiService {
       CacheKeys.QUEUE_STATS,
       async () => {
         const response = await fetch(
-          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/queue-stats`,
+          `${BACKGROUND_SERVER_URL}/queue-stats`,
           { headers: getAuthHeaders() }
         );
         await handleApiError(response);
@@ -279,7 +280,7 @@ export class RabbitMQBatchApiService {
       CacheKeys.WORKER_STATUS,
       async () => {
         const response = await fetch(
-          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/worker-status`,
+          `${BACKGROUND_SERVER_URL}/worker-status`,
           { headers: getAuthHeaders() }
         );
         await handleApiError(response);
@@ -297,7 +298,7 @@ export class RabbitMQBatchApiService {
       CacheKeys.RABBITMQ_STATUS,
       async () => {
         const response = await fetch(
-          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/rabbitmq-status`,
+          `${BACKGROUND_SERVER_URL}/rabbitmq-status`,
           { headers: getAuthHeaders() }
         );
         await handleApiError(response);
@@ -315,7 +316,7 @@ export class RabbitMQBatchApiService {
       CacheKeys.DATABASE_STATUS,
       async () => {
         const response = await fetch(
-          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/database-status`,
+          `${BACKGROUND_SERVER_URL}/database-status`,
           { headers: getAuthHeaders() }
         );
         await handleApiError(response);
@@ -333,7 +334,7 @@ export class RabbitMQBatchApiService {
       CacheKeys.HEALTH_STATUS,
       async () => {
         const response = await fetch(
-          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/health`,
+          `${BACKGROUND_SERVER_URL}/health`,
           { headers: getAuthHeaders() }
         );
         await handleApiError(response);
@@ -351,7 +352,7 @@ export class RabbitMQBatchApiService {
     formData.append('action', action);
 
     const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/worker-control`,
+      `${BACKGROUND_SERVER_URL}/worker-control`,
       {
         method: 'POST',
         headers: getFormDataHeaders(),
@@ -378,7 +379,7 @@ export class RabbitMQBatchApiService {
     formData.append('user_id', userId);
 
     const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/stop-campaign`,
+      `${BACKGROUND_SERVER_URL}/stop-campaign`,
       {
         method: 'POST',
         headers: getFormDataHeaders(),
@@ -403,7 +404,7 @@ export class RabbitMQBatchApiService {
     formData.append('bulk_operation_id', bulkOperationId);
 
     const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/stop-batch`,
+      `${BACKGROUND_SERVER_URL}/stop-batch`,
       {
         method: 'POST',
         headers: getFormDataHeaders(),
@@ -427,7 +428,7 @@ export class RabbitMQBatchApiService {
    */
   static async abortAllOperations(): Promise<AbortAllResponse> {
     const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/abort-all`,
+      `${BACKGROUND_SERVER_URL}/abort-all`,
       {
         method: 'POST',
         headers: getAuthHeaders()
@@ -498,7 +499,7 @@ export class RabbitMQBatchApiService {
       CacheKeys.SYSTEM_METRICS,
       async () => {
         const response = await fetch(
-          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/system-metrics`,
+          `${BACKGROUND_SERVER_URL}/system-metrics`,
           { headers: getAuthHeaders() }
         );
         await handleApiError(response);
@@ -516,7 +517,7 @@ export class RabbitMQBatchApiService {
       CacheKeys.QUEUE_HEALTH,
       async () => {
         const response = await fetch(
-          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/queue-health`,
+          `${BACKGROUND_SERVER_URL}/queue-health`,
           { headers: getAuthHeaders() }
         );
         await handleApiError(response);
@@ -534,7 +535,7 @@ export class RabbitMQBatchApiService {
       CacheKeys.WORKER_METRICS,
       async () => {
         const response = await fetch(
-          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/worker-metrics`,
+          `${BACKGROUND_SERVER_URL}/worker-metrics`,
           { headers: getAuthHeaders() }
         );
         await handleApiError(response);
@@ -549,7 +550,7 @@ export class RabbitMQBatchApiService {
    */
   static async pauseAllWorkers(): Promise<WorkerControlResponse> {
     const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/pause-all-workers`,
+      `${BACKGROUND_SERVER_URL}/pause-all-workers`,
       {
         method: 'POST',
         headers: getAuthHeaders()
@@ -571,7 +572,7 @@ export class RabbitMQBatchApiService {
    */
   static async resumeAllWorkers(): Promise<WorkerControlResponse> {
     const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/resume-all-workers`,
+      `${BACKGROUND_SERVER_URL}/resume-all-workers`,
       {
         method: 'POST',
         headers: getAuthHeaders()
@@ -593,7 +594,7 @@ export class RabbitMQBatchApiService {
    */
   static async restartAllWorkers(): Promise<WorkerControlResponse> {
     const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/restart-all-workers`,
+      `${BACKGROUND_SERVER_URL}/restart-all-workers`,
       {
         method: 'POST',
         headers: getAuthHeaders()
@@ -619,7 +620,7 @@ export class RabbitMQBatchApiService {
     formData.append('worker_count', count.toString());
 
     const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/scale-workers`,
+      `${BACKGROUND_SERVER_URL}/scale-workers`,
       {
         method: 'POST',
         headers: getFormDataHeaders(),
@@ -676,10 +677,10 @@ export class RabbitMQBatchApiService {
   static async getRealTimeMonitoring() {
     try {
       const [queueStats, workerStatus, queueHealth, workerMetrics] = await Promise.all([
-        fetch(`${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/queue-stats`, { headers: getAuthHeaders() }).then(r => r.json()),
-        fetch(`${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/worker-status`, { headers: getAuthHeaders() }).then(r => r.json()),
-        fetch(`${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/queue-health`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null),
-        fetch(`${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/worker-metrics`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null)
+        fetch(`${BACKGROUND_SERVER_URL}/queue-stats`, { headers: getAuthHeaders() }).then(r => r.json()),
+        fetch(`${BACKGROUND_SERVER_URL}/worker-status`, { headers: getAuthHeaders() }).then(r => r.json()),
+        fetch(`${BACKGROUND_SERVER_URL}/queue-health`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null),
+        fetch(`${BACKGROUND_SERVER_URL}/worker-metrics`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null)
       ]);
 
       return {
@@ -700,7 +701,7 @@ export class RabbitMQBatchApiService {
    */
   static async emergencyStopAll(): Promise<AbortAllResponse> {
     const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/emergency-stop`,
+      `${BACKGROUND_SERVER_URL}/emergency-stop`,
       {
         method: 'POST',
         headers: getAuthHeaders()
@@ -728,7 +729,7 @@ export class RabbitMQBatchApiService {
       CacheKeys.OPERATION_ANALYTICS(bulkOperationId),
       async () => {
         const response = await fetch(
-          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/operation-analytics/${bulkOperationId}`,
+          `${BACKGROUND_SERVER_URL}/operation-analytics/${bulkOperationId}`,
           { headers: getAuthHeaders() }
         );
         await handleApiError(response);
@@ -746,7 +747,7 @@ export class RabbitMQBatchApiService {
       CacheKeys.SYSTEM_ALERTS,
       async () => {
         const response = await fetch(
-          `${BACKGROUND_SERVER_URL}/api/v1/rabbitmq-bulk-calls/system-alerts`,
+          `${BACKGROUND_SERVER_URL}/system-alerts`,
           { headers: getAuthHeaders() }
         );
         await handleApiError(response);

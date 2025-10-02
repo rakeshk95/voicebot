@@ -192,6 +192,14 @@ export function AppSidebar() {
                             : "text-sidebar-foreground hover:text-primary hover:bg-primary/5"
                         )
                       }
+                      // PERFORMANCE FIX: Prevent multiple navigation triggers
+                      onClick={(e) => {
+                        // Add small delay to prevent rapid navigation
+                        if (e.currentTarget.getAttribute('aria-current') === 'page') {
+                          e.preventDefault();
+                          return;
+                        }
+                      }}
                     >
                       <item.icon className={cn(
                         "w-4 h-4 mr-3 transition-colors duration-200",

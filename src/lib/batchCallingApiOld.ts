@@ -725,27 +725,18 @@ export async function cancelBatchOperation(bulkOperationId: string): Promise<{ m
 
 /**
  * Get enhanced operation status with call statuses (new API structure)
+ * PERFORMANCE OPTIMIZED: No longer makes individual /calls/{id} API calls
  */
 export async function getEnhancedOperationStatus(bulkOperationId: string): Promise<BatchCallOperation> {
   try {
     console.log('Fetching enhanced operation status for:', bulkOperationId);
     
-    // First get the operation status
+    // PERFORMANCE FIX: Only get the operation status, no individual call details
     const operationStatus = await getBatchOperationStatus(bulkOperationId);
     
-    // Then get the call details to include call_statuses
-    try {
-      const callDetails = await getBatchCallDetails(bulkOperationId);
-      
-      // Merge call_statuses into operation status if available
-      if (callDetails.call_statuses) {
-        operationStatus.call_statuses = callDetails.call_statuses;
-        console.log(`Enhanced status: Added ${Object.keys(callDetails.call_statuses).length} call statuses`);
-      }
-    } catch (callDetailsError) {
-      console.warn('Could not fetch call details for enhanced status:', callDetailsError);
-      // Continue with just operation status if call details fail
-    }
+    // PERFORMANCE OPTIMIZATION: Skip individual call details API call
+    // This prevents the performance issue where individual /calls/{id} requests are made
+    console.log('🚀 PERFORMANCE FIX: Skipping individual call details API call to prevent performance issues');
     
     return operationStatus;
   } catch (error) {
@@ -783,6 +774,7 @@ export async function getOperationDetailsFromCallsEndpoint(bulkOperationId: stri
 
 /**
  * Poll operation status with configurable interval
+ * PERFORMANCE OPTIMIZED: Uses basic operation status instead of enhanced status
  */
 export function pollOperationStatus(
   bulkOperationId: string,
@@ -796,17 +788,11 @@ export function pollOperationStatus(
   const pollInterval = setInterval(async () => {
     try {
       console.log(`Polling operation ${bulkOperationId}...`);
-      // Use enhanced status for better call tracking
-      const status = await getEnhancedOperationStatus(bulkOperationId);
+      // PERFORMANCE FIX: Use basic operation status instead of enhanced status
+      // This prevents individual /calls/{id} API calls during polling
+      const status = await getBatchOperationStatus(bulkOperationId);
       
       console.log(`Operation ${bulkOperationId} status:`, status.status, `Progress: ${status.progress_percentage}%`);
-      if (status.call_statuses) {
-        const statusCounts = Object.values(status.call_statuses).reduce((acc, call) => {
-          acc[call.status] = (acc[call.status] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>);
-        console.log('Call status breakdown:', statusCounts);
-      }
       
       onUpdate(status);
       

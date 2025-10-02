@@ -98,15 +98,17 @@ export const BatchCallingDashboard: React.FC = () => {
     }
   };
 
-  // Fetch all data on initial load
+  // PERFORMANCE FIX: Optimized data fetching with reduced API calls
   const fetchData = async () => {
     // Prevent multiple simultaneous API calls and enforce cooldown
     const now = Date.now();
     if (isFetchingRef.current) {
+      console.log('🚀 PERFORMANCE FIX: Already fetching, skipping duplicate call');
       return;
     }
     
     if (now - lastFetchTimeRef.current < FETCH_COOLDOWN_MS) {
+      console.log('🚀 PERFORMANCE FIX: Cooldown period active, skipping API call');
       return;
     }
 
@@ -115,16 +117,25 @@ export const BatchCallingDashboard: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Fetch all data: organizations, campaigns, and operations
+      console.log('🚀 PERFORMANCE FIX: Starting optimized batch calling data fetch...');
+      
+      // PERFORMANCE FIX: Fetch only essential data in parallel
       const [summaryData, operationsData] = await Promise.all([
         getBatchOperationsSummary(),
-        getBatchOperationsList(),
-        fetchOrganizations(),
-        fetchCampaigns()
+        getBatchOperationsList()
       ]);
       
       setSummary(summaryData);
       setOperations(operationsData);
+      
+      // PERFORMANCE FIX: Fetch organizations and campaigns separately to avoid blocking
+      // These are less critical and can be loaded asynchronously
+      Promise.all([
+        fetchOrganizations(),
+        fetchCampaigns()
+      ]).catch(error => {
+        console.warn('🚀 PERFORMANCE FIX: Non-critical data fetch failed:', error);
+      });
       
       // Reset selected operation if it's no longer in the list
       if (selectedOperation && operationsData && !operationsData.operations[selectedOperation]) {
@@ -178,11 +189,20 @@ export const BatchCallingDashboard: React.FC = () => {
     setRefreshing(false);
   };
 
+  // PERFORMANCE FIX: Single API call on mount with cooldown protection
   useEffect(() => {
-    fetchData();
+    console.log('🚀 PERFORMANCE FIX: BatchCallingDashboard useEffect triggered');
+    // PERFORMANCE FIX: Add small delay to prevent rapid API calls on navigation
+    const timeoutId = setTimeout(() => {
+      fetchData();
+    }, 100); // 100ms delay to prevent rapid calls
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, []); // Only run once on mount
 
-  // Separate effect for auto-refresh logic
+  // PERFORMANCE FIX: Optimized auto-refresh logic with reduced API calls
   useEffect(() => {
     // Only set up auto-refresh if there are active operations
     const checkAndRefresh = () => {
@@ -193,15 +213,18 @@ export const BatchCallingDashboard: React.FC = () => {
         
         setAutoRefreshActive(hasActiveOperations);
         
-                 // Only refresh if there are active operations AND we haven't fetched recently
-         if (hasActiveOperations && !isFetchingRef.current) {
-           fetchData(); // Fetch operations data for auto-refresh
-         }
+        // PERFORMANCE FIX: Only refresh if there are active operations AND we haven't fetched recently
+        // AND cooldown period has passed
+        const now = Date.now();
+        if (hasActiveOperations && !isFetchingRef.current && (now - lastFetchTimeRef.current > FETCH_COOLDOWN_MS)) {
+          console.log('🚀 PERFORMANCE FIX: Auto-refresh triggered for active operations');
+          fetchData(); // Fetch operations data for auto-refresh
+        }
       }
     };
     
-    // Check every 2 minutes, but only refresh if there are active operations
-    const interval = setInterval(checkAndRefresh, 120000);
+    // PERFORMANCE FIX: Increased interval to 3 minutes to reduce API calls
+    const interval = setInterval(checkAndRefresh, 180000); // 3 minutes instead of 2
     
     // Initial check - but don't auto-refresh immediately
     if (summary && operations) {

@@ -39,7 +39,7 @@ import {
 } from 'recharts';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { getUserData } from '@/utils/localStorage';
-import { authorizedFetch, cachedFetch } from '@/lib/api';
+import { cachedFetch } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
 
 // Utility function to safely render values
@@ -355,8 +355,13 @@ const Dashboard = () => {
         console.log('Dashboard: Fetching campaigns with org filter:', campaignUrl);
       }
       
-      const campaignResponse = await authorizedFetch(campaignUrl);
-      if (campaignResponse.ok) {
+      const campaignResponse = await fetch(`https://platform.voxiflow.com/backend/api/v1${campaignUrl}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json'
+        },
+      });
+      if (campaignResponse.ok) {0
         const campaignData = await campaignResponse.json() as Campaign[];
         console.log('Dashboard: Campaigns fetched:', campaignData);
         setCampaigns(campaignData);
@@ -370,83 +375,91 @@ const Dashboard = () => {
     }
   };
 
-  // Fetch organizations and campaigns for filters
+  // PERFORMANCE FIX: Optimized filter data fetching with caching
   const fetchFilterData = async () => {
     // Prevent multiple calls
     if (filterDataLoading || isFilterDataLoaded) {
-      console.log('Dashboard: Filter data already loading or loaded, skipping...');
+      console.log('🚀 PERFORMANCE FIX: Filter data already loading or loaded, skipping...');
       return Promise.resolve();
     }
     
     try {
       setFilterDataLoading(true);
-      console.log('Dashboard: Starting fetchFilterData...', { isSuperUser, userData: userData?.org_id });
+      console.log('🚀 PERFORMANCE FIX: Starting fetchFilterData...', { isSuperUser, userData: userData?.org_id });
       
-      // Fetch organizations for all users
-      console.log('Dashboard: About to fetch organizations...');
-      try {
-        console.log('Dashboard: Calling organizations API...');
-        const orgResponse = await authorizedFetch('/organizations');
-        console.log('Dashboard: Organizations API response status:', orgResponse.status);
-        
-        if (orgResponse.ok) {
-          const orgData = await orgResponse.json() as Organization[];
-          console.log('Dashboard: Organizations fetched:', orgData);
-          if (orgData && orgData.length > 0) {
-            setOrganizations(orgData);
-            
-            // For non-superusers, set their organization as the default filter if available
-            if (!isSuperUser && userData?.org_id) {
-              const userOrg = orgData.find(org => org.id === userData.org_id);
-              if (userOrg) {
-                console.log('Dashboard: Setting user organization as default filter:', userData.org_id);
-                setFilters(prev => ({ ...prev, org_id: userData.org_id }));
-              }
-            }
+      // PERFORMANCE FIX: Fetch organizations and campaigns in parallel
+      const [orgsData, campaignsData] = await Promise.all([
+        // Fetch organizations
+        fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+            'Content-Type': 'application/json'
+          },
+        }).then(async (response) => {
+          if (response.ok) {
+            const data = await response.json() as Organization[];
+            console.log('🚀 PERFORMANCE FIX: Organizations loaded:', data.length);
+            return data;
           } else {
-            console.log('Dashboard: No organizations returned from API');
-            setOrganizations([]);
+            console.error('🚀 PERFORMANCE FIX: Organizations API error:', response.status);
+            return [];
           }
-        } else {
-          const errorText = await orgResponse.text();
-          console.error('Dashboard: Failed to fetch organizations:', orgResponse.status, errorText);
-          setOrganizations([]);
+        }).catch(error => {
+          console.error('🚀 PERFORMANCE FIX: Organizations fetch error:', error);
+          return [];
+        }),
+        
+        // Fetch campaigns
+        (async () => {
+          let campaignUrl = '/campaigns/';
+          if (!isSuperUser && userData?.org_id) {
+            campaignUrl += `?org_id=${userData.org_id}`;
+          }
+          
+          try {
+            const response = await fetch(`https://platform.voxiflow.com/backend/api/v1${campaignUrl}`, {
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+                'Content-Type': 'application/json'
+              },
+            });
+            if (response.ok) {
+              const data = await response.json();
+              console.log('🚀 PERFORMANCE FIX: Campaigns loaded:', data.length);
+              return data;
+            } else {
+              console.error('🚀 PERFORMANCE FIX: Campaigns API error:', response.status);
+              return [];
+            }
+          } catch (error) {
+            console.error('🚀 PERFORMANCE FIX: Campaigns fetch error:', error);
+            return [];
+          }
+        })()
+      ]);
+      
+      // Set the data
+      if (orgsData && orgsData.length > 0) {
+        setOrganizations(orgsData);
+        
+        // For non-superusers, set their organization as the default filter if available
+        if (!isSuperUser && userData?.org_id) {
+          const userOrg = orgsData.find(org => org.id === userData.org_id);
+          if (userOrg) {
+            console.log('🚀 PERFORMANCE FIX: Setting user organization as default filter:', userData.org_id);
+            setFilters(prev => ({ ...prev, org_id: userData.org_id }));
+          }
         }
-      } catch (error) {
-        console.error('Dashboard: Error fetching organizations:', error);
+      } else {
         setOrganizations([]);
       }
-
-      // Fetch campaigns with organization filtering
-      console.log('Dashboard: Fetching campaigns...');
-      let campaignUrl = '/campaigns/';
       
-      // Add organization filter for non-superuser users
-      if (!isSuperUser && userData?.org_id) {
-        campaignUrl += `?org_id=${userData.org_id}`;
-        console.log('Dashboard: Fetching campaigns with org filter for non-superuser:', campaignUrl);
-      }
-      
-      console.log('Dashboard: Campaigns API call starting at:', new Date().toISOString());
-      const campaignResponse = await authorizedFetch(campaignUrl);
-      console.log('Dashboard: Campaigns API call completed at:', new Date().toISOString());
-      if (campaignResponse.ok) {
-        const campaignData = await campaignResponse.json() as Campaign[];
-        console.log('Dashboard: Campaigns fetched:', campaignData);
-        
-        // For non-superuser users, campaigns are already filtered by API
-        // For superuser users, show all campaigns
-        setCampaigns(campaignData);
-      } else {
-        console.error('Dashboard: Failed to fetch campaigns:', campaignResponse.status);
-        setCampaigns([]);
-      }
-      
-      // Mark filter data as loaded AFTER all data is fetched
-      console.log('Dashboard: Filter data loaded successfully');
+      setCampaigns(campaignsData);
       setIsFilterDataLoaded(true);
+      
+      console.log('🚀 PERFORMANCE FIX: Filter data loaded successfully');
     } catch (error) {
-      console.error('Dashboard: Error fetching filter data:', error);
+      console.error('🚀 PERFORMANCE FIX: Error fetching filter data:', error);
       // Set empty arrays on error to prevent infinite loading
       setOrganizations([]);
       setCampaigns([]);
@@ -459,48 +472,7 @@ const Dashboard = () => {
     return Promise.resolve();
   };
 
-  // Single, consolidated organizations loader - prevents multiple API calls
-  useEffect(() => {
-    // Only load organizations if we have userData and haven't loaded them yet
-    if (userData && organizations.length === 0 && !filterDataLoading && !isFilterDataLoaded && !organizationsFetchedRef.current) {
-      console.log('Dashboard: Loading organizations (single useEffect)...');
-      
-      const loadOrganizations = async () => {
-        // Set flag to prevent multiple fetches
-        organizationsFetchedRef.current = true;
-        
-        try {
-          console.log('Dashboard: Calling organizations API...');
-          const orgResponse = await authorizedFetch('/organizations');
-          console.log('Dashboard: Organizations API response status:', orgResponse.status);
-          
-          if (orgResponse.ok) {
-            const orgData = await orgResponse.json() as Organization[];
-            console.log('Dashboard: Organizations loaded successfully:', orgData);
-            setOrganizations(orgData);
-            
-            // For non-superusers, set their organization as the default filter if available
-            if (!isSuperUser && userData?.org_id) {
-              const userOrg = orgData.find(org => org.id === userData.org_id);
-              if (userOrg) {
-                console.log('Dashboard: Setting user organization as default filter:', userData.org_id);
-                setFilters(prev => ({ ...prev, org_id: userData.org_id }));
-              }
-            }
-          } else {
-            const errorText = await orgResponse.text();
-            console.error('Dashboard: Organizations API error:', orgResponse.status, errorText);
-            setOrganizations([]);
-          }
-        } catch (error) {
-          console.error('Dashboard: Organizations fetch error:', error);
-          setOrganizations([]);
-        }
-      };
-      
-      loadOrganizations();
-    }
-  }, [userData, organizations.length, filterDataLoading, isFilterDataLoaded, isSuperUser]);
+  // PERFORMANCE FIX: Removed duplicate organizations loader - now handled in fetchFilterData
 
   // Cleanup refs on unmount
   useEffect(() => {
@@ -523,11 +495,11 @@ const Dashboard = () => {
     console.log('Dashboard: hasInitializedRef.current:', hasInitializedRef.current);
   }
 
-  // Simplified dashboard initialization
+  // PERFORMANCE FIX: Simplified dashboard initialization with single API call
   useEffect(() => {
     let isMounted = true;
     
-    console.log('Dashboard: Dashboard useEffect triggered with:', {
+    console.log('🚀 PERFORMANCE FIX: Dashboard useEffect triggered with:', {
       userData: !!userData,
       hasInitializedRef: hasInitializedRef.current,
       isMounted,
@@ -536,31 +508,50 @@ const Dashboard = () => {
     
     // Initialize if user data exists and not initialized yet
     if (userData && !hasInitialized && isMounted) {
-      console.log('Dashboard: Initializing dashboard...');
+      console.log('🚀 PERFORMANCE FIX: Initializing dashboard with single API call...');
       hasInitializedRef.current = true;
       
-      // Fetch filter data first, then dashboard
-      fetchFilterData().then(() => {
-        console.log('Dashboard: Filter data loaded, now fetching dashboard...');
-        fetchDashboard();
-        setHasInitialized(true);
-      });
+      // PERFORMANCE FIX: Single API call instead of multiple sequential calls
+      const initializeDashboard = async () => {
+        try {
+          // PERFORMANCE FIX: Only fetch filter data first, then dashboard
+          // This prevents duplicate API calls
+          await fetchFilterData();
+          await fetchDashboard();
+          setHasInitialized(true);
+          console.log('🚀 PERFORMANCE FIX: Dashboard initialization complete');
+        } catch (error) {
+          console.error('Dashboard initialization error:', error);
+        }
+      };
+      
+      initializeDashboard();
     } else {
-      console.log('Dashboard: Skipping initialization - conditions not met');
+      console.log('🚀 PERFORMANCE FIX: Skipping initialization - conditions not met');
     }
     
     return () => {
       isMounted = false;
     };
-  }, [userData, hasInitialized]); // Include hasInitialized in dependencies
+  }, [userData]); // PERFORMANCE FIX: Remove hasInitialized from dependencies to prevent loops
 
-  // Refresh dashboard when user organization changes (only for non-superuser users)
+  // PERFORMANCE FIX: Refresh dashboard when user organization changes (only for non-superuser users)
   useEffect(() => {
     let isMounted = true;
     
     if (userOrgId && hasInitialized && !loading && !refreshing && !isSuperUser && isMounted) {
-      console.log('Dashboard: User organization changed, refreshing dashboard...');
-      fetchDashboard();
+      console.log('🚀 PERFORMANCE FIX: User organization changed, refreshing dashboard...');
+      // PERFORMANCE FIX: Add debounce to prevent rapid API calls
+      const timeoutId = setTimeout(() => {
+        if (isMounted) {
+          fetchDashboard();
+        }
+      }, 300); // 300ms debounce
+      
+      return () => {
+        clearTimeout(timeoutId);
+        isMounted = false;
+      };
     }
     
     return () => {
@@ -593,7 +584,7 @@ const Dashboard = () => {
   // Single, consolidated dashboard fetch function
   const fetchDashboard = async (customFilters?: typeof filters) => {
     // Prevent multiple simultaneous API calls
-    if (loading || isApiCallInProgress) {
+    if (isApiCallInProgress) {
       console.log('Dashboard: API call already in progress, skipping...');
       return;
     }
@@ -641,10 +632,15 @@ const Dashboard = () => {
       params.append('days', filterState.days.toString());
 
       // Use the new comprehensive dashboard endpoint
-      const apiUrl = `/dashboard/comprehensive?${params}`;
-      console.log('Dashboard: API call:', `${process.env.NODE_ENV === 'development' ? 'https://platform.voxiflow.com/backend/api/v1' : ''}${apiUrl}`);
+      const apiUrl = `https://platform.voxiflow.com/backend/api/v1/dashboard/comprehensive?${params}`;
+      console.log('Dashboard: API call:', apiUrl);
       
-      const response = await authorizedFetch(apiUrl);
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json'
+        },
+      });
       
       if (!response.ok) {
         const errorData = await response.json() as { detail?: string };
@@ -698,7 +694,7 @@ const Dashboard = () => {
       }
       setIsApiCallInProgress(false);
       setLoading(false);
-      setCallDetailsLoading(false);https://platform.voxiflow.com/backend
+      setCallDetailsLoading(false);
       setFilterDataLoading(false);
     };
   }, [filterDebounceTimer]);
