@@ -158,7 +158,8 @@ export async function startBatchCallWithRabbitMQ(request: BatchCallStartRequest)
       org_id: request.org_id.trim(),
       user_id: request.user_id.trim(),
       sleep_seconds: request.sleep_seconds || 100,
-      channels: request.channels || 1
+      channels: request.channels || 1,
+      operation_name: request.operation_name
     };
 
     // Use RabbitMQ service to upload bulk calls
@@ -909,17 +910,6 @@ export function getStatusColorClass(status: string): string {
 /**
  * Get system monitoring data
  */
-export async function getSystemMonitoring() {
-  return RabbitMQBatchApiService.getSystemStatus();
-}
-
-/**
- * Get real-time monitoring data
- */
-export async function getRealTimeMonitoring() {
-  return RabbitMQBatchApiService.getRealTimeMonitoring();
-}
-
 /**
  * Get system metrics
  */
@@ -981,4 +971,39 @@ export async function scaleWorkers(count: number) {
  */
 export async function emergencyStopAll() {
   return RabbitMQBatchApiService.emergencyStopAll();
+}
+
+/**
+ * Get RabbitMQ operation status
+ */
+export async function getRabbitMQOperationStatus(bulkOperationId: string) {
+  return RabbitMQBatchApiService.getRabbitMQOperationStatus(bulkOperationId);
+}
+
+/**
+ * Get all RabbitMQ operations
+ */
+export async function getAllRabbitMQOperations() {
+  return RabbitMQBatchApiService.getAllRabbitMQOperations();
+}
+
+/**
+ * Pause RabbitMQ operation
+ */
+export async function pauseRabbitMQOperation(bulkOperationId: string) {
+  return RabbitMQBatchApiService.pauseRabbitMQOperation(bulkOperationId);
+}
+
+/**
+ * Resume RabbitMQ operation
+ */
+export async function resumeRabbitMQOperation(bulkOperationId: string) {
+  return RabbitMQBatchApiService.resumeRabbitMQOperation(bulkOperationId);
+}
+
+/**
+ * Delete RabbitMQ operation
+ */
+export async function deleteRabbitMQOperation(bulkOperationId: string) {
+  return RabbitMQBatchApiService.deleteRabbitMQOperation(bulkOperationId);
 }

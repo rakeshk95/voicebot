@@ -1199,19 +1199,23 @@ const Campaigns = () => {
       formData.append('campaign_id', selectedCampaignForBulkCall.id);
       formData.append('org_id', selectedCampaignForBulkCall.org_id);
       formData.append('user_id', 'user_1');
-      formData.append('external_username', 'admin@example.com');
-      formData.append('external_password', 'password1234');
+      formData.append('sleep_seconds', '5'); // Reduced from 100 to 5 seconds
+      formData.append('channels', '16'); // Dynamic channel allocation
+      formData.append('worker_prefetch', '5'); // Worker prefetch count
+      formData.append('batch_size', '50'); // Batch size for processing
 
       console.log('CallHistory: Initiating bulk calls with FormData:', {
         campaign_id: selectedCampaignForBulkCall.id,
         org_id: selectedCampaignForBulkCall.org_id,
         user_id: 'user_1',
-        external_username: 'admin@example.com',
-        external_password: 'password1234',
+        sleep_seconds: 5,
+        channels: 16,
+        worker_prefetch: 5,
+        batch_size: 50,
         file: bulkCallFile.name
       });
 
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/bulk-calls/', {
+      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/rabbitmq-bulk-calls/rabbitmq-bulk-calls', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1229,7 +1233,7 @@ const Campaigns = () => {
 
       toast({
         title: "Success",
-        description: "Bulk calls initiated successfully",
+        description: `Bulk calls initiated successfully. ${result.message}. Estimated processing time: ${result.estimated_processing_time}`,
       });
 
       // Reset form and close dialog

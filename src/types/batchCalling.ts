@@ -121,13 +121,28 @@ export interface BatchCallStartRequest {
   external_call_url?: string;
   external_username?: string;
   external_password?: string;
+  operation_name?: string; // New field for operation tracking
 }
 
 export interface BatchCallStartResponse {
   message: string;
   bulk_operation_id: string;
+  operation_name?: string;
   status: string;
+  progress_percentage?: number;
+  total_calls?: number;
+  queued_calls?: number;
+  campaign_id?: string;
+  org_id?: string;
+  user_id?: string;
+  started_at?: string;
   note: string;
+  actions_available?: {
+    pause: boolean;
+    resume: boolean;
+    delete: boolean;
+    view_status: boolean;
+  };
 }
 
 export interface BatchOperationsList {

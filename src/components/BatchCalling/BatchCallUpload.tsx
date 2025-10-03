@@ -29,7 +29,10 @@ import {
   startBatchCallWithRabbitMQ,
   pollOperationStatus, 
   calculateCallStatusCounts, 
-  getStatusColorClass 
+  getStatusColorClass,
+  pauseRabbitMQOperation,
+  resumeRabbitMQOperation,
+  deleteRabbitMQOperation
 } from '@/lib/batchCallingApi';
 import { BatchCallStartRequest, BatchCallOperation } from '@/types/batchCalling';
 import { Campaign } from '@/types/campaign';
@@ -62,7 +65,8 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
     campaign_id: '',
     org_id: '',
     channels: '1', // Default to 1 channel
-    sleep_seconds: '100' // Default to 100 seconds
+    sleep_seconds: '100', // Default to 100 seconds
+    operation_name: '' // New field for operation name
   });
 
   // Get user data and check role
@@ -301,7 +305,8 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
         org_id: formData.org_id.trim(),
         user_id: 'auto', // Will be automatically set by backend
         channels: parseInt(formData.channels),
-        sleep_seconds: Math.max(1, Math.min(3600, parseInt(formData.sleep_seconds) || 100)) // Ensure value is between 1-3600
+        sleep_seconds: Math.max(1, Math.min(3600, parseInt(formData.sleep_seconds) || 100)), // Ensure value is between 1-3600
+        operation_name: formData.operation_name.trim() || undefined // Include operation name if provided
       };
 
       // Double-check that all required fields are present
@@ -438,22 +443,33 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
   // Handler functions for operation control
   const handlePauseOperation = async (operationId: string) => {
     try {
-      const response = await authorizedFetch(`/bulk-calls/operations/${operationId}/pause`, { method: 'POST' });
-      if (response.ok) {
+      let response;
+      if (useRabbitMQ) {
+        // Use RabbitMQ API for pause
+        const result = await pauseRabbitMQOperation(operationId);
         toast({
           title: "Operation Paused",
-          description: "Batch operation paused successfully.",
+          description: result.message || "RabbitMQ operation paused successfully.",
         });
-        // Refresh status after pausing
-        handleCheckStatus(operationId);
       } else {
-        const errorData = await response.json() as any;
-        toast({
-          title: "Pause Failed",
-          description: errorData.detail || "Failed to pause operation.",
-          variant: "destructive",
-        });
+        // Use legacy API for pause
+        response = await authorizedFetch(`/bulk-calls/operations/${operationId}/pause`, { method: 'POST' });
+        if (response.ok) {
+          toast({
+            title: "Operation Paused",
+            description: "Batch operation paused successfully.",
+          });
+        } else {
+          const errorData = await response.json() as any;
+          toast({
+            title: "Pause Failed",
+            description: errorData.detail || "Failed to pause operation.",
+            variant: "destructive",
+          });
+        }
       }
+      // Refresh status after pausing
+      handleCheckStatus(operationId);
     } catch (error) {
       console.error('Error pausing operation:', error);
       toast({
@@ -466,22 +482,33 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
 
   const handleResumeOperation = async (operationId: string) => {
     try {
-      const response = await authorizedFetch(`/bulk-calls/operations/${operationId}/resume`, { method: 'POST' });
-      if (response.ok) {
+      let response;
+      if (useRabbitMQ) {
+        // Use RabbitMQ API for resume
+        const result = await resumeRabbitMQOperation(operationId);
         toast({
           title: "Operation Resumed",
-          description: "Batch operation resumed successfully.",
+          description: result.message || "RabbitMQ operation resumed successfully.",
         });
-        // Refresh status after resuming
-        handleCheckStatus(operationId);
       } else {
-        const errorData = await response.json() as any;
-        toast({
-          title: "Resume Failed",
-          description: errorData.detail || "Failed to resume operation.",
-          variant: "destructive",
-        });
+        // Use legacy API for resume
+        response = await authorizedFetch(`/bulk-calls/operations/${operationId}/resume`, { method: 'POST' });
+        if (response.ok) {
+          toast({
+            title: "Operation Resumed",
+            description: "Batch operation resumed successfully.",
+          });
+        } else {
+          const errorData = await response.json() as any;
+          toast({
+            title: "Resume Failed",
+            description: errorData.detail || "Failed to resume operation.",
+            variant: "destructive",
+          });
+        }
       }
+      // Refresh status after resuming
+      handleCheckStatus(operationId);
     } catch (error) {
       console.error('Error resuming operation:', error);
       toast({
@@ -495,22 +522,33 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
   const handleCancelOperation = async (operationId: string) => {
     if (window.confirm('Are you sure you want to cancel this batch operation? This action cannot be undone.')) {
       try {
-        const response = await authorizedFetch(`/bulk-calls/operations/${operationId}/cancel`, { method: 'POST' });
-        if (response.ok) {
+        let response;
+        if (useRabbitMQ) {
+          // Use RabbitMQ API for delete/cancel
+          const result = await deleteRabbitMQOperation(operationId);
           toast({
-            title: "Operation Cancelled",
-            description: "Batch operation cancelled successfully.",
+            title: "Operation Deleted",
+            description: result.message || "RabbitMQ operation deleted successfully.",
           });
-          // Refresh status after cancelling
-          handleCheckStatus(operationId);
         } else {
-          const errorData = await response.json() as any;
-          toast({
-            title: "Cancel Failed",
-            description: errorData.detail || "Failed to cancel operation.",
-            variant: "destructive",
-          });
+          // Use legacy API for cancel
+          response = await authorizedFetch(`/bulk-calls/operations/${operationId}/cancel`, { method: 'POST' });
+          if (response.ok) {
+            toast({
+              title: "Operation Cancelled",
+              description: "Batch operation cancelled successfully.",
+            });
+          } else {
+            const errorData = await response.json() as any;
+            toast({
+              title: "Cancel Failed",
+              description: errorData.detail || "Failed to cancel operation.",
+              variant: "destructive",
+            });
+          }
         }
+        // Refresh status after cancelling
+        handleCheckStatus(operationId);
       } catch (error) {
         console.error('Error cancelling operation:', error);
         toast({
@@ -841,6 +879,19 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
               </p>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="operation_name">Operation Name</Label>
+              <Input
+                id="operation_name"
+                type="text"
+                value={formData.operation_name}
+                onChange={(e) => handleInputChange('operation_name', e.target.value)}
+                placeholder="Enter a name for this operation (optional)"
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">Give your operation a descriptive name for easier tracking</p>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="org_id">Organization *</Label>
@@ -962,6 +1013,11 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
                 <p className="text-sm font-medium text-blue-800">
                   Operation ID: {currentOperation.bulk_operation_id.slice(-8)}
                 </p>
+                {currentOperation.operation_name && (
+                  <p className="text-sm font-medium text-blue-700">
+                    Name: {currentOperation.operation_name}
+                  </p>
+                )}
                 <p className="text-xs text-blue-600">
                   Started: {new Date(currentOperation.started_at).toLocaleString()}
                 </p>
@@ -1071,7 +1127,7 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
                   className="border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <X className="h-4 w-4 mr-2" />
-                  Cancel
+                  {useRabbitMQ ? 'Delete' : 'Cancel'}
                 </Button>
 
                 {/* Check Status Button */}

@@ -179,7 +179,6 @@ export interface BatchCallRequest {
   user_id: string;
   sleep_seconds?: number;
   channels?: number;
-  operation_name?: string;
 }
 
 /**
@@ -236,11 +235,6 @@ export class RabbitMQBatchApiService {
     formData.append('user_id', request.user_id);
     formData.append('sleep_seconds', String(request.sleep_seconds || 10));
     formData.append('channels', String(request.channels || 1));
-    
-    // Add operation name if provided
-    if (request.operation_name) {
-      formData.append('operation_name', request.operation_name);
-    }
 
     const response = await fetch(
       `${BACKGROUND_SERVER_URL}/rabbitmq-bulk-calls`,
@@ -761,75 +755,6 @@ export class RabbitMQBatchApiService {
       },
       10000 // 10 second cache
     );
-  }
-
-  /**
-   * Get RabbitMQ operation status
-   */
-  static async getRabbitMQOperationStatus(bulkOperationId: string): Promise<any> {
-    const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/operations/${bulkOperationId}/status`,
-      { headers: getAuthHeaders() }
-    );
-    await handleApiError(response);
-    return response.json();
-  }
-
-  /**
-   * Get all RabbitMQ operations
-   */
-  static async getAllRabbitMQOperations(): Promise<any> {
-    const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/operations`,
-      { headers: getAuthHeaders() }
-    );
-    await handleApiError(response);
-    return response.json();
-  }
-
-  /**
-   * Pause RabbitMQ operation
-   */
-  static async pauseRabbitMQOperation(bulkOperationId: string): Promise<any> {
-    const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/operations/${bulkOperationId}/pause`,
-      {
-        method: 'POST',
-        headers: getAuthHeaders()
-      }
-    );
-    await handleApiError(response);
-    return response.json();
-  }
-
-  /**
-   * Resume RabbitMQ operation
-   */
-  static async resumeRabbitMQOperation(bulkOperationId: string): Promise<any> {
-    const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/operations/${bulkOperationId}/resume`,
-      {
-        method: 'POST',
-        headers: getAuthHeaders()
-      }
-    );
-    await handleApiError(response);
-    return response.json();
-  }
-
-  /**
-   * Delete RabbitMQ operation
-   */
-  static async deleteRabbitMQOperation(bulkOperationId: string): Promise<any> {
-    const response = await fetch(
-      `${BACKGROUND_SERVER_URL}/operations/${bulkOperationId}`,
-      {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      }
-    );
-    await handleApiError(response);
-    return response.json();
   }
 }
 

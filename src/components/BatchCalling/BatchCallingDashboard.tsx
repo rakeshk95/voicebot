@@ -36,8 +36,6 @@ import { BatchCallUpload } from './BatchCallUpload';
 import { BatchCallOperations } from './BatchCallOperations';
 import { BatchOperationsTable } from './BatchOperationsTable';
 import { BatchCallDetails } from './BatchCallDetails';
-import { SystemMonitoring } from './SystemMonitoring';
-import { RabbitMQIntegrationTest } from './RabbitMQIntegrationTest';
 
 export const BatchCallingDashboard: React.FC = () => {
   const [summary, setSummary] = useState<BatchCallSummary | null>(null);
@@ -450,7 +448,7 @@ export const BatchCallingDashboard: React.FC = () => {
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="operations" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="operations" className="flex items-center space-x-2">
             <BarChart3 className="h-4 w-4" />
             <span>Operations</span>
@@ -458,14 +456,6 @@ export const BatchCallingDashboard: React.FC = () => {
           <TabsTrigger value="upload" className="flex items-center space-x-2">
             <Upload className="h-4 w-4" />
             <span>New Operation</span>
-          </TabsTrigger>
-          <TabsTrigger value="monitoring" className="flex items-center space-x-2">
-            <Activity className="h-4 w-4" />
-            <span>Monitoring</span>
-          </TabsTrigger>
-          <TabsTrigger value="test" className="flex items-center space-x-2">
-            <CheckCircle className="h-4 w-4" />
-            <span>Integration Test</span>
           </TabsTrigger>
           <TabsTrigger value="call-details" className="flex items-center space-x-2">
             <FileSpreadsheet className="h-4 w-4" />
@@ -489,13 +479,7 @@ export const BatchCallingDashboard: React.FC = () => {
            <BatchCallUpload onUploadSuccess={fetchData} />
          </TabsContent>
 
-         <TabsContent value="monitoring" className="space-y-4">
-           <SystemMonitoring refreshInterval={10000} autoRefresh={true} />
-         </TabsContent>
 
-         <TabsContent value="test" className="space-y-4">
-           <RabbitMQIntegrationTest />
-         </TabsContent>
 
         <TabsContent value="call-details" className="space-y-4">
           <BatchCallDetails 
