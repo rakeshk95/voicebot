@@ -68,7 +68,7 @@ const campaignFormSchema = z.object({
     provider: z.string().optional(),
     model: z.string().optional(),
     temperature: z.string().optional(),
-    maxCallDuration: z.string().optional(),
+    maxCallDuration: z.any().optional(),
     useEmbeddings: z.boolean().optional(),
     prompt: z.string().optional(),
     promptJson: z.object({
@@ -135,7 +135,7 @@ type CampaignFormValues = {
     provider?: string;
     model?: string;
     temperature?: string;
-    maxCallDuration?: string;
+    maxCallDuration?: any;
     useEmbeddings?: boolean;
     prompt?: string;
     promptJson?: {

@@ -115,7 +115,7 @@ interface Campaign {
     useProxyLlm: boolean;
     useEmbeddings: boolean;
     initialMessage: string;
-    maxCallDuration: number;
+    maxCallDuration: any;
     UseStructuredPrompt: boolean;
   };
   telephonic_provider: string;

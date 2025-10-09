@@ -35,7 +35,7 @@ export interface CampaignVersion {
     provider?: string;
     model: string;
     temperature?: string;
-    maxCallDuration?: string;
+    maxCallDuration?: any;
     useEmbeddings?: boolean;
     prompt: string;
     promptJson?: {

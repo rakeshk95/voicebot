@@ -945,13 +945,19 @@ const CallHistory = () => {
     let allCalls: Call[] = [];
     let nextCursor: string | null = null;
     let page = 1;
-    const pageSize = 10;
+    const pageSize = 50; // Maximum page size supported by external API
+    
+    console.log(`Starting to fetch all calls for campaign ${campaignId} with page size ${pageSize}`);
+    
     do {
       let apiUrl = new URL(`https://platform.voxiflow.com/backend/api/v1/calls/external/${campaignId}/list`);
       apiUrl.searchParams.append('start_date', startDate);
       apiUrl.searchParams.append('end_date', endDate);
       apiUrl.searchParams.append('page_size', pageSize.toString());
       if (nextCursor) apiUrl.searchParams.append('cursor', nextCursor);
+      
+      console.log(`Fetching page ${page} with URL: ${apiUrl.toString()}`);
+      
       const response = await fetch(apiUrl.toString(), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -960,31 +966,96 @@ const CallHistory = () => {
       });
       if (!response.ok) throw new Error('Failed to fetch calls');
       const data = await response.json();
+      
+      console.log(`Page ${page} response:`, {
+        itemsCount: data.items?.length || 0,
+        hasMore: data.has_more,
+        nextCursor: data.next_cursor
+      });
+      
       if (data.items && Array.isArray(data.items)) {
-        allCalls = allCalls.concat(data.items);
+        // Map the external API response to match our Call interface
+        const mappedCalls = data.items.map((call: any, index: number) => {
+          console.log(`Mapping call ${index}:`, call);
+          console.log(`Call call_id: ${call.call_id}`);
+          const mappedCall = {
+            Sid: call.call_id || '', // Use call_id from the API response
+            ParentCallSid: call.ParentCallSid || '',
+            DateCreated: call.DateCreated || '',
+            DateUpdated: call.DateUpdated || '',
+            AccountSid: call.AccountSid || '',
+            To: call.To || '',
+            From: call.From || '',
+            PhoneNumber: call.PhoneNumber || '',
+            PhoneNumberSid: call.PhoneNumberSid || '',
+            Status: (call.Status || '').toLowerCase(),
+            StartTime: call.StartTime || '',
+            EndTime: call.EndTime || '',
+            Duration: call.Duration || 0,
+            Price: call.Price || 0,
+            Direction: call.Direction || '',
+            AnsweredBy: call.AnsweredBy || '',
+            ForwardedFrom: call.ForwardedFrom || '',
+            CallerName: call.CallerName || '',
+            Uri: call.Uri || '',
+            RecordingUrl: call.RecordingUrl || '',
+            rating: call.rating || 0,
+            sortTimestamp: (() => {
+              if (call.DateCreated && !isNaN(Date.parse(call.DateCreated))) return new Date(call.DateCreated).getTime();
+              if (call.StartTime && !isNaN(Date.parse(call.StartTime))) return new Date(call.StartTime).getTime();
+              if (call.EndTime && !isNaN(Date.parse(call.EndTime))) return new Date(call.EndTime).getTime();
+              return 0;
+            })(),
+          };
+          console.log(`Mapped call ${index} Sid: ${mappedCall.Sid}`);
+          return mappedCall;
+        });
+        allCalls = allCalls.concat(mappedCalls);
+        console.log(`Added ${mappedCalls.length} calls from page ${page}. Total calls so far: ${allCalls.length}`);
       }
       nextCursor = data.next_cursor;
       page++;
     } while (nextCursor);
+    
+    console.log(`Finished fetching all calls. Total calls retrieved: ${allCalls.length}`);
     return allCalls;
   };
 
   // Add this function to fetch artifacts for a call
   const fetchArtifacts = async (callId: string) => {
-    const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/calls/${callId}/artifacts`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    if (!response.ok) return {};
-    const data = await response.json();
-    // Always normalize to 'extracted-data'
-    if (data.extracted_data && !data['extracted-data']) {
-      data['extracted-data'] = data.extracted_data;
-      delete data.extracted_data;
+    try {
+      // Validate callId before making API call
+      if (!callId || callId === '' || callId === 'undefined') {
+        console.error(`Invalid callId provided to fetchArtifacts: ${callId}`);
+        return {};
+      }
+      
+      console.log(`Fetching artifacts for call ID: ${callId}`);
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/calls/${callId}/artifacts`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        console.log(`Failed to fetch artifacts for call ${callId}: ${response.status} ${response.statusText}`);
+        return {};
+      }
+      
+      const data = await response.json();
+      console.log(`Successfully fetched artifacts for call ${callId}:`, data);
+      
+      // Always normalize to 'extracted-data'
+      if (data.extracted_data && !data['extracted-data']) {
+        data['extracted-data'] = data.extracted_data;
+        delete data.extracted_data;
+      }
+      return data;
+    } catch (error) {
+      console.error(`Error fetching artifacts for call ${callId}:`, error);
+      return {};
     }
-    return data;
   };
 
   // Add this function to export the detailed report
@@ -992,35 +1063,83 @@ const CallHistory = () => {
     if (!selectedCampaign || !startDate || !endDate) return;
     setIsExportingDetailed(true);
     try {
-      const startStr = `${format(startDate, 'yyyy-MM-dd')} 00:00:00`;
-      const endStr = `${format(endDate, 'yyyy-MM-dd')} 23:59:00`;
+      console.log('Starting detailed report export...');
+      const startStr = format(startDate, "yyyy-MM-dd'T'HH:mm:ss'Z'");
+      const endStr = format(endDate, "yyyy-MM-dd'T'HH:mm:ss'Z'");
+      console.log(`Fetching calls for campaign ${selectedCampaign} from ${startStr} to ${endStr}`);
+      
       const calls = await fetchAllCalls(selectedCampaign, startStr, endStr);
+      console.log(`Fetched ${calls.length} calls for export`);
+      
       const reportRows = [];
       const allExtractedKeys = new Set<string>();
-      for (const call of calls) {
-        const artifacts = await fetchArtifacts(call.Sid);
-        const { transcript, 'extracted-data': extractedData, ...artifactsNoTranscript } = artifacts || {};
-        let extractedObj = {};
-        if (extractedData) {
-          let extracted = extractedData;
-          try {
-            if (typeof extracted === 'string') {
-              extracted = extracted.replace(/^```json\s*|\s*```$/g, '').trim();
-            }
-            while (typeof extracted === 'string') {
-              extracted = JSON.parse(extracted);
-            }
-            if (typeof extracted === 'object' && extracted !== null) {
-              extractedObj = extracted;
-              Object.keys(extractedObj).forEach(key => allExtractedKeys.add(key));
-            }
-          } catch (e) {
-            console.error("Error parsing extracted data: ", e);
+      
+      // Process calls in batches to avoid overwhelming the API
+      const batchSize = 10;
+      const totalBatches = Math.ceil(calls.length / batchSize);
+      
+      console.log(`Processing ${calls.length} calls in ${totalBatches} batches of ${batchSize}`);
+      
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const startIndex = batchIndex * batchSize;
+        const endIndex = Math.min(startIndex + batchSize, calls.length);
+        const batchCalls = calls.slice(startIndex, endIndex);
+        
+        console.log(`Processing batch ${batchIndex + 1}/${totalBatches} (calls ${startIndex + 1}-${endIndex})`);
+        
+        // Process batch calls in parallel
+        const batchPromises = batchCalls.map(async (call, index) => {
+          const globalIndex = startIndex + index;
+          console.log(`Processing call ${globalIndex + 1}/${calls.length}: ${call.Sid}`);
+          console.log(`Full call object:`, call);
+          
+          // Skip calls with undefined or empty Sid
+          if (!call.Sid || call.Sid === '') {
+            console.warn(`Skipping call ${globalIndex + 1} - no valid Sid found:`, call);
+            return { ...call, summary: 'No artifacts available - invalid call ID', category: '', 'extracted-data': '' };
           }
+          
+          console.log(`About to fetch artifacts for call_id: ${call.Sid}`);
+          const artifacts = await fetchArtifacts(call.Sid);
+          const { transcript, 'extracted-data': extractedData, ...artifactsNoTranscript } = artifacts || {};
+          let extractedObj = {};
+          
+          if (extractedData) {
+            let extracted = extractedData;
+            try {
+              if (typeof extracted === 'string') {
+                extracted = extracted.replace(/^```json\s*|\s*```$/g, '').trim();
+              }
+              while (typeof extracted === 'string') {
+                extracted = JSON.parse(extracted);
+              }
+              if (typeof extracted === 'object' && extracted !== null) {
+                extractedObj = extracted;
+                Object.keys(extractedObj).forEach(key => allExtractedKeys.add(key));
+              }
+            } catch (e) {
+              console.error(`Error parsing extracted data for call ${call.Sid}:`, e);
+            }
+          }
+          
+          console.log(`Completed processing call ${call.Sid}`);
+          return { ...call, ...artifactsNoTranscript, ...extractedObj };
+        });
+        
+        // Wait for all calls in this batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        reportRows.push(...batchResults);
+        
+        console.log(`Completed batch ${batchIndex + 1}/${totalBatches}. Processed ${batchResults.length} calls.`);
+        
+        // Add a small delay between batches to be respectful to the API
+        if (batchIndex < totalBatches - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
-        reportRows.push({ ...call, ...artifactsNoTranscript, ...extractedObj });
       }
       const extractedKeys = Array.from(allExtractedKeys).sort();
+      console.log(`Found ${extractedKeys.length} unique extracted data keys:`, extractedKeys);
+      
       const baseColumns = [
         'Sid', 'ParentCallSid', 'DateCreated', 'DateUpdated', 'AccountSid', 'To', 'From',
         'PhoneNumber', 'PhoneNumberSid', 'Status', 'StartTime', 'EndTime', 'Duration',
@@ -1031,6 +1150,9 @@ const CallHistory = () => {
       const finalBaseKeys = baseColumns.filter(key => allPresentKeys.includes(key));
       const otherKeys = allPresentKeys.filter(key => !finalBaseKeys.includes(key) && !extractedKeys.includes(key) && key !== 'sortTimestamp');
       const allKeys = [...finalBaseKeys, ...otherKeys, ...extractedKeys];
+      
+      console.log(`Creating Excel file with ${allKeys.length} columns and ${reportRows.length} rows`);
+      
       const wsData = [
         allKeys,
         ...reportRows.map(row =>
@@ -1055,6 +1177,19 @@ const CallHistory = () => {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
+      
+      console.log('Detailed report export completed successfully');
+      toast({
+        title: "Export Complete",
+        description: `Successfully exported ${reportRows.length} calls with artifacts data`,
+      });
+    } catch (error) {
+      console.error('Error during detailed report export:', error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to export detailed report. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsExportingDetailed(false);
     }

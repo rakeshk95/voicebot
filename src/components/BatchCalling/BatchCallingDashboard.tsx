@@ -28,7 +28,10 @@ import {
   getBatchOperationStatus,
   pauseBatchOperation,
   resumeBatchOperation,
-  cancelBatchOperation
+  cancelBatchOperation,
+  pauseRabbitMQOperation,
+  resumeRabbitMQOperation,
+  deleteRabbitMQOperation
 } from '@/lib/batchCallingApi';
 import { authorizedFetch } from '@/lib/api';
 import { BatchCallSummary, BatchOperationsList, BatchCallOperation } from '@/types/batchCalling';
@@ -255,25 +258,45 @@ export const BatchCallingDashboard: React.FC = () => {
   const handleOperationAction = async (operationId: string, action: 'pause' | 'resume' | 'cancel') => {
     try {
       let result;
-      switch (action) {
-        case 'pause':
-          result = await pauseBatchOperation(operationId);
-          break;
-        case 'resume':
-          result = await resumeBatchOperation(operationId);
-          break;
-        case 'cancel':
-          result = await cancelBatchOperation(operationId);
-          break;
+      
+      // Check if this is a RabbitMQ operation (starts with 'rabbitmq_bulk_op_')
+      const isRabbitMQOperation = operationId.startsWith('rabbitmq_bulk_op_');
+      
+      if (isRabbitMQOperation) {
+        // Use RabbitMQ APIs
+        switch (action) {
+          case 'pause':
+            result = await pauseRabbitMQOperation(operationId);
+            break;
+          case 'resume':
+            result = await resumeRabbitMQOperation(operationId);
+            break;
+          case 'cancel':
+            result = await deleteRabbitMQOperation(operationId);
+            break;
+        }
+      } else {
+        // Use legacy APIs
+        switch (action) {
+          case 'pause':
+            result = await pauseBatchOperation(operationId);
+            break;
+          case 'resume':
+            result = await resumeBatchOperation(operationId);
+            break;
+          case 'cancel':
+            result = await cancelBatchOperation(operationId);
+            break;
+        }
       }
 
       toast({
         title: "Success",
-        description: result.message,
+        description: result.message || `Operation ${action}d successfully`,
       });
 
-             // Refresh data after action
-       await fetchData(); // Fetch operations data after action
+      // Refresh data after action
+      await fetchData();
     } catch (error) {
       toast({
         title: "Error",

@@ -372,8 +372,8 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            {/* Pause Button */}
-                            {operation.status === 'processing' && (operation.pending_calls || 0) > 0 && (
+                            {/* Pause Button - Show for processing operations */}
+                            {operation.status === 'processing' && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -382,12 +382,13 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
                                   onOperationAction(operationId, 'pause');
                                 }}
                                 className="border-yellow-300 text-yellow-700 hover:bg-yellow-50"
+                                title="Pause Operation"
                               >
                                 <Pause className="h-4 w-4" />
                               </Button>
                             )}
                             
-                            {/* Resume Button */}
+                            {/* Resume Button - Show for paused operations */}
                             {operation.status === 'paused' && (
                               <Button
                                 size="sm"
@@ -397,13 +398,14 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
                                   onOperationAction(operationId, 'resume');
                                 }}
                                 className="border-green-300 text-green-700 hover:bg-green-50"
+                                title="Resume Operation"
                               >
                                 <Play className="h-4 w-4" />
                               </Button>
                             )}
                             
-                            {/* Cancel Button */}
-                            {(operation.status === 'processing' || operation.status === 'paused') && (operation.pending_calls || 0) > 0 && (
+                            {/* Cancel/Delete Button - Show for active operations */}
+                            {(operation.status === 'processing' || operation.status === 'paused' || operation.status === 'starting') && (
                               <Button
                                 size="sm"
                                 variant="destructive"
@@ -412,9 +414,19 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
                                   onOperationAction(operationId, 'cancel');
                                 }}
                                 className="border-red-300 text-red-700 hover:bg-red-50"
+                                title={operation.status === 'processing' || operation.status === 'paused' ? 'Cancel Operation' : 'Delete Operation'}
                               >
                                 <Square className="h-4 w-4" />
                               </Button>
+                            )}
+                            
+                            {/* Show message if no actions available */}
+                            {!['processing', 'paused', 'starting'].includes(operation.status) && (
+                              <span className="text-xs text-gray-500">
+                                {operation.status === 'completed' ? 'Completed' : 
+                                 operation.status === 'failed' ? 'Failed' : 
+                                 operation.status === 'cancelled' ? 'Cancelled' : 'No actions'}
+                              </span>
                             )}
                           </div>
                         </TableCell>
