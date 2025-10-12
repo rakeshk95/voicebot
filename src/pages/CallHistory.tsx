@@ -1075,7 +1075,7 @@ const CallHistory = () => {
       const allExtractedKeys = new Set<string>();
       
       // Process calls in batches to avoid overwhelming the API
-      const batchSize = 10;
+      const batchSize = 50;
       const totalBatches = Math.ceil(calls.length / batchSize);
       
       console.log(`Processing ${calls.length} calls in ${totalBatches} batches of ${batchSize}`);
