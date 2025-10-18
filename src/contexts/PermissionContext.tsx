@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { getUserData, getAuthToken } from '@/utils/localStorage';
+import { refreshUserPermissions } from '@/utils/refreshPermissions';
 
 // Create a simple event system to notify when auth changes
 const authEventTarget = new EventTarget();
@@ -152,8 +153,8 @@ export const PermissionProvider: React.FC<PermissionProviderProps> = ({ children
   };
 
   // Generate sidebar and navigation items based on permissions
-  const generateUIItems = (permissions: StandardizedPermissions) => {
-    console.log('PermissionContext: generateUIItems called with permissions:', permissions);
+  const generateUIItems = (permissions: StandardizedPermissions, roleName?: string) => {
+    console.log('PermissionContext: generateUIItems called with permissions:', permissions, 'roleName:', roleName);
     
     const sidebarItems: string[] = [];
     const navigationItems: string[] = [];
@@ -162,36 +163,60 @@ export const PermissionProvider: React.FC<PermissionProviderProps> = ({ children
     sidebarItems.push('dashboard');
     navigationItems.push('home');
 
-    // Add items based on permissions
-    if (permissions.admin || permissions.read.includes('users')) {
-      console.log('PermissionContext: Adding users to sidebar items');
-      sidebarItems.push('users');
-      navigationItems.push('users');
+    // Role-specific sidebar items
+    if (roleName === 'org_admin') {
+      // org_admin: Can create campaigns, manage users for their org, view call history
+      sidebarItems.push('campaigns', 'call-history', 'users');
+      navigationItems.push('campaigns', 'call-history', 'users');
+    } else if (roleName === 'manager') {
+      // manager: Can manage campaigns, view call history (no user management)
+      sidebarItems.push('campaigns', 'call-history');
+      navigationItems.push('campaigns', 'call-history');
+    } else if (roleName === 'agent') {
+      // agent: Can view campaigns and call history (read-only)
+      sidebarItems.push('campaigns', 'call-history');
+      navigationItems.push('campaigns', 'call-history');
+    } else {
+      // Default behavior for admin and other roles
+      // Add items based on permissions
+      if (permissions.admin || permissions.read.includes('users')) {
+        console.log('PermissionContext: Adding users to sidebar items');
+        sidebarItems.push('users');
+        navigationItems.push('users');
+      }
+
+      if (permissions.admin || permissions.read.includes('campaigns')) {
+        console.log('PermissionContext: Adding campaigns to sidebar items');
+        sidebarItems.push('campaigns');
+        navigationItems.push('campaigns');
+      }
+
+      if (permissions.admin || permissions.read.includes('organizations')) {
+        console.log('PermissionContext: Adding organizations to sidebar items');
+        sidebarItems.push('organizations');
+        navigationItems.push('organizations');
+      }
+
+      if (permissions.admin || permissions.read.includes('roles')) {
+        console.log('PermissionContext: Adding roles-permissions to sidebar items');
+        sidebarItems.push('roles-permissions');
+        navigationItems.push('roles');
+      }
+
+      if (permissions.admin || permissions.read.includes('call_history')) {
+        console.log('PermissionContext: Adding call-history to sidebar items');
+        sidebarItems.push('call-history');
+        navigationItems.push('call-history');
+      }
     }
 
-    if (permissions.admin || permissions.read.includes('campaigns')) {
-      console.log('PermissionContext: Adding campaigns to sidebar items');
-      sidebarItems.push('campaigns');
-      navigationItems.push('campaigns');
-    }
-
-    if (permissions.admin || permissions.read.includes('organizations')) {
-      console.log('PermissionContext: Adding organizations to sidebar items');
-      sidebarItems.push('organizations');
-      navigationItems.push('organizations');
-    }
-
-    if (permissions.admin || permissions.read.includes('roles')) {
-      console.log('PermissionContext: Adding roles-permissions to sidebar items');
-      sidebarItems.push('roles-permissions');
-      navigationItems.push('roles');
-    }
-
-    if (permissions.admin || permissions.read.includes('call_history')) {
-      console.log('PermissionContext: Adding call-history to sidebar items');
-      sidebarItems.push('call-history');
-      navigationItems.push('call-history');
-    }
+    // Add new feature items (available to all users for now)
+    sidebarItems.push('batch-calling');
+    sidebarItems.push('ai-chat');
+    sidebarItems.push('automations');
+    sidebarItems.push('whatsapp');
+    sidebarItems.push('integrations');
+    sidebarItems.push('templates');
 
     // Add profile and settings for all users
     sidebarItems.push('profile');
@@ -223,7 +248,26 @@ export const PermissionProvider: React.FC<PermissionProviderProps> = ({ children
       // Get role data directly from localStorage
       const role = getRoleData();
       if (!role) {
-        console.log('PermissionContext: No role data found, skipping permissions fetch');
+        console.log('PermissionContext: No role data found, creating fallback for admin user');
+        
+        // Check if this is admin@example.com and create fallback role
+        const userData = getUserData();
+        if (userData?.email === 'admin@example.com') {
+          console.log('PermissionContext: Creating fallback superuser role for admin');
+          const fallbackRole = {
+            id: 'fallback-superuser',
+            name: 'superuser',
+            description: 'Fallback superuser role',
+            permissions: { admin: true, read: ['*'], write: ['*'], delete: ['*'] },
+            sidebar_items: ['dashboard', 'users', 'organizations', 'roles-permissions', 'campaigns', 'call-history', 'batch-calling', 'ai-chat', 'automations', 'whatsapp', 'integrations', 'templates', 'settings'],
+            navigation_items: ['dashboard', 'users', 'organizations', 'roles-permissions', 'campaigns', 'call-history', 'batch-calling']
+          };
+          
+          setUserRole(fallbackRole);
+          setUserPermissions(fallbackRole.permissions);
+          return;
+        }
+        
         setUserPermissions(null);
         setUserRole(null);
         return;
@@ -240,7 +284,7 @@ export const PermissionProvider: React.FC<PermissionProviderProps> = ({ children
       // If sidebar items are missing, generate them from permissions
       if (sidebarItems.length === 0) {
         console.log('PermissionContext: No sidebar items found, generating from permissions');
-        const { sidebarItems: generatedSidebar, navigationItems: generatedNav } = generateUIItems(permissions);
+        const { sidebarItems: generatedSidebar, navigationItems: generatedNav } = generateUIItems(permissions, role.name);
         sidebarItems = generatedSidebar;
         navigationItems = generatedNav;
       }
@@ -275,11 +319,32 @@ export const PermissionProvider: React.FC<PermissionProviderProps> = ({ children
   };
 
   const hasPermission = (action: 'read' | 'write' | 'delete', resource: string): boolean => {
-    if (!userPermissions) return false;
+    if (!userPermissions || !userRole) {
+      console.log('PermissionContext: Missing userPermissions or userRole', { userPermissions, userRole });
+      return false;
+    }
     
-    // Check for admin privileges
-    if (userPermissions.admin) return true;
+    // Check for admin privileges - superuser should have all permissions
+    if (userPermissions.admin || userRole.name === 'superuser' || userRole.name === 'super_admin' || userRole.name === 'superadmin') {
+      console.log('PermissionContext: Superuser access granted', { userRole: userRole.name, admin: userPermissions.admin });
+      return true;
+    }
     
+      // Role-specific permissions
+      if (userRole.name === 'org_admin') {
+        if (action === 'read' && ['campaigns', 'call_history', 'users'].includes(resource)) return true;
+        if (action === 'write' && ['campaigns', 'users'].includes(resource)) return true;
+        if (action === 'delete' && resource === 'campaigns') return true;
+      } else if (userRole.name === 'manager') {
+        if (action === 'read' && ['campaigns', 'call_history'].includes(resource)) return true;
+        if (action === 'write' && resource === 'campaigns') return true;
+        if (action === 'delete' && resource === 'campaigns') return true;
+      } else if (userRole.name === 'agent') {
+        if (action === 'read' && ['campaigns', 'call_history'].includes(resource)) return true;
+        // Agents have no write or delete permissions
+      }
+    
+    // Default permission checking logic
     // Check for wildcard permissions
     if (userPermissions[action].includes('*')) return true;
     
@@ -339,6 +404,8 @@ export const PermissionProvider: React.FC<PermissionProviderProps> = ({ children
 
   useEffect(() => {
     console.log('PermissionContext: useEffect triggered, fetching permissions');
+    console.log('PermissionContext: Current userRole from localStorage:', getRoleData());
+    console.log('PermissionContext: Current userPermissions state:', userPermissions);
     
     // Only fetch if not already fetching
     if (!isFetching) {
@@ -378,3 +445,51 @@ export const PermissionProvider: React.FC<PermissionProviderProps> = ({ children
     </PermissionContext.Provider>
   );
 }; 
+
+// Configurable permissions registry (frontend-only helper)
+export const PERMISSION_RESOURCES = [
+  'dashboard',
+  'users',
+  'roles',
+  'organizations',
+  'campaigns',
+  'call_history',
+  'analytics',
+  'settings'
+] as const
+
+export type PermissionResource = typeof PERMISSION_RESOURCES[number]
+
+export type Action = 'read' | 'write' | 'delete'
+
+// Default role presets (used for UI presets only; real authority comes from backend)
+export const ROLE_PRESETS: Record<string, { name: string; permissions: Partial<Record<Action, PermissionResource[]>> } > = {
+  superuser: {
+    name: 'Super Admin',
+    permissions: { 
+      read: ['*'], 
+      write: ['*'], 
+      delete: ['*'] 
+    }
+  },
+  org_admin: {
+    name: 'Org Admin',
+    permissions: {
+      read: ['users', 'organizations', 'campaigns', 'call_history', 'roles'],
+      write: ['users', 'organizations', 'campaigns']
+    }
+  },
+  manager: {
+    name: 'Manager',
+    permissions: {
+      read: ['campaigns', 'call_history', 'roles'],
+      write: ['campaigns']
+    }
+  },
+  agent: {
+    name: 'Agent',
+    permissions: {
+      read: ['campaigns', 'users', 'roles', 'call_history']
+    }
+  }
+} 

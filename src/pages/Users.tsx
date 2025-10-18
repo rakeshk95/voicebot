@@ -88,7 +88,7 @@ interface User {
   first_name: string;
   last_name: string;
   mobile_number: string | null;
-  role: 'superuser' | 'org_admin' | 'user' | 'agent';
+  role?: 'superuser' | 'org_admin' | 'user' | 'agent' | 'manager';
   status: 'active' | 'inactive';
   organization_id: string | null;
   is_superuser: boolean;
@@ -148,6 +148,11 @@ export default function Users() {
   const [viewingUser, setViewingUser] = useState<User | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  
+  // Debug organizations state
+  useEffect(() => {
+    console.log('Users: Organizations state changed:', organizations);
+  }, [organizations]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
@@ -175,27 +180,25 @@ export default function Users() {
   const [isCreateSubmitting, setIsCreateSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Resolve current user once for reuse across helpers (outside effects)
+  const currentUserData: any = JSON.parse(localStorage.getItem('userData') || '{}');
+  const isSuperUserGlobal: boolean = currentUserData?.role_name === 'superuser';
+
+  // Frontend defaults as a last resort (when API returns empty)
+  const getDefaultOrganizations = () => {
+    if (currentUserData?.org_id) {
+      return [{ id: currentUserData.org_id, name: currentUserData.org_name || 'My Organization' }];
+    }
+    return [] as Organization[];
+  };
+
   // Check permissions for users management
   const canReadUsers = hasPermission('read', 'users');
   const canWriteUsers = hasPermission('write', 'users');
   const canDeleteUsers = hasPermission('delete', 'users');
   const isAdmin = userPermissions?.admin;
 
-  // If user can't read users, show access denied
-  if (!canReadUsers && !isAdmin) {
-    return (
-      <div className="container mx-auto py-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-red-600">Access Denied</CardTitle>
-            <CardDescription>
-              You don't have permission to view users.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
+  // Note: Do not early-return before hooks below; render gate is handled in JSX
 
   const form = useForm<z.infer<typeof userSchema>>({
     resolver: zodResolver(userSchema),
@@ -254,49 +257,75 @@ export default function Users() {
   const fetchUsers = async () => {
     try {
       setIsRefreshing(true);
-  
+
       const params = new URLSearchParams();
-  
+
       if (searchTerm) {
         params.append("search", searchTerm);
       }
-  
+
       if (startDate) {
         params.append("start_date", startDate.toISOString());
       }
-  
+
       if (endDate) {
         params.append("end_date", endDate.toISOString());
       }
-  
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/users/?${params.toString()}`, {
+
+      const response = await fetch(`http://localhost:8000/api/v1/users/?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
           "Content-Type": "application/json",
         },
       });
-  
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-  
+
       const data: User[] = await response.json();
-  
+
       // Optional: use Map for fast organization name lookup
       const orgMap = new Map(organizations.map((org) => [org.id, org.name]));
-  
-      const mappedUsers = data.map((user) => ({
+
+      const baseUsers = data.map((user) => ({
         ...user,
         organization_name: orgMap.get(user.organization_id) || null,
         first_name: user.first_name || "",
         last_name: user.last_name || "",
         mobile_number: user.mobile_number || null,
-        role: user.role || "user",
         status: user.status || "active",
       }));
-  
-      setUsers(mappedUsers);
-      setTotalItems(mappedUsers.length);
+
+      // Enrich each user with role from roles API if missing
+      const enriched = await Promise.all(
+        baseUsers.map(async (u) => {
+          if (u.role_id || u.role) return u;
+          try {
+            const r = await fetch(`http://localhost:8000/api/v1/roles/user/${u.id}`, {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+                "Content-Type": "application/json",
+              },
+            });
+            if (r.ok) {
+              const rolesResp: any[] = await r.json();
+              if (Array.isArray(rolesResp) && rolesResp.length > 0) {
+                const first = rolesResp[0];
+                return {
+                  ...u,
+                  role_id: first.role_id || u.role_id,
+                  role: (first.role_name as any) || u.role,
+                };
+              }
+            }
+          } catch (_e) {}
+          return u;
+        })
+      );
+
+      setUsers(enriched);
+      setTotalItems(enriched.length);
       setTotalPages(1); // only 1 page since <10 users
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -342,21 +371,42 @@ export default function Users() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+        console.log('Users: Fetching organizations...');
+        const response = await fetch('http://localhost:8000/api/v1/organizations/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
           },
         });
 
+        console.log('Users: Organizations API response status:', response.status);
+        
         if (!response.ok) {
-          throw new Error('Failed to fetch organizations');
+          const errorText = await response.text();
+          console.error('Users: Organizations API error:', response.status, errorText);
+          throw new Error(`Failed to fetch organizations: ${response.status}`);
         }
 
         const data = await response.json();
-        setOrganizations(data);
+        console.log('Users: Organizations API raw data:', data);
+        
+        const orgsArray = Array.isArray(data) ? data : (Array.isArray((data as any)?.value) ? (data as any).value : []);
+        console.log('Users: Parsed organizations array:', orgsArray);
+        
+        if (!orgsArray || orgsArray.length === 0) {
+          console.log('Users: No organizations found, using fallback');
+          const fallback = getDefaultOrganizations();
+          setOrganizations(fallback);
+        } else {
+          console.log('Users: Setting organizations:', orgsArray);
+          setOrganizations(orgsArray);
+        }
       } catch (error) {
-        console.error('Error fetching organizations:', error);
+        console.error('Users: Error fetching organizations:', error);
+        // Use fallback to avoid empty dropdown
+        const fallback = getDefaultOrganizations();
+        console.log('Users: Using fallback organizations:', fallback);
+        setOrganizations(fallback);
         toast({
           title: "Error",
           description: "Failed to load organizations",
@@ -365,14 +415,13 @@ export default function Users() {
       }
     };
 
-    // Get user data and check role
     const userData = JSON.parse(localStorage.getItem('userData') || '{}');
     const isSuperUser = userData?.role_name === 'superuser';
     
     const fetchCampaignsData = async () => {
       try {
         // Build API URL with role-based filtering
-        let campaignsUrl = 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
+        let campaignsUrl = 'http://localhost:8000/api/v1/campaigns/';
         if (!isSuperUser && userData?.org_id) {
           campaignsUrl += `?org_id=${userData.org_id}`;
           console.log('Users: Non-superuser - filtering campaigns by organization:', userData.org_id);
@@ -405,7 +454,7 @@ export default function Users() {
 
     const fetchRolesData = async () => {
       try {
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/roles/', {
+        const response = await fetch('http://localhost:8000/api/v1/roles/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -417,8 +466,27 @@ export default function Users() {
         }
 
         const data = await response.json();
-        console.log('Fetched roles:', data);
-        setRoles(data);
+        const rolesArray = Array.isArray(data) ? data : (Array.isArray((data as any)?.value) ? (data as any).value : []);
+        // Fallback: if no roles returned, try org-scoped
+        if ((!rolesArray || rolesArray.length === 0) && currentUserData?.org_id) {
+          try {
+            const scoped = await fetch(`http://localhost:8000/api/v1/roles/?org_id=${currentUserData.org_id}`, {
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+                'Content-Type': 'application/json'
+              },
+            });
+            if (scoped.ok) {
+              const scopedData = await scoped.json();
+              const scopedArray = Array.isArray(scopedData) ? scopedData : (Array.isArray(scopedData?.value) ? scopedData.value : []);
+              if (scopedArray && scopedArray.length > 0) {
+                setRoles(scopedArray);
+                return;
+              }
+            }
+          } catch (_e) {}
+        }
+        setRoles(rolesArray || []);
       } catch (error) {
         console.error('Error fetching roles:', error);
         toast({
@@ -437,10 +505,10 @@ export default function Users() {
   const fetchCampaigns = async () => {
     try {
       // Build API URL with role-based filtering
-      let campaignsUrl = 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
-      if (!isSuperUser && userData?.org_id) {
-        campaignsUrl += `?org_id=${userData.org_id}`;
-        console.log('Users: Non-superuser - filtering campaigns by organization:', userData.org_id);
+      let campaignsUrl = 'http://localhost:8000/api/v1/campaigns/';
+      if (!isSuperUserGlobal && currentUserData?.org_id) {
+        campaignsUrl += `?org_id=${currentUserData.org_id}`;
+        console.log('Users: Non-superuser - filtering campaigns by organization:', currentUserData.org_id);
       }
       
       const response = await fetch(campaignsUrl, {
@@ -471,27 +539,27 @@ export default function Users() {
     try {
       setIsLoadingCreateData(true);
       // Build API URLs with role-based filtering
-      let campaignsUrl = 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
-      let orgsUrl = 'https://platform.voxiflow.com/backend/api/v1/organizations';
+      let campaignsUrl = 'http://localhost:8000/api/v1/campaigns/';
+      let orgsUrl = 'http://localhost:8000/api/v1/organizations';
       
-      if (!isSuperUser && userData?.org_id) {
-        campaignsUrl += `?org_id=${userData.org_id}`;
-        console.log('Users: Non-superuser - filtering campaigns by organization:', userData.org_id);
+      if (!isSuperUserGlobal && currentUserData?.org_id) {
+        campaignsUrl += `?org_id=${currentUserData.org_id}`;
+        console.log('Users: Non-superuser - filtering campaigns by organization:', currentUserData.org_id);
       }
       
       const [rolesResponse, orgsResponse, campaignsResponse] = await Promise.all([
-        fetch('https://platform.voxiflow.com/backend/api/v1/roles/', {
+        fetch('http://localhost:8000/api/v1/roles/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
           },
         }),
-        isSuperUser ? fetch(orgsUrl, {
+        isSuperUserGlobal ? fetch(orgsUrl, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
           },
-        }) : Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: userData.org_id, name: userData.user_name || userData.org_name || 'My Organization' }]) }),
+        }) : Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: currentUserData.org_id, name: currentUserData.org_name || 'My Organization' }]) }),
         fetch(campaignsUrl, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -504,11 +572,40 @@ export default function Users() {
         throw new Error('Failed to fetch required data');
       }
 
-      const [rolesData, orgsData, campaignsData] = await Promise.all([
+      const [rolesDataRaw, orgsDataRaw, campaignsDataRaw] = await Promise.all([
         rolesResponse.json(),
         orgsResponse.json(),
         campaignsResponse.json()
       ]);
+
+      let rolesData = Array.isArray(rolesDataRaw) ? rolesDataRaw : (Array.isArray(rolesDataRaw?.value) ? rolesDataRaw.value : []);
+      let orgsData = Array.isArray(orgsDataRaw) ? orgsDataRaw : (Array.isArray(orgsDataRaw?.value) ? orgsDataRaw.value : []);
+      const campaignsData = Array.isArray(campaignsDataRaw) ? campaignsDataRaw : (Array.isArray(campaignsDataRaw?.value) ? campaignsDataRaw.value : []);
+
+      // If no global roles, try org-scoped fetch
+      if ((!rolesData || rolesData.length === 0) && currentUserData?.org_id) {
+        try {
+          const scoped = await fetch(`http://localhost:8000/api/v1/roles/?org_id=${currentUserData.org_id}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+              'Content-Type': 'application/json'
+            },
+          });
+          if (scoped.ok) {
+            const scopedData = await scoped.json();
+            rolesData = Array.isArray(scopedData) ? scopedData : (Array.isArray(scopedData?.value) ? scopedData.value : []);
+          }
+        } catch (_e) {}
+      }
+
+      // Non-superuser fallback if orgs still empty
+      if (!isSuperUserGlobal && orgsData.length === 0 && currentUserData?.org_id) {
+        orgsData = [{ id: currentUserData.org_id, name: currentUserData.org_name || 'My Organization' }];
+      }
+
+      if (!orgsData || orgsData.length === 0) {
+        orgsData = getDefaultOrganizations();
+      }
 
       setRoles(rolesData);
       setOrganizations(orgsData);
@@ -531,6 +628,9 @@ export default function Users() {
     if (roles.length === 0 || organizations.length === 0 || campaigns.length === 0) {
       fetchCreateUserData();
     } else {
+      // Preselect user's org for non-superusers
+      const defaultOrg = !isSuperUserGlobal && currentUserData?.org_id ? currentUserData.org_id : null;
+      setCreateFormData(prev => ({ ...prev, organization_id: defaultOrg }));
       setIsCreateDialogOpen(true);
     }
   };
@@ -538,7 +638,7 @@ export default function Users() {
   const handleDeleteUser = async (user: User) => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/users/${user.id}`, {
+      const response = await fetch(`http://localhost:8000/api/v1/users/${user.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -601,7 +701,7 @@ export default function Users() {
 
       console.log('Sending update data:', updateData); // Debug log
 
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/users/${editingUser.id}`, {
+      const response = await fetch(`http://localhost:8000/api/v1/users/${editingUser.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -669,7 +769,7 @@ export default function Users() {
         campaign_ids: createFormData.campaign_ids || [],
       };
 
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/users/', {
+      const response = await fetch('http://localhost:8000/api/v1/users/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -721,7 +821,7 @@ export default function Users() {
       const csvData = users.map(user => [
         `${user.first_name} ${user.last_name}`.trim() || 'Not Set',
         user.email,
-        getRoleDisplayName(user.role_id),
+        getRoleDisplayNameFromIdOrName(user.role_id, user.role as any),
         user.status,
         user.mobile_number || 'Not Set',
         user.organization_name,
@@ -764,47 +864,58 @@ export default function Users() {
     }
   };
 
-  // Function to get role name from role_id
-  const getRoleName = (roleId: string | undefined) => {
-    if (!roleId) return 'Not Set';
-    const role = roles.find(r => r.id === roleId);
-    return role ? role.name : 'Unknown Role';
+  // Helpers to resolve role via id or fallback to user's role string
+  const resolveRoleName = (roleId?: string, roleNameFallback?: string) => {
+    if (roleId) {
+      const role = roles.find(r => r.id === roleId);
+      if (role?.name) return role.name;
+    }
+    if (roleNameFallback) return roleNameFallback;
+    return 'Not Set';
   };
 
-  // Function to get role display name (for badges and UI)
-  const getRoleDisplayName = (roleId: string | undefined) => {
-    const roleName = getRoleName(roleId);
+  const getRoleDisplayNameFromIdOrName = (roleId?: string, roleNameFallback?: string) => {
+    const roleName = resolveRoleName(roleId, roleNameFallback);
     if (roleName === 'Not Set' || roleName === 'Unknown Role') return roleName;
-    
-    // Map role names to display names
     const roleDisplayMap: { [key: string]: string } = {
       'superuser': 'Super Admin',
       'org_admin': 'Org Admin',
       'user': 'User',
-      'agent': 'Agent'
+      'agent': 'Agent',
+      'manager': 'Manager'
     };
-    
     return roleDisplayMap[roleName.toLowerCase()] || roleName;
   };
 
-  // Function to get role badge variant
-  const getRoleBadgeVariant = (roleId: string | undefined) => {
-    const roleName = getRoleName(roleId);
+  const getRoleBadgeVariantFromIdOrName = (roleId?: string, roleNameFallback?: string) => {
+    const roleName = resolveRoleName(roleId, roleNameFallback);
     if (roleName === 'Not Set' || roleName === 'Unknown Role') return 'outline';
-    
     const roleVariantMap: { [key: string]: string } = {
       'superuser': 'bg-purple-50 text-purple-700 border-purple-200',
       'org_admin': 'bg-blue-50 text-blue-700 border-blue-200',
       'agent': 'bg-green-50 text-green-700 border-green-200',
+      'manager': 'bg-amber-50 text-amber-700 border-amber-200',
       'user': 'bg-gray-50 text-gray-700 border-gray-200'
     };
-    
     return roleVariantMap[roleName.toLowerCase()] || 'bg-gray-50 text-gray-700 border-gray-200';
   };
 
   return (
     <div className="p-6 bg-white min-h-screen">
-      <div className="mb-4">
+      {(!canReadUsers && !isAdmin) ? (
+        <div className="container mx-auto py-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-red-600">Access Denied</CardTitle>
+              <CardDescription>
+                You don't have permission to view users.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      ) : (
+        <>
+        <div className="mb-4">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-semibold text-blue-600">Users</h1>
           <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-100">
@@ -939,9 +1050,9 @@ export default function Users() {
                   <TableCell>
                     <Badge variant="outline" className={cn(
                       "capitalize font-medium",
-                      getRoleBadgeVariant(user.role_id)
+                      getRoleBadgeVariantFromIdOrName(user.role_id, user.role as any)
                     )}>
-                      {getRoleDisplayName(user.role_id)}
+                      {getRoleDisplayNameFromIdOrName(user.role_id, user.role as any)}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -1108,20 +1219,24 @@ export default function Users() {
                       <Select 
                         onValueChange={field.onChange} 
                         value={field.value}
+                        disabled={isLoadingCreateData || (roles || []).length === 0}
                       >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select role">
-                              {field.value ? getRoleDisplayName(field.value) : "Select role"}
+                              {field.value ? getRoleDisplayNameFromIdOrName(field.value, field.value) : "Select role"}
                             </SelectValue>
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {roles.map((role) => (
+                          {(roles || []).map((role) => (
                             <SelectItem key={role.id} value={role.id}>
-                              {getRoleDisplayName(role.id)}
+                              {getRoleDisplayNameFromIdOrName(role.id, role.name)}
                             </SelectItem>
                           ))}
+                          {(!roles || roles.length === 0) && (
+                            <div className="px-3 py-2 text-xs text-gray-500">No roles available. Create roles in Roles tab.</div>
+                          )}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -1135,10 +1250,27 @@ export default function Users() {
                     <FormItem>
                       <FormLabel>Organization</FormLabel>
                       <Select 
-                        onValueChange={(value) => {
-                          field.onChange(value === 'none' ? null : value);
+                        onValueChange={async (value) => {
+                          const val = value === 'none' ? null : value;
+                          field.onChange(val);
+                          setCreateFormData(prev => ({ ...prev, organization_id: val }));
+                          // Refetch campaigns for selected org to keep dialog in sync
+                          try {
+                            let url = 'http://localhost:8000/api/v1/campaigns/';
+                            if (val) url += `?org_id=${val}`;
+                            const resp = await fetch(url, {
+                              headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+                                'Content-Type': 'application/json'
+                              },
+                            });
+                            const data = await resp.json();
+                            const list = Array.isArray(data) ? data : (Array.isArray(data?.value) ? data.value : []);
+                            setCampaigns(list);
+                          } catch (_e) {}
                         }} 
                         value={field.value || 'none'}
+                        disabled={isLoadingCreateData || (organizations || []).length === 0}
                       >
                         <FormControl>
                           <SelectTrigger className="pl-9">
@@ -1148,11 +1280,14 @@ export default function Users() {
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="none">Not Set</SelectItem>
-                          {organizations.map((org) => (
+                          {(organizations || []).map((org) => (
                             <SelectItem key={org.id} value={org.id}>
                               {org.name}
                             </SelectItem>
                           ))}
+                          {(!organizations || organizations.length === 0) && (
+                            <div className="px-3 py-2 text-xs text-gray-500">No organizations available.</div>
+                          )}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -1312,9 +1447,9 @@ export default function Users() {
                   <div className="p-3 bg-muted/50 rounded-lg">
                     <div className={cn(
                       "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize",
-                      getRoleBadgeVariant(viewingUser?.role_id)
+                      getRoleBadgeVariantFromIdOrName(viewingUser?.role_id, viewingUser?.role as any)
                     )}>
-                      {getRoleDisplayName(viewingUser?.role_id)}
+                      {getRoleDisplayNameFromIdOrName(viewingUser?.role_id, viewingUser?.role as any)}
                     </div>
                   </div>
                 </div>
@@ -1533,7 +1668,7 @@ export default function Users() {
                     <SelectValue placeholder="Select organization" />
                   </SelectTrigger>
                   <SelectContent>
-                    {organizations.map((org) => (
+                    {(organizations || []).map((org) => (
                       <SelectItem key={org.id} value={org.id}>
                         {org.name}
                       </SelectItem>
@@ -1553,13 +1688,13 @@ export default function Users() {
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select role">
-                      {createFormData.role_id ? getRoleDisplayName(createFormData.role_id) : "Select role"}
+                      {createFormData.role_id ? getRoleDisplayNameFromIdOrName(createFormData.role_id, createFormData.role_id) : "Select role"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {roles.map((role) => (
+                    {(roles || []).map((role) => (
                       <SelectItem key={role.id} value={role.id}>
-                        {getRoleDisplayName(role.id)}
+                        {getRoleDisplayNameFromIdOrName(role.id, role.name)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1605,11 +1740,16 @@ export default function Users() {
                     <SelectValue placeholder="Select campaigns" />
                   </SelectTrigger>
                   <SelectContent>
-                    {campaigns.map((campaign) => (
-                      <SelectItem key={campaign.id} value={campaign.id}>
-                        {campaign.name}
-                      </SelectItem>
-                    ))}
+                    {(campaigns || [])
+                      .filter(c => {
+                        const selectedOrg = createFormData.organization_id || (!isSuperUserGlobal && currentUserData?.org_id) || undefined;
+                        return selectedOrg ? c.org_id === selectedOrg : true;
+                      })
+                      .map((campaign) => (
+                        <SelectItem key={campaign.id} value={campaign.id}>
+                          {campaign.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
                 {createFormData.campaign_ids && createFormData.campaign_ids.length > 0 && (
@@ -1665,6 +1805,8 @@ export default function Users() {
           </form>
         </DialogContent>
       </Dialog>
+      </>
+      )}
     </div>
   );
 }

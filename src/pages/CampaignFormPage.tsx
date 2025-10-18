@@ -596,7 +596,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
   useEffect(() => {
     async function fetchOrganizations() {
       try {
-        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+        const response = await fetch('http://localhost:8000/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -627,7 +627,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
     if (mode === 'edit' && params.id) {
       (async () => {
         try {
-          const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${params.id}`, {
+          const response = await fetch(`http://localhost:8000/api/v1/campaigns/${params.id}`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -885,8 +885,8 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         ...(mode === 'edit' && params.id ? { id: params.id } : {})
       };
       const url = mode === 'edit' && params.id
-        ? `https://platform.voxiflow.com/backend/api/v1/campaigns/${params.id}`
-        : 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
+        ? `http://localhost:8000/api/v1/campaigns/${params.id}`
+        : 'http://localhost:8000/api/v1/campaigns/';
       const response = await fetch(url, {
         method: mode === 'edit' ? 'PUT' : 'POST',
         headers: {

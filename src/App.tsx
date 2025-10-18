@@ -18,6 +18,12 @@ import NotFound from "./pages/NotFound";
 import Login from '@/pages/Login';
 import CampaignFormPage from './pages/CampaignFormPage';
 import BatchCallingPage from './pages/BatchCalling';
+import BatchCallingCreatePage from './pages/BatchCallingCreate';
+import AgenticChat from './pages/AgenticChat';
+import WhatsAppIntegration from './pages/WhatsAppIntegration';
+import Integrations from './pages/Integrations';
+import Templates from './pages/Templates';
+import Automations from './pages/Automations';
 
 const queryClient = new QueryClient();
 
@@ -38,7 +44,7 @@ const App = () => {
       <TooltipProvider>
         <PermissionProvider>
           <Router>
-            <div className="min-h-screen">
+            <div className="min-h-screen overflow-x-hidden">
               <Routes>
                 <Route path="/login" element={<Login />} />
                 
@@ -58,6 +64,12 @@ const App = () => {
                   <Route path="campaigns/:id/edit" element={<CampaignFormPage mode="edit" />} />
                   <Route path="call-history" element={<CallHistory />} />
                   <Route path="batch-calling" element={<BatchCallingPage />} />
+                  <Route path="batch-calling/create" element={<BatchCallingCreatePage />} />
+                  <Route path="ai-chat" element={<AgenticChat />} />
+                  <Route path="whatsapp" element={<WhatsAppIntegration />} />
+                  <Route path="integrations" element={<Integrations />} />
+                  <Route path="templates" element={<Templates />} />
+                  <Route path="automations" element={<Automations />} />
                   <Route path="users" element={<Users />} />
                   <Route path="analytics" element={<Analytics />} />
                   <Route path="roles-permissions" element={<RolesPermissions />} />

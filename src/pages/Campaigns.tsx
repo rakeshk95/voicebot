@@ -533,7 +533,7 @@ const Campaigns = () => {
         }
 
         // Build API URL with organization filter for non-superusers
-        let campaignUrl = 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
+        let campaignUrl = 'http://localhost:8000/api/v1/campaigns/';
         if (!isSuperUser && userData?.org_id) {
           campaignUrl += `?org_id=${userData.org_id}`;
           console.log('Campaigns: Non-superuser - filtering by organization:', userData.org_id);
@@ -649,7 +649,7 @@ const Campaigns = () => {
         }
         
         // Build organizations API URL with role-based filtering
-        let orgUrl = 'https://platform.voxiflow.com/backend/api/v1/organizations/';
+        let orgUrl = 'http://localhost:8000/api/v1/organizations/';
         if (!isSuperUser && userData?.org_id) {
           // For non-superusers, still fetch organizations to get the proper name
           console.log('Campaigns: Non-superuser - fetching organizations for proper names');
@@ -756,7 +756,7 @@ const Campaigns = () => {
   const handleEdit = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -1008,8 +1008,8 @@ const Campaigns = () => {
       // Remove FormData and Excel template logic for campaign create/edit
       // Send JSON body instead
       const url = editingCampaign 
-        ? `https://platform.voxiflow.com/backend/api/v1/campaigns/${editingCampaign.id}`
-        : 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
+        ? `http://localhost:8000/api/v1/campaigns/${editingCampaign.id}`
+        : 'http://localhost:8000/api/v1/campaigns/';
 
       const response = await fetch(url, {
         method: editingCampaign ? 'PUT' : 'POST',
@@ -1100,7 +1100,7 @@ const Campaigns = () => {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
 
     try {
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1151,7 +1151,7 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaignId}/upload`, {
+      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaignId}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1194,11 +1194,27 @@ const Campaigns = () => {
 
     setIsBulkCalling(true);
     try {
+      // Get user ID from localStorage
+      const userData = localStorage.getItem('userData') 
+        ? JSON.parse(localStorage.getItem('userData') || '{}')
+        : null;
+      
+      const userId = userData?.id || userData?.user_id || 'unknown';
+      
+      if (userId === 'unknown') {
+        toast({
+          title: "Authentication Error",
+          description: "Unable to identify user. Please log in again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const formData = new FormData();
       formData.append('file', bulkCallFile);
       formData.append('campaign_id', selectedCampaignForBulkCall.id);
       formData.append('org_id', selectedCampaignForBulkCall.org_id);
-      formData.append('user_id', 'user_1');
+      formData.append('user_id', userId);
       formData.append('sleep_seconds', '5'); // Reduced from 100 to 5 seconds
       formData.append('channels', '16'); // Dynamic channel allocation
       formData.append('worker_prefetch', '5'); // Worker prefetch count
@@ -1207,7 +1223,7 @@ const Campaigns = () => {
       console.log('CallHistory: Initiating bulk calls with FormData:', {
         campaign_id: selectedCampaignForBulkCall.id,
         org_id: selectedCampaignForBulkCall.org_id,
-        user_id: 'user_1',
+        user_id: userId,
         sleep_seconds: 5,
         channels: 16,
         worker_prefetch: 5,
@@ -1215,7 +1231,7 @@ const Campaigns = () => {
         file: bulkCallFile.name
       });
 
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/rabbitmq-bulk-calls/rabbitmq-bulk-calls', {
+      const response = await fetch('http://localhost:8000/api/v1/rabbitmq-bulk-calls/rabbitmq-bulk-calls', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1253,6 +1269,22 @@ const Campaigns = () => {
   };
 
   const onCallSubmit = async (data: any) => {
+    // Get user ID from localStorage
+    const userData = localStorage.getItem('userData') 
+      ? JSON.parse(localStorage.getItem('userData') || '{}')
+      : null;
+    
+    const userId = userData?.id || userData?.user_id || 'unknown';
+    
+    if (userId === 'unknown') {
+      toast({
+        title: "Authentication Error",
+        description: "Unable to identify user. Please log in again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Get the variable keys from the selected campaign
     const variableKeys = Object.keys(selectedCampaignForCall?.llm?.promptJson?.promptVariables || {}).filter(
       key => key !== 'mobile_number' && key !== 'caller_name'
@@ -1270,13 +1302,13 @@ const Campaigns = () => {
       dynamic_variables,
       call_metadata: {
         org_id: selectedCampaignForCall?.org_id || "",
-        user_id: "user_1"
+        user_id: userId
       },
       campaign_id: selectedCampaignForCall?.id || ""
     };
 
     try {
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/calls/', {
+      const response = await fetch('http://localhost:8000/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1388,7 +1420,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -1772,322 +1804,329 @@ const Campaigns = () => {
   };
 
   return (
-    <div className="p-1 pt-0 bg-gray-50 min-h-screen">
-      <div className="mb-3">
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-            Campaigns
-          </h1>
-          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-medium">
-            {filteredCampaigns.length} Total
-          </Badge>
-        </div>
-        <p className="text-sm text-gray-500">Manage your voice campaigns and automation</p>
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-3 p-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              placeholder="Search campaigns..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 border-gray-200 focus:border-blue-500 focus:ring-blue-500 h-9"
-            />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200/50 shadow-sm">
+        <div className="px-6 py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
+                  <BarChart className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 via-blue-900 to-indigo-900 bg-clip-text text-transparent">
+                    Campaigns
+                  </h1>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {filteredCampaigns.length} Total Campaigns • Voice automation & management
+                  </p>
+                </div>
               </div>
-
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div className="w-[140px]">
-                <DatePicker
-                  selected={startDate}
-                  onChange={(date: Date) => setStartDate(date)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                  placeholderText="From date"
-                  isClearable
-                  showMonthDropdown
-                  showYearDropdown
-                  dropdownMode="select"
-                  dateFormat="MMM dd, yyyy"
-                  maxDate={endDate || undefined}
-                  customInput={
-                    <Button variant="outline" className="w-full h-9 justify-start text-left font-normal border-gray-200">
-                      <CalendarIcon className="mr-2 h-4 w-4 text-gray-500" />
-                      {startDate ? format(startDate, "MMM dd, yyyy") : "From date"}
-                    </Button>
-                  }
-                />
-              </div>
-              <span className="text-gray-400">to</span>
-              <div className="w-[140px]">
-                <DatePicker
-                  selected={endDate}
-                  onChange={(date: Date) => setEndDate(date)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                  placeholderText="To date"
-                  isClearable
-                  showMonthDropdown
-                  showYearDropdown
-                  dropdownMode="select"
-                  dateFormat="MMM dd, yyyy"
-                  minDate={startDate || undefined}
-                  customInput={
-                    <Button variant="outline" className="w-full h-9 justify-start text-left font-normal border-gray-200">
-                      <CalendarIcon className="mr-2 h-4 w-4 text-gray-500" />
-                      {endDate ? format(endDate, "MMM dd, yyyy") : "To date"}
-                    </Button>
-                  }
-                />
             </div>
-      </div>
-
-            {/* Organization Filter */}
-            <div className="flex items-center gap-2">
-              <Label htmlFor="org-filter" className="text-sm font-medium text-gray-700 whitespace-nowrap">
-                Organization:
-              </Label>
-              <Select value={selectedOrgFilter} onValueChange={setSelectedOrgFilter}>
-                <SelectTrigger className="w-[200px] h-9 border-gray-200">
-                  <SelectValue placeholder="All Organizations" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Organizations</SelectItem>
-                  {organizations.map((org) => (
-                    <SelectItem key={org.id} value={org.id}>
-                      {org.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Status Filter */}
-            <div className="flex items-center gap-2">
-              <Label htmlFor="status-filter" className="text-sm font-medium text-gray-700 whitespace-nowrap">
-                Status:
-              </Label>
-              <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
-                <SelectTrigger className="w-[150px] h-9 border-gray-200">
-                  <SelectValue placeholder="All Statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="TRIAL">TRIAL</SelectItem>
-                  <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-                  <SelectItem value="INACTIVE">INACTIVE</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                onClick={handleExportToCSV}
-                className="bg-white hover:bg-gray-50 h-9 border-gray-200 text-gray-700 hover:text-gray-900"
-              >
-                <FileDown className="w-4 h-4 mr-2 text-gray-500" />
-                Export to CSV
-        </Button>
-              <Button 
-                onClick={() => navigate('/campaigns/new')} 
-                className="bg-blue-600 hover:bg-blue-700 text-white h-9"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Create Campaign
-        </Button>
+            <div className="text-right">
+              <p className="text-xs text-gray-500">Last updated</p>
+              <p className="text-sm font-medium text-gray-700">
+                {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="w-full">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-gray-50/80 hover:bg-gray-50/80 border-b border-gray-200">
-                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-32">Campaign Name</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-28">Organization</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-20">Direction</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-20">Status</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-20">Language</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-24">Voice ID</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-20">Provider</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-24">Created At</TableHead>
-                <TableHead className="font-semibold text-gray-700 py-2 px-2 text-xs w-24">Updated At</TableHead>
-                <TableHead className="text-right font-semibold text-gray-700 py-2 px-2 text-xs w-40">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="text-center py-6">
-                    <div className="flex items-center justify-center">
-                      <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2" />
-                      <span className="text-sm">Loading campaigns...</span>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : filteredCampaigns.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="text-center py-6 text-gray-500 text-sm">
-                    No campaigns found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredCampaigns.map((campaign) => (
-                  <TableRow key={campaign.id} className="hover:bg-gray-50/50 border-t border-gray-100">
-                    <TableCell className="font-medium text-gray-900 py-2 px-2 max-w-32 truncate text-xs" title={campaign.name}>{campaign.name}</TableCell>
-                    <TableCell className="py-2 px-2">
-                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
-                        {campaign.org_name}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="py-2 px-2">
-                      <Badge variant={campaign.direction === 'INBOUND' ? 'default' : 'secondary'} className="font-medium text-xs">
-                        {campaign.direction}
-                    </Badge>
-                  </TableCell>
-                    <TableCell className="py-2 px-2">
-                      <Badge 
-                        variant="outline" 
-                        className={`font-medium text-xs ${
-                          campaign.state === 'ACTIVE' ? 'bg-green-50 text-green-700 border-green-200' :
-                          campaign.state === 'TRIAL' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                          'bg-gray-50 text-gray-700 border-gray-200'
-                        }`}
-                      >
-                        {campaign.state}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="capitalize py-2 px-2 text-xs">{campaign.language}</TableCell>
-                    <TableCell className="font-mono text-xs py-2 px-2 text-gray-600 max-w-24 truncate" title={campaign.voice_id}>{campaign.voice_id}</TableCell>
-                    <TableCell className="py-2 px-2">
-                      <Badge variant="outline" className="bg-gray-50/80 text-gray-700 border-gray-200 text-xs">
-                        {campaign.telephonic_provider}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-gray-600 text-xs py-2 px-2">
-                      {new Date(campaign.created_at).toLocaleString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </TableCell>
-                    <TableCell className="text-gray-600 text-xs py-2 px-2">
-                      {new Date(campaign.updated_at).toLocaleString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </TableCell>
-                    <TableCell className="py-2 px-2">
-                      <div className="flex justify-end space-x-2">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
-                              onClick={() => handleView(campaign)}
-                              className="h-7 w-7 bg-blue-50 hover:bg-blue-100 text-blue-600"
-                            >
-                              <Eye className="h-3 w-3" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>View Campaign Details</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
-                              onClick={() => handleOpenCallDialog(campaign)}
-                              className="h-7 w-7 bg-green-50 hover:bg-green-100 text-green-600"
-                            >
-                              <Phone className="h-3 w-3" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Make a Call</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
-                              onClick={() => navigate(`/call-history?campaignId=${campaign.id}&campaignName=${encodeURIComponent(campaign.name)}`)}
-                              className="h-7 w-7 bg-purple-50 hover:bg-purple-100 text-purple-600"
-                            >
-                              <History className="h-3 w-3" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>View Call History</p>
-                          </TooltipContent>
-                        </Tooltip>
+      {/* Main Content */}
+      <div className="px-6 py-6">
 
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
-                              onClick={() => {
-                                setSelectedCampaignForBulkCall(campaign);
-                                setIsBulkCallDialogOpen(true);
-                              }}
-                              className="h-7 w-7 bg-orange-50 hover:bg-orange-100 text-orange-600"
-                            >
-                              <FileSpreadsheet className="h-3 w-3" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Bulk Call - Upload Excel file</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
-                              onClick={() => navigate(`/campaigns/${campaign.id}/edit`)}
-                              className="h-7 w-7 bg-amber-50 hover:bg-amber-100 text-amber-600"
-                            >
-                              <Edit className="h-3 w-3" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Edit Campaign</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(campaign)}
-                              className="h-7 w-7 bg-red-50 hover:bg-red-100 text-red-600"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Delete Campaign</p>
-                          </TooltipContent>
-                        </Tooltip>
-                    </div>
-                  </TableCell>
+        {/* Enhanced Toolbar */}
+        <div className="bg-white/70 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/50 mb-6 p-4">
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Search Bar */}
+            <div className="relative flex-1 max-w-[400px]">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                placeholder="Search campaigns..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 h-10 border-gray-200 focus:border-blue-500 focus:ring-blue-500/20 bg-white/80 backdrop-blur-sm"
+              />
+            </div>
+
+            {/* Date Range Filters */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <div className="w-[140px]">
+                  <DatePicker
+                    selected={startDate}
+                    onChange={(date: Date) => setStartDate(date)}
+                    className="w-full h-10 rounded-lg border border-gray-200 bg-white/80 backdrop-blur-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    placeholderText="From date"
+                    isClearable
+                    showMonthDropdown
+                    showYearDropdown
+                    dropdownMode="select"
+                    dateFormat="MMM dd, yyyy"
+                    maxDate={endDate || undefined}
+                    customInput={
+                      <Button variant="outline" className="w-full h-10 justify-start text-left font-normal border-gray-200 bg-white/80 hover:bg-gray-50/80">
+                        <CalendarIcon className="mr-2 h-4 w-4 text-gray-500" />
+                        {startDate ? format(startDate, "MMM dd, yyyy") : "From date"}
+                      </Button>
+                    }
+                  />
+                </div>
+                <span className="text-gray-400 font-medium">to</span>
+                <div className="w-[140px]">
+                  <DatePicker
+                    selected={endDate}
+                    onChange={(date: Date) => setEndDate(date)}
+                    className="w-full h-10 rounded-lg border border-gray-200 bg-white/80 backdrop-blur-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    placeholderText="To date"
+                    isClearable
+                    showMonthDropdown
+                    showYearDropdown
+                    dropdownMode="select"
+                    dateFormat="MMM dd, yyyy"
+                    minDate={startDate || undefined}
+                    customInput={
+                      <Button variant="outline" className="w-full h-10 justify-start text-left font-normal border-gray-200 bg-white/80 hover:bg-gray-50/80">
+                        <CalendarIcon className="mr-2 h-4 w-4 text-gray-500" />
+                        {endDate ? format(endDate, "MMM dd, yyyy") : "To date"}
+                      </Button>
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* Organization Filter */}
+              <div className="flex items-center gap-2">
+                <Label htmlFor="org-filter" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                  Organization:
+                </Label>
+                <Select value={selectedOrgFilter} onValueChange={setSelectedOrgFilter}>
+                  <SelectTrigger className="w-[200px] h-10 border-gray-200 bg-white/80">
+                    <SelectValue placeholder="All Organizations" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Organizations</SelectItem>
+                    {organizations.map((org) => (
+                      <SelectItem key={org.id} value={org.id}>
+                        {org.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Status Filter */}
+              <div className="flex items-center gap-2">
+                <Label htmlFor="status-filter" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                  Status:
+                </Label>
+                <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
+                  <SelectTrigger className="w-[150px] h-10 border-gray-200 bg-white/80">
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="TRIAL">TRIAL</SelectItem>
+                    <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                    <SelectItem value="INACTIVE">INACTIVE</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={handleExportToCSV}
+                  className="bg-white/80 hover:bg-gray-50/80 h-10 border-gray-200 text-gray-700 hover:text-gray-900 shadow-sm hover:shadow-md transition-all duration-200"
+                >
+                  <Download className="w-4 h-4 mr-2 text-gray-500" />
+                  Export CSV
+                </Button>
+                <Button 
+                  onClick={() => navigate('/campaigns/new')} 
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-10 shadow-lg hover:shadow-xl transition-all duration-200"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Campaign
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Enhanced Table */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200/50 overflow-hidden">
+          <div className="w-full overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-gradient-to-r from-gray-50/80 to-blue-50/30 hover:from-gray-50/80 hover:to-blue-50/30 border-b border-gray-200/50">
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-32">Campaign Name</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-28">Organization</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-20">Direction</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-20">Status</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-20">Language</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-24">Voice ID</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-20">Provider</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-24">Created At</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-24">Updated At</TableHead>
+                  <TableHead className="text-right font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-40">Actions</TableHead>
                 </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
+                        <p className="text-gray-600 font-medium">Loading campaigns...</p>
+                        <p className="text-sm text-gray-400 mt-1">Please wait while we fetch your data</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredCampaigns.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center text-gray-500">
+                        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                          <BarChart className="h-8 w-8 text-gray-400" />
+                        </div>
+                        <p className="text-xl font-semibold text-gray-700 mb-2">No campaigns found</p>
+                        <p className="text-sm text-gray-400 mb-4">Try adjusting your search criteria or create a new campaign</p>
+                        <Button 
+                          onClick={() => navigate('/campaigns/new')}
+                          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Create First Campaign
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredCampaigns.map((campaign, index) => (
+                    <TableRow 
+                      key={campaign.id} 
+                      className={`group hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/30 transition-all duration-200 border-t border-gray-100/50 ${
+                        index % 2 === 0 ? "bg-white" : "bg-gray-50/30"
+                      }`}
+                    >
+                      <TableCell className="py-4 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
+                            <BarChart className="h-5 w-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900 group-hover:text-blue-900 transition-colors max-w-32 truncate" title={campaign.name}>
+                              {campaign.name}
+                            </p>
+                            <p className="text-xs text-gray-500">Campaign</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-4 px-4">
+                        <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 transition-colors">
+                          {campaign.org_name}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="py-4 px-4">
+                        <Badge 
+                          variant="outline" 
+                          className={`font-medium px-3 py-1 rounded-full border-0 shadow-sm ${
+                            campaign.direction === 'INBOUND' 
+                              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' 
+                              : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                          }`}
+                        >
+                          <div className={`w-2 h-2 rounded-full mr-2 ${
+                            campaign.direction === 'INBOUND' ? 'bg-emerald-500' : 'bg-blue-500'
+                          }`} />
+                          {campaign.direction}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="py-4 px-4">
+                        <Badge 
+                          variant="outline" 
+                          className={`font-medium px-3 py-1 rounded-full border-0 shadow-sm ${
+                            campaign.state === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' :
+                            campaign.state === 'TRIAL' ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' :
+                            'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                          }`}
+                        >
+                          <div className={`w-2 h-2 rounded-full mr-2 ${
+                            campaign.state === 'ACTIVE' ? 'bg-emerald-500' :
+                            campaign.state === 'TRIAL' ? 'bg-amber-500' :
+                            'bg-gray-500'
+                          }`} />
+                          {campaign.state}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="py-4 px-4">
+                        <span className="capitalize text-sm font-medium text-gray-700 bg-gray-100 px-2 py-1 rounded-md">
+                          {campaign.language}
+                        </span>
+                      </TableCell>
+                      <TableCell className="py-4 px-4">
+                        <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded-md text-gray-700 max-w-24 truncate block" title={campaign.voice_id}>
+                          {campaign.voice_id}
+                        </span>
+                      </TableCell>
+                      <TableCell className="py-4 px-4">
+                        <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200 transition-colors">
+                          {campaign.telephonic_provider}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="py-4 px-4">
+                        <div className="text-sm text-gray-600">
+                          <p className="font-medium">{new Date(campaign.created_at).toLocaleDateString()}</p>
+                          <p className="text-xs text-gray-400">Created</p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-4 px-4">
+                        <div className="text-sm text-gray-600">
+                          <p className="font-medium">{new Date(campaign.updated_at).toLocaleDateString()}</p>
+                          <p className="text-xs text-gray-400">Updated</p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-4 px-4">
+                        <div className="flex justify-end space-x-2">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => handleView(campaign.id)}
+                            className="h-9 w-9 bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
+                            title="View Campaign"
+                          >
+                            <Eye className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => handleEdit(campaign)}
+                            className="h-9 w-9 bg-amber-50 hover:bg-amber-100 text-amber-600 hover:text-amber-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
+                            title="Edit Campaign"
+                          >
+                            <Edit className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(campaign.id)}
+                            className="h-9 w-9 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
+                            title="Delete Campaign"
+                          >
+                            <Trash2 className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       </div>
 

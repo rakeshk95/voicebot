@@ -355,7 +355,7 @@ const Dashboard = () => {
         console.log('Dashboard: Fetching campaigns with org filter:', campaignUrl);
       }
       
-      const campaignResponse = await fetch(`https://platform.voxiflow.com/backend/api/v1${campaignUrl}`, {
+      const campaignResponse = await fetch(`http://localhost:8000/api/v1${campaignUrl}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -390,7 +390,7 @@ const Dashboard = () => {
       // PERFORMANCE FIX: Fetch organizations and campaigns in parallel
       const [orgsData, campaignsData] = await Promise.all([
         // Fetch organizations
-        fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
+        fetch('http://localhost:8000/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -417,7 +417,7 @@ const Dashboard = () => {
           }
           
           try {
-            const response = await fetch(`https://platform.voxiflow.com/backend/api/v1${campaignUrl}`, {
+            const response = await fetch(`http://localhost:8000/api/v1${campaignUrl}`, {
               headers: {
                 'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
                 'Content-Type': 'application/json'
@@ -632,7 +632,7 @@ const Dashboard = () => {
       params.append('days', filterState.days.toString());
 
       // Use the new comprehensive dashboard endpoint
-      const apiUrl = `https://platform.voxiflow.com/backend/api/v1/dashboard/comprehensive?${params}`;
+      const apiUrl = `http://localhost:8000/api/v1/dashboard/comprehensive?${params}`;
       console.log('Dashboard: API call:', apiUrl);
       
       const response = await fetch(apiUrl, {

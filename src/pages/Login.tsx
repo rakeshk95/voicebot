@@ -27,7 +27,7 @@ export default function Login() {
       formBody.append('username', formData.email);
       formBody.append('password', formData.password);
 
-      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/auth/login', {
+      const response = await fetch('http://localhost:8000/api/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -63,7 +63,7 @@ export default function Login() {
       // Fetch user permissions immediately after login
       try {
         console.log('Fetching user permissions for user ID:', userId);
-        const permissionsResponse = await fetch(`https://platform.voxiflow.com/backend/api/v1/roles/user/${userId}`, {
+        const permissionsResponse = await fetch(`http://localhost:8000/api/v1/roles/user/${userId}`, {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json'

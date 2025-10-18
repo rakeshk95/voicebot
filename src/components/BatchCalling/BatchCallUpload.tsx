@@ -298,12 +298,28 @@ export const BatchCallUpload: React.FC<BatchCallUploadProps> = ({ onUploadSucces
       isSubmittingRef.current = true;
       setUploading(true);
       
+      // Get user ID from localStorage
+      const userData = localStorage.getItem('userData') 
+        ? JSON.parse(localStorage.getItem('userData') || '{}')
+        : null;
+      
+      const userId = userData?.id || userData?.user_id || 'unknown';
+      
+      if (userId === 'unknown') {
+        toast({
+          title: "Authentication Error",
+          description: "Unable to identify user. Please log in again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Final validation and data preparation
       const request: BatchCallStartRequest = {
         file: file!,
         campaign_id: formData.campaign_id.trim(),
         org_id: formData.org_id.trim(),
-        user_id: 'auto', // Will be automatically set by backend
+        user_id: userId,
         channels: parseInt(formData.channels),
         sleep_seconds: Math.max(1, Math.min(3600, parseInt(formData.sleep_seconds) || 100)), // Ensure value is between 1-3600
         operation_name: formData.operation_name.trim() || undefined // Include operation name if provided
