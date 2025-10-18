@@ -8,7 +8,7 @@ const SimpleBatchDashboard: React.FC = () => {
   const navigate = useNavigate();
   
   return (
-    <div className="p-6">
+    <div className="p-6 overflow-x-hidden">
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Batch Operations</h1>
         <p className="text-gray-600 mt-2">Manage and monitor your calling campaigns</p>
@@ -76,7 +76,7 @@ const BatchCallingPage: React.FC = () => {
   
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 overflow-x-hidden">
         <SimpleBatchDashboard />
       </div>
     </ErrorBoundary>

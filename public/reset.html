@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset Permissions - VoxiFlow</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2rem;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1.1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 1rem;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .status {
+            margin-top: 1rem;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 Reset VoxiFlow Permissions</h1>
+        <p>This will clear all cached data and force a fresh login</p>
+        <button onclick="resetAndRedirect()">Reset & Login</button>
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        function resetAndRedirect() {
+            const status = document.getElementById('status');
+            status.textContent = 'Clearing cache...';
+            
+            // Clear everything
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Clear cookies
+            document.cookie.split(";").forEach(function(c) { 
+                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+            });
+            
+            status.textContent = 'Redirecting to login...';
+            
+            // Redirect to login
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 1000);
+        }
+        
+        // Auto-run if accessed directly
+        if (window.location.search.includes('auto=true')) {
+            resetAndRedirect();
+        }
+    </script>
+</body>
+</html>

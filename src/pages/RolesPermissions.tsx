@@ -25,7 +25,7 @@ import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
-import { usePermissions } from "@/contexts/PermissionContext";
+import { usePermissions, PERMISSION_RESOURCES } from "@/contexts/PermissionContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,7 +59,7 @@ const defaultRole: Role = {
   id: "",
   name: "",
   description: null,
-  org_id: "org_b150bdcc",
+  org_id: null,
   permissions: { read: [], write: [] },
   status: "active",
   created_at: new Date().toISOString(),
@@ -86,6 +86,64 @@ export default function RolesPermissions() {
   const canWriteRoles = hasPermission('write', 'roles');
   const canDeleteRoles = hasPermission('delete', 'roles');
   const isAdmin = userPermissions?.admin;
+
+  const fetchRoles = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('http://localhost:8000/api/v1/roles/', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const raw = await response.json().catch(() => null);
+      if (!response.ok) throw new Error((raw && raw.detail) || 'Failed to fetch roles');
+
+      const pickArray = (obj: any): any[] => {
+        if (!obj) return [];
+        if (Array.isArray(obj)) return obj;
+        if (Array.isArray(obj.value)) return obj.value;
+        if (Array.isArray(obj.items)) return obj.items;
+        if (Array.isArray(obj.results)) return obj.results;
+        if (Array.isArray(obj.data)) return obj.data;
+        if (Array.isArray(obj.roles)) return obj.roles;
+        return [];
+      };
+
+      const rolesData = pickArray(raw);
+      const transformedRoles = rolesData
+        .map((role: any) => ({
+          ...role,
+          permissions: role.permissions || { read: [], write: [] },
+          isSystem: (role.name || '').toLowerCase() === 'superuser'
+        }))
+        .sort((a: Role, b: Role) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+      setRoles(transformedRoles);
+      setFilteredRoles(transformedRoles);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to fetch roles",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Always call hooks (no early returns before hooks)
+  useEffect(() => { fetchRoles(); }, []);
+  useEffect(() => {
+    setFilteredRoles(
+      searchTerm.trim()
+        ? roles.filter(role =>
+            role.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (role.description && role.description.toLowerCase().includes(searchTerm.toLowerCase()))
+          )
+        : roles
+    );
+  }, [searchTerm, roles]);
 
   // Loading state
   if (permissionsLoading) {
@@ -130,57 +188,12 @@ export default function RolesPermissions() {
     );
   }
 
-  const fetchRoles = async () => {
-    try {
-      setIsLoading(true);
-      const response = await fetch('http://localhost:8000/api/v1/roles/', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      if (!response.ok) throw new Error((await response.json()).detail || 'Failed to fetch roles');
-
-      const rolesData = await response.json();
-      const transformedRoles = rolesData
-        .map((role: any) => ({
-          ...role,
-          permissions: role.permissions || { read: [], write: [] },
-          isSystem: role.name.toLowerCase() === 'superuser'
-        }))
-        .sort((a: Role, b: Role) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-      setRoles(transformedRoles);
-      setFilteredRoles(transformedRoles);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to fetch roles",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchRoles(); }, []);
-  useEffect(() => {
-    setFilteredRoles(
-      searchTerm.trim()
-        ? roles.filter(role =>
-            role.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (role.description && role.description.toLowerCase().includes(searchTerm.toLowerCase()))
-          )
-        : roles
-    );
-  }, [searchTerm, roles]);
-
   const handleSaveRole = async () => {
     try {
       const roleData = {
         name: newRole.name,
         description: newRole.description || null,
-        org_id: newRole.org_id,
+        org_id: newRole.org_id || null,
         permissions: newRole.permissions,
         status: newRole.status
       };
@@ -195,8 +208,26 @@ export default function RolesPermissions() {
         },
         body: JSON.stringify(roleData)
       });
-      if (!response.ok) throw new Error((await response.json()).detail || `Failed to ${editMode} role`);
+      const returned = await response.json().catch(() => null);
+      if (!response.ok) throw new Error((returned && returned.detail) || `Failed to ${editMode} role`);
 
+      // Optimistically update table using returned role
+      if (returned && returned.id) {
+        const mapped: Role = {
+          ...returned,
+          permissions: returned.permissions || { read: [], write: [] },
+          isSystem: (returned.name || '').toLowerCase() === 'superuser'
+        };
+        setRoles(prev => {
+          const next = editMode === 'edit'
+            ? prev.map(r => r.id === mapped.id ? mapped : r)
+            : [mapped, ...prev];
+          setFilteredRoles(next);
+          return next;
+        });
+      }
+
+      // Ensure server state is reflected
       await fetchRoles();
       toast({
         title: "Success",
@@ -317,18 +348,20 @@ export default function RolesPermissions() {
                 {/* Permissions */}
                 <div className="space-y-4">
                   <Label className="text-base font-semibold text-gray-900">Permissions</Label>
-                  <div className="grid grid-cols-3 gap-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    {['organizations', 'users', 'campaigns'].map(module => (
-                      <div key={module} className="space-y-3">
-                        <Label className="text-sm font-medium capitalize text-gray-700">{module}</Label>
-                        {['read', 'write'].map(type => (
-                          <div key={type} className="flex items-center space-x-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    {PERMISSION_RESOURCES.map((resource) => (
+                      <div key={resource} className="space-y-3">
+                        <Label className="text-sm font-medium text-gray-700">
+                          {resource.replace(/_/g, ' ')}
+                        </Label>
+                        {(['read','write'] as const).map((type) => (
+                          <div key={`${resource}_${type}`} className="flex items-center space-x-2">
                             <Checkbox
-                              id={`${module}_${type}`}
-                              checked={newRole.permissions[type].includes(module)}
-                              onCheckedChange={() => togglePermission(module, type as 'read' | 'write')}
+                              id={`${resource}_${type}`}
+                              checked={newRole.permissions[type].includes(resource)}
+                              onCheckedChange={() => togglePermission(resource, type)}
                             />
-                            <Label htmlFor={`${module}_${type}`} className="text-sm capitalize text-gray-600">{type}</Label>
+                            <Label htmlFor={`${resource}_${type}`} className="text-sm capitalize text-gray-600">{type}</Label>
                           </div>
                         ))}
                       </div>

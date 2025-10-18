@@ -164,9 +164,17 @@ export async function updateCampaignWithVersioning(
  */
 export async function getCampaignVersions(campaignId: string): Promise<CampaignVersion[]> {
   try {
-    const response = await authorizedFetch<CampaignVersion[]>(
-      `/campaigns/${campaignId}/versions`
+    // Try new prefix first
+    let response = await authorizedFetch<CampaignVersion[]>(
+      `/campaign-versions/${campaignId}/versions`
     );
+
+    // Fallback to legacy route if not found
+    if (response.status === 404) {
+      response = await authorizedFetch<CampaignVersion[]>(
+        `/campaigns/${campaignId}/versions`
+      );
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -185,9 +193,15 @@ export async function getCampaignVersions(campaignId: string): Promise<CampaignV
  */
 export async function getCampaignVersion(campaignId: string, versionNumber: string): Promise<CampaignVersion> {
   try {
-    const response = await authorizedFetch<CampaignVersion>(
-      `/campaigns/${campaignId}/versions/${versionNumber}`
+    let response = await authorizedFetch<CampaignVersion>(
+      `/campaign-versions/${campaignId}/versions/${versionNumber}`
     );
+
+    if (response.status === 404) {
+      response = await authorizedFetch<CampaignVersion>(
+        `/campaigns/${campaignId}/versions/${versionNumber}`
+      );
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -206,12 +220,17 @@ export async function getCampaignVersion(campaignId: string, versionNumber: stri
  */
 export async function restoreToVersion(campaignId: string, versionNumber: string): Promise<RestoreResponse> {
   try {
-    const response = await authorizedFetch<RestoreResponse>(
-      `/campaigns/${campaignId}/versions/${versionNumber}/restore`,
-      {
-        method: 'POST',
-      }
+    let response = await authorizedFetch<RestoreResponse>(
+      `/campaign-versions/${campaignId}/versions/${versionNumber}/restore`,
+      { method: 'POST' }
     );
+
+    if (response.status === 404) {
+      response = await authorizedFetch<RestoreResponse>(
+        `/campaigns/${campaignId}/versions/${versionNumber}/restore`,
+        { method: 'POST' }
+      );
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -230,9 +249,15 @@ export async function restoreToVersion(campaignId: string, versionNumber: string
  */
 export async function getCurrentVersion(campaignId: string): Promise<CampaignVersion> {
   try {
-    const response = await authorizedFetch<CampaignVersion>(
-      `/campaigns/${campaignId}/current-version`
+    let response = await authorizedFetch<CampaignVersion>(
+      `/campaign-versions/${campaignId}/current-version`
     );
+
+    if (response.status === 404) {
+      response = await authorizedFetch<CampaignVersion>(
+        `/campaigns/${campaignId}/current-version`
+      );
+    }
 
     if (!response.ok) {
       const errorText = await response.text();

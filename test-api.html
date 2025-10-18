@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test API</title>
+</head>
+<body>
+    <h1>API Test</h1>
+    <button onclick="testCampaigns()">Test Campaigns API</button>
+    <button onclick="testUsers()">Test Users API</button>
+    <button onclick="testRoles()">Test Roles API</button>
+    <div id="results"></div>
+
+    <script>
+        async function testCampaigns() {
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                document.getElementById('results').innerHTML = '<p>No auth token found</p>';
+                return;
+            }
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/campaigns/', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('results').innerHTML = `
+                    <h3>Campaigns API Response:</h3>
+                    <p>Status: ${response.status}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('results').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+        
+        async function testUsers() {
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                document.getElementById('results').innerHTML = '<p>No auth token found</p>';
+                return;
+            }
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/users/', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('results').innerHTML = `
+                    <h3>Users API Response:</h3>
+                    <p>Status: ${response.status}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('results').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+        
+        async function testRoles() {
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                document.getElementById('results').innerHTML = '<p>No auth token found</p>';
+                return;
+            }
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/roles/', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('results').innerHTML = `
+                    <h3>Roles API Response:</h3>
+                    <p>Status: ${response.status}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('results').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+        
+        // Show current localStorage data
+        document.addEventListener('DOMContentLoaded', function() {
+            const userData = localStorage.getItem('userData');
+            const userRole = localStorage.getItem('userRole');
+            const authToken = localStorage.getItem('authToken');
+            
+            document.getElementById('results').innerHTML = `
+                <h3>Current localStorage:</h3>
+                <p><strong>userData:</strong> ${userData || 'null'}</p>
+                <p><strong>userRole:</strong> ${userRole || 'null'}</p>
+                <p><strong>authToken:</strong> ${authToken ? 'Present' : 'null'}</p>
+            `;
+        });
+    </script>
+</body>
+</html>

@@ -13,13 +13,13 @@ export function Layout() {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="min-h-screen flex bg-background overflow-x-hidden">
       {/* Sidebar */}
       <AppSidebar />
       
       {/* Main Content */}
-      <div className="flex-1 ml-64 flex flex-col min-h-screen">
-        <main className="flex-1">
+      <div className="flex-1 ml-64 flex flex-col min-h-screen overflow-x-hidden">
+        <main className="flex-1 overflow-x-hidden">
           <Outlet />
         </main>
       </div>

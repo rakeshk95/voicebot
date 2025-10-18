@@ -48,6 +48,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { DialogFooter } from '@/components/ui/dialog';
+import { usePermissions } from '@/contexts/PermissionContext';
 import * as z from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -363,6 +364,7 @@ function generateUUID() {
 const Campaigns = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { hasPermission, userRole } = usePermissions();
   
   console.log('Campaigns component mounted');
   
@@ -409,6 +411,9 @@ const Campaigns = () => {
   const [bulkCallFile, setBulkCallFile] = useState<File | null>(null);
   const [isBulkCalling, setIsBulkCalling] = useState(false);
   const [allowInterruptions, setAllowInterruptions] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [isCalling, setIsCalling] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
   const [ambientStatus, setAmbientStatus] = useState(false);
   const [sound, setSound] = useState('office');
   const [volume, setVolume] = useState(0.1);
@@ -557,7 +562,19 @@ const Campaigns = () => {
           throw new Error(`API Error: ${response.status} - ${errorText}`);
         }
 
-        const data = await response.json();
+        const responseData = await response.json();
+        console.log('🚀 PERFORMANCE FIX: Campaigns API response:', responseData);
+        
+        // Handle different response formats
+        let data;
+        if (Array.isArray(responseData)) {
+          data = responseData;
+        } else if (responseData.value && Array.isArray(responseData.value)) {
+          data = responseData.value;
+        } else {
+          console.error('🚀 PERFORMANCE FIX: Invalid campaigns data format:', responseData);
+          data = [];
+        }
         
         // PERFORMANCE FIX: Format campaigns with organization names
         console.log('🚀 PERFORMANCE FIX: Available organizations:', organizations.length);
@@ -673,7 +690,20 @@ const Campaigns = () => {
           throw new Error(`Organizations API Error: ${response.status} - ${errorText}`);
         }
         
-        const data = await response.json();
+        const responseData = await response.json();
+        console.log('Organizations API response:', responseData);
+        
+        // Handle different response formats
+        let data;
+        if (Array.isArray(responseData)) {
+          data = responseData;
+        } else if (responseData.value && Array.isArray(responseData.value)) {
+          data = responseData.value;
+        } else {
+          console.error('Invalid organizations data format:', responseData);
+          data = [];
+        }
+        
         console.log('Organizations API data:', data);
         
         if (Array.isArray(data)) {
@@ -753,100 +783,9 @@ const Campaigns = () => {
     }
   };
 
-  const handleEdit = async (campaign: Campaign) => {
-    try {
-      // Fetch the complete campaign data first
-      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch campaign details');
-      }
-
-      const campaignData = await response.json();
-      setEditingCampaign(campaignData);
-      setCurrentStep(1);
-      // Set Speech section state from API response
-      setAllowInterruptions(campaignData.speech_setting?.interruption?.status ?? false);
-      setAmbientStatus(campaignData.speech_setting?.ambient_sound?.status ?? false);
-      setSound(campaignData.speech_setting?.ambient_sound?.sound ?? 'office');
-      setVolume(Number(campaignData.speech_setting?.ambient_sound?.volume ?? 0.1));
-      // Map campaign data to form fields with null checks
-      form.reset({
-        campaign_id: campaignData.campaign_id || campaignData.id || generateUUID(),
-        name: campaignData.name || '',
-        direction: campaignData.direction || 'OUTBOUND',
-        state: campaignData.state || 'TRIAL',
-        org_id: campaignData.org_id || '',
-        tts: {
-          gender: campaignData.tts?.gender || 'female',
-          language: campaignData.tts?.language || 'hindi',
-          voice_id: campaignData.tts?.voice_id || 'hi-IN-AnanyaNeural'
-        },
-        stt: {
-          vendor: campaignData.stt?.vendor || 'deepgram'
-        },
-        telephonic_provider: campaignData.telephonic_provider || 'czentrix',
-        knowledge_base: {
-          url: campaignData.knowledge_base?.url || '',
-          file: campaignData.knowledge_base?.file || null
-        },
-        post_call_actions: {
-          categories: {
-            system_prompt: campaignData.post_call_actions?.categories?.system_prompt || '',
-            fields: campaignData.post_call_actions?.categories?.fields || {}
-          },
-          data_extracted: {
-            system_prompt: campaignData.post_call_actions?.data_extracted?.system_prompt || '',
-            fields: campaignData.post_call_actions?.data_extracted?.fields || {}
-          }
-        }
-      });
-
-      // Set context value from llm.promptJson.context
-      const contextFromAPI = campaignData.llm?.promptJson?.context || '';
-      console.log('Context from API:', contextFromAPI);
-      setContextValue(contextFromAPI);
-
-      // Set variables from llm.promptJson.promptVariables
-      const promptVarsFromAPI = campaignData.llm?.promptJson?.promptVariables || {};
-      console.log('Variables from API:', promptVarsFromAPI);
-      const variablesArray = Object.entries(promptVarsFromAPI).map(([key, value]) => ({
-        key,
-        value: value as string
-      }));
-      setVariables(variablesArray);
-
-      // Set up key-value pairs for categories and data extraction
-      const categories = Object.entries(campaignData.post_call_actions?.categories?.fields || {}).map(([key, value]) => ({
-        key,
-        value: value as string
-      }));
-      setCategorization(categories);
-
-      const extractedData = Object.entries(campaignData.post_call_actions?.data_extracted?.fields || {}).map(([key, value]) => ({
-        key,
-        value: value as string
-      }));
-      setDataExtractionFields(extractedData);
-
-      // Set knowledge base data with null checks
-      setKnowledgeBaseUrl(campaignData.knowledge_base?.url || '');
-      setSelectedFile(campaignData.knowledge_base?.file || null);
-
-      setIsCreateDialogOpen(true);
-    } catch (error) {
-      console.error('Error fetching campaign details:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load campaign details",
-        variant: "destructive",
-      });
-    }
+  const handleEdit = (campaign: Campaign) => {
+    // Navigate to dedicated edit page which handles its own data loading
+    navigate(`/campaigns/${campaign.id}/edit`);
   };
 
   const handleSubmit = async (data: CampaignFormData) => {
@@ -1417,6 +1356,104 @@ const Campaigns = () => {
     XLSX.writeFile(wb, 'bulk_call_template.xlsx');
   };
 
+  const handleCall = (campaign: Campaign) => {
+    setSelectedCampaignForCall(campaign);
+    setPhoneNumber('');
+    setPhoneError('');
+    setIsCallDialogOpen(true);
+  };
+
+  const validatePhoneNumber = (phone: string): boolean => {
+    // Remove all non-digit characters except +
+    let cleaned = phone.replace(/[^\d+]/g, '');
+    
+    // Auto-add +91 for Indian numbers (10 digits starting with 6,7,8,9)
+    if (!cleaned.startsWith('+') && cleaned.length === 10 && /^[6-9]/.test(cleaned)) {
+      cleaned = '+91' + cleaned;
+      setPhoneNumber(cleaned); // Update the input field
+    }
+    
+    // Check if it starts with + and has 10-15 digits after
+    const phoneRegex = /^\+[1-9]\d{9,14}$/;
+    
+    if (!cleaned.startsWith('+')) {
+      setPhoneError('Phone number must start with country code (e.g., +1, +91)');
+      return false;
+    }
+    
+    if (!phoneRegex.test(cleaned)) {
+      setPhoneError('Please enter a valid phone number with country code (e.g., +1234567890)');
+      return false;
+    }
+    
+    setPhoneError('');
+    return true;
+  };
+
+  const handlePhoneNumberChange = (value: string) => {
+    setPhoneNumber(value);
+    if (phoneError) {
+      setPhoneError('');
+    }
+  };
+
+  const makeCall = async () => {
+    if (!selectedCampaignForCall) return;
+    
+    if (!validatePhoneNumber(phoneNumber)) {
+      return;
+    }
+
+    setIsCalling(true);
+    
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/calls', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          campaign_id: selectedCampaignForCall.id,
+          to_number: phoneNumber,
+          dynamic_variables: {
+            mobile_number: phoneNumber
+          },
+          call_metadata: {
+            org_id: selectedCampaignForCall.org_id || 'org_1',
+            user_id: localStorage.getItem('userId') || 'user_1'
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to initiate call');
+      }
+
+      const result = await response.json();
+      toast({
+        title: "Call Initiated",
+        description: `Call to ${phoneNumber} has been started successfully. Call ID: ${result.call_id}`,
+      });
+
+      // Close dialog and reset state
+      setIsCallDialogOpen(false);
+      setPhoneNumber('');
+      setSelectedCampaignForCall(null);
+
+    } catch (error) {
+      console.error('Error making call:', error);
+      toast({
+        title: "Call Failed",
+        description: error instanceof Error ? error.message : 'Failed to initiate call',
+        variant: "destructive"
+      });
+    } finally {
+      setIsCalling(false);
+    }
+  };
+
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
@@ -1804,7 +1841,7 @@ const Campaigns = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 overflow-x-hidden">
       {/* Sticky Header */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200/50 shadow-sm">
         <div className="px-6 py-6">
@@ -1823,13 +1860,7 @@ const Campaigns = () => {
                   </p>
                 </div>
               </div>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-gray-500">Last updated</p>
-              <p className="text-sm font-medium text-gray-700">
-                {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </p>
-            </div>
+                </div>
           </div>
         </div>
       </div>
@@ -1945,13 +1976,15 @@ const Campaigns = () => {
                   <Download className="w-4 h-4 mr-2 text-gray-500" />
                   Export CSV
                 </Button>
-                <Button 
-                  onClick={() => navigate('/campaigns/new')} 
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-10 shadow-lg hover:shadow-xl transition-all duration-200"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Campaign
-                </Button>
+                {hasPermission('write', 'campaigns') && (
+                  <Button 
+                    onClick={() => navigate('/campaigns/new')} 
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-10 shadow-lg hover:shadow-xl transition-all duration-200"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Campaign
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -1959,20 +1992,20 @@ const Campaigns = () => {
 
         {/* Enhanced Table */}
         <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200/50 overflow-hidden">
-          <div className="w-full overflow-x-auto">
-            <Table>
+          <div className="w-full">
+            <Table className="w-full table-fixed">
               <TableHeader>
                 <TableRow className="bg-gradient-to-r from-gray-50/80 to-blue-50/30 hover:from-gray-50/80 hover:to-blue-50/30 border-b border-gray-200/50">
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-32">Campaign Name</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-28">Organization</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-20">Direction</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-20">Status</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-20">Language</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-24">Voice ID</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-20">Provider</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-24">Created At</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-24">Updated At</TableHead>
-                  <TableHead className="text-right font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-40">Actions</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[18%]">Campaign Name</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[12%]">Organization</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[8%]">Direction</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[8%]">Status</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[10%]">Language</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[12%]">Voice ID</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[10%]">Provider</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[12%]">Created At</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[12%]">Updated At</TableHead>
+                  <TableHead className="text-right font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[12%]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -2095,30 +2128,43 @@ const Campaigns = () => {
                           <Button 
                             variant="ghost" 
                             size="icon"
+                            onClick={() => handleCall(campaign)}
+                            className="h-9 w-9 bg-green-50 hover:bg-green-100 text-green-600 hover:text-green-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
+                            title="Make Test Call"
+                          >
+                            <Phone className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
                             onClick={() => handleView(campaign.id)}
                             className="h-9 w-9 bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
                             title="View Campaign"
                           >
                             <Eye className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={() => handleEdit(campaign)}
-                            className="h-9 w-9 bg-amber-50 hover:bg-amber-100 text-amber-600 hover:text-amber-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
-                            title="Edit Campaign"
-                          >
-                            <Edit className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(campaign.id)}
-                            className="h-9 w-9 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
-                            title="Delete Campaign"
-                          >
-                            <Trash2 className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
-                          </Button>
+                          {hasPermission('write', 'campaigns') && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => handleEdit(campaign)}
+                              className="h-9 w-9 bg-amber-50 hover:bg-amber-100 text-amber-600 hover:text-amber-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
+                              title="Edit Campaign"
+                            >
+                              <Edit className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
+                            </Button>
+                          )}
+                          {hasPermission('delete', 'campaigns') && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(campaign.id)}
+                              className="h-9 w-9 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
+                              title="Delete Campaign"
+                            >
+                              <Trash2 className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -2303,6 +2349,93 @@ const Campaigns = () => {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Call Dialog */}
+      <Dialog open={isCallDialogOpen} onOpenChange={setIsCallDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-primary flex items-center gap-2">
+              <Phone className="h-5 w-5 text-green-600" />
+              Make Test Call
+            </DialogTitle>
+            <DialogDescription>
+              Enter a phone number to make a test call using the <strong>{selectedCampaignForCall?.name}</strong> campaign.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="phone-number" className="text-sm font-medium">
+                Phone Number
+              </Label>
+              <Input
+                id="phone-number"
+                type="tel"
+                placeholder="9876543210 or +1234567890"
+                value={phoneNumber}
+                onChange={(e) => handlePhoneNumberChange(e.target.value)}
+                className={`${phoneError ? 'border-red-500 focus:border-red-500' : ''}`}
+                disabled={isCalling}
+              />
+              {phoneError && (
+                <p className="text-sm text-red-600 flex items-center gap-1">
+                  <X className="h-4 w-4" />
+                  {phoneError}
+                </p>
+              )}
+              <p className="text-xs text-gray-500">
+                Indian numbers (10 digits) will automatically get +91 prefix. For other countries, include country code (e.g., +1 for US)
+              </p>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-blue-800">
+                  <p className="font-medium">Campaign Details:</p>
+                  <p className="text-blue-700 mt-1">
+                    <strong>Name:</strong> {selectedCampaignForCall?.name}<br/>
+                    <strong>Direction:</strong> {selectedCampaignForCall?.direction}<br/>
+                    <strong>Status:</strong> {selectedCampaignForCall?.state}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsCallDialogOpen(false);
+                setPhoneNumber('');
+                setPhoneError('');
+                setSelectedCampaignForCall(null);
+              }}
+              disabled={isCalling}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={makeCall}
+              disabled={isCalling || !phoneNumber.trim()}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {isCalling ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Calling...
+                </>
+              ) : (
+                <>
+                  <Phone className="h-4 w-4 mr-2" />
+                  Make Call
+                </>
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

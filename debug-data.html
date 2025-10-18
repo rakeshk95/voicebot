@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Data Loading</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .error { background: #ffebee; border-color: #f44336; }
+        .success { background: #e8f5e8; border-color: #4caf50; }
+        .info { background: #e3f2fd; border-color: #2196f3; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        button { padding: 10px 15px; margin: 5px; background: #2196f3; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #1976d2; }
+    </style>
+</head>
+<body>
+    <h1>🔍 VoxiFlow Data Debug Tool</h1>
+    
+    <div class="section info">
+        <h3>📊 Current State</h3>
+        <div id="currentState"></div>
+    </div>
+    
+    <div class="section">
+        <h3>🔑 Authentication Test</h3>
+        <button onclick="testAuth()">Test Login</button>
+        <div id="authResult"></div>
+    </div>
+    
+    <div class="section">
+        <h3>👥 Users API Test</h3>
+        <button onclick="testUsersAPI()">Test Users API</button>
+        <div id="usersResult"></div>
+    </div>
+    
+    <div class="section">
+        <h3>📋 Campaigns API Test</h3>
+        <button onclick="testCampaignsAPI()">Test Campaigns API</button>
+        <div id="campaignsResult"></div>
+    </div>
+    
+    <div class="section">
+        <h3>🏢 Organizations API Test</h3>
+        <button onclick="testOrganizationsAPI()">Test Organizations API</button>
+        <div id="organizationsResult"></div>
+    </div>
+    
+    <div class="section">
+        <h3>🛡️ Roles API Test</h3>
+        <button onclick="testRolesAPI()">Test Roles API</button>
+        <div id="rolesResult"></div>
+    </div>
+    
+    <div class="section">
+        <h3>🔧 Fix Tools</h3>
+        <button onclick="clearCache()">Clear All Cache</button>
+        <button onclick="forceLogin()">Force Fresh Login</button>
+        <div id="fixResult"></div>
+    </div>
+
+    <script>
+        function updateCurrentState() {
+            const userData = localStorage.getItem('userData');
+            const userRole = localStorage.getItem('userRole');
+            const authToken = localStorage.getItem('authToken');
+            
+            document.getElementById('currentState').innerHTML = `
+                <p><strong>User Data:</strong> ${userData ? '✅ Present' : '❌ Missing'}</p>
+                <p><strong>User Role:</strong> ${userRole ? '✅ Present' : '❌ Missing'}</p>
+                <p><strong>Auth Token:</strong> ${authToken ? '✅ Present' : '❌ Missing'}</p>
+                ${userData ? `<pre>${JSON.stringify(JSON.parse(userData), null, 2)}</pre>` : ''}
+                ${userRole ? `<pre>${JSON.stringify(JSON.parse(userRole), null, 2)}</pre>` : ''}
+            `;
+        }
+        
+        async function testAuth() {
+            const result = document.getElementById('authResult');
+            result.innerHTML = '<p>Testing authentication...</p>';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'username=admin@example.com&password=admin123'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.innerHTML = `<div class="success"><p>✅ Login successful!</p><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+                    localStorage.setItem('authToken', data.access_token);
+                    updateCurrentState();
+                } else {
+                    result.innerHTML = `<div class="error"><p>❌ Login failed: ${data.detail}</p></div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error"><p>❌ Error: ${error.message}</p></div>`;
+            }
+        }
+        
+        async function testAPI(endpoint, resultId, name) {
+            const result = document.getElementById(resultId);
+            const token = localStorage.getItem('authToken');
+            
+            if (!token) {
+                result.innerHTML = '<div class="error"><p>❌ No auth token. Please test authentication first.</p></div>';
+                return;
+            }
+            
+            result.innerHTML = `<p>Testing ${name}...</p>`;
+            
+            try {
+                const response = await fetch(`http://localhost:8000/api/v1/${endpoint}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.innerHTML = `<div class="success"><p>✅ ${name} API working!</p><p>Status: ${response.status}</p><p>Data count: ${Array.isArray(data) ? data.length : (data.value ? data.value.length : 'N/A')}</p><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+                } else {
+                    result.innerHTML = `<div class="error"><p>❌ ${name} API failed: ${response.status}</p><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error"><p>❌ ${name} Error: ${error.message}</p></div>`;
+            }
+        }
+        
+        function testUsersAPI() { testAPI('users/', 'usersResult', 'Users'); }
+        function testCampaignsAPI() { testAPI('campaigns/', 'campaignsResult', 'Campaigns'); }
+        function testOrganizationsAPI() { testAPI('organizations/', 'organizationsResult', 'Organizations'); }
+        function testRolesAPI() { testAPI('roles/', 'rolesResult', 'Roles'); }
+        
+        function clearCache() {
+            localStorage.clear();
+            sessionStorage.clear();
+            updateCurrentState();
+            document.getElementById('fixResult').innerHTML = '<div class="success"><p>✅ Cache cleared!</p></div>';
+        }
+        
+        function forceLogin() {
+            clearCache();
+            testAuth();
+            document.getElementById('fixResult').innerHTML = '<div class="success"><p>✅ Forcing fresh login...</p></div>';
+        }
+        
+        // Initialize
+        updateCurrentState();
+    </script>
+</body>
+</html>

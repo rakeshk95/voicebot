@@ -470,8 +470,8 @@ const Organizations = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 overflow-x-hidden">
       {/* Sticky Header */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200/50 shadow-sm">
         <div className="px-6 py-6">
@@ -498,13 +498,7 @@ const Organizations = () => {
                   View Only
                 </Badge>
               )}
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-gray-500">Last updated</p>
-              <p className="text-sm font-medium text-gray-700">
-                {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </p>
-            </div>
+                </div>
           </div>
         </div>
       </div>
@@ -596,31 +590,31 @@ const Organizations = () => {
           </div>
         </div>
 
-        {/* Enhanced Table */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200/50 overflow-hidden">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gradient-to-r from-gray-50/80 to-blue-50/30 hover:from-gray-50/80 hover:to-blue-50/30 border-b border-gray-200/50">
-                  <TableHead className="font-bold text-gray-800 py-4 px-6 text-sm uppercase tracking-wide">
-                    <div className="flex items-center gap-2">
-                      Name
-                      <span className="text-gray-400">↕</span>
-                    </div>
-                  </TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-6 text-sm uppercase tracking-wide">Code</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-6 text-sm uppercase tracking-wide">Description</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-6 text-sm uppercase tracking-wide">Status</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-6 text-sm uppercase tracking-wide">
-                    <div className="flex items-center gap-2">
-                      Created Date
-                      <span className="text-gray-400">↕</span>
-                    </div>
-                  </TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-6 text-sm uppercase tracking-wide">Last Modified</TableHead>
-                  <TableHead className="text-right font-bold text-gray-800 py-4 px-6 text-sm uppercase tracking-wide">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
+            {/* Enhanced Table */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200/50 overflow-hidden">
+              <div className="w-full">
+                <Table className="w-full table-fixed">
+                  <TableHeader>
+                    <TableRow className="bg-gradient-to-r from-gray-50/80 to-blue-50/30 hover:from-gray-50/80 hover:to-blue-50/30 border-b border-gray-200/50">
+                      <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[20%]">
+                        <div className="flex items-center gap-2">
+                          Name
+                          <span className="text-gray-400">↕</span>
+                        </div>
+                      </TableHead>
+                      <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[12%]">Code</TableHead>
+                      <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[18%]">Description</TableHead>
+                      <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[10%]">Status</TableHead>
+                      <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[15%]">
+                        <div className="flex items-center gap-2">
+                          Created Date
+                          <span className="text-gray-400">↕</span>
+                        </div>
+                      </TableHead>
+                      <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[15%]">Last Modified</TableHead>
+                      <TableHead className="text-right font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[10%]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
               <TableBody>
                 {isInitialLoading ? (
                   <TableRow>
@@ -662,30 +656,30 @@ const Organizations = () => {
                         index % 2 === 0 ? "bg-white" : "bg-gray-50/30"
                       )}
                     >
-                      <TableCell className="py-4 px-6">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
-                            <Building2 className="h-5 w-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-gray-900 group-hover:text-blue-900 transition-colors">
-                              {org.name}
+                          <TableCell className="py-4 px-4 w-[20%]">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center flex-shrink-0">
+                                <Building2 className="h-5 w-5 text-blue-600" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-gray-900 group-hover:text-blue-900 transition-colors break-words">
+                                  {org.name}
+                                </p>
+                                <p className="text-xs text-gray-500">Organization</p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4 px-4 w-[12%]">
+                            <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded-md text-gray-700 break-all">
+                              {org.code}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-4 px-4 w-[18%]">
+                            <p className="text-gray-600 break-words" title={org.description || ''}>
+                              {org.description || '-'}
                             </p>
-                            <p className="text-xs text-gray-500">Organization</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-4 px-6">
-                        <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded-md text-gray-700">
-                          {org.code}
-                        </span>
-                      </TableCell>
-                      <TableCell className="py-4 px-6">
-                        <p className="text-gray-600 max-w-xs truncate" title={org.description || ''}>
-                          {org.description || '-'}
-                        </p>
-                      </TableCell>
-                      <TableCell className="py-4 px-6">
+                          </TableCell>
+                      <TableCell className="py-4 px-4 w-[10%]">
                         <Badge 
                           variant="outline" 
                           className={cn(
@@ -704,25 +698,25 @@ const Organizations = () => {
                           {org.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="py-4 px-6">
+                      <TableCell className="py-4 px-4 w-[15%]">
                         <div className="text-sm text-gray-600">
-                          <p className="font-medium">{formatDate(org.created_at)}</p>
+                          <p className="font-medium break-words">{formatDate(org.created_at)}</p>
                           <p className="text-xs text-gray-400">Created</p>
                         </div>
                       </TableCell>
-                      <TableCell className="py-4 px-6">
+                      <TableCell className="py-4 px-4 w-[15%]">
                         <div className="text-sm text-gray-600">
-                          <p className="font-medium">{formatDate(org.modified_date)}</p>
+                          <p className="font-medium break-words">{formatDate(org.modified_date)}</p>
                           <p className="text-xs text-gray-400">Modified</p>
                         </div>
                       </TableCell>
-                      <TableCell className="py-4 px-6">
-                        <div className="flex justify-end space-x-2">
+                      <TableCell className="py-4 px-4 w-[10%]">
+                        <div className="flex justify-end space-x-1">
                           <Button 
                             variant="ghost" 
                             size="icon"
                             onClick={() => handleView(org.id)}
-                            className="h-9 w-9 bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
+                            className="h-8 w-8 bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
                             title="View Details"
                           >
                             <Eye className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
@@ -733,7 +727,7 @@ const Organizations = () => {
                                 variant="ghost" 
                                 size="icon"
                                 onClick={() => handleEdit(org)}
-                                className="h-9 w-9 bg-amber-50 hover:bg-amber-100 text-amber-600 hover:text-amber-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
+                                className="h-8 w-8 bg-amber-50 hover:bg-amber-100 text-amber-600 hover:text-amber-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
                                 title="Edit Organization"
                               >
                                 <Edit className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
@@ -742,7 +736,7 @@ const Organizations = () => {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => deleteOrganization(org.id)}
-                                className="h-9 w-9 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
+                                className="h-8 w-8 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
                                 title="Delete Organization"
                               >
                                 <Trash2 className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />

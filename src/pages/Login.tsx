@@ -43,18 +43,31 @@ export default function Login() {
       const data = await response.json();
       console.log('Login response:', data);
       
-      // Extract user data and token
-      const userData = data.user || data;
+      // Extract token and user ID
       const accessToken = data.access_token;
-      const userId = userData?.id || userData?.user_id;
+      const userId = data.user_id;
       
-      console.log('Extracted user data:', userData);
       console.log('User ID:', userId);
       console.log('Access token:', accessToken);
 
       if (!userId || !accessToken) {
         throw new Error('Invalid response: missing user ID or access token');
       }
+
+      // Fetch user details using the user_id from login response
+      const userResponse = await fetch(`http://localhost:8000/api/v1/users/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!userResponse.ok) {
+        throw new Error('Failed to fetch user details');
+      }
+
+      const userData = await userResponse.json();
+      console.log('Fetched user data:', userData);
 
       // Store auth data
       localStorage.setItem('authToken', accessToken);

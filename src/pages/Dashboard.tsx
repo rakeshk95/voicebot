@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,6 +18,8 @@ import {
   RefreshCw,
   Building2,
   Target as Campaign,
+  Calendar,
+  BarChart as BarChartIcon,
   Play,
   Info
 } from 'lucide-react';
@@ -290,6 +292,7 @@ const Dashboard = () => {
   const { userPermissions, userRole, hasPermission } = usePermissions();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -309,6 +312,13 @@ const Dashboard = () => {
   // Store all data for reference (keeping for potential future use)
   const [allCallDetails, setAllCallDetails] = useState<CallDetailsResponse | null>(null);
   const [allMetrics, setAllMetrics] = useState<DashboardMetrics | null>(null);
+
+  // Locally filtered campaigns for the selected organization (UI-only, dashboard scope)
+  const filteredCampaigns = useMemo(() => {
+    if (!campaigns || campaigns.length === 0) return [] as Campaign[];
+    if (!filters.org_id || filters.org_id === 'all') return campaigns;
+    return campaigns.filter(c => c.org_id === filters.org_id);
+  }, [campaigns, filters.org_id]);
   
   // Flag to prevent multiple API calls
   const [isApiCallInProgress, setIsApiCallInProgress] = useState(false);
@@ -322,25 +332,43 @@ const Dashboard = () => {
   // Ref to prevent multiple organization fetches
   const organizationsFetchedRef = useRef(false);
   
-  const userData = getUserData();
+  // Memoize userData to prevent infinite re-renders
+  const userData = useMemo(() => getUserData(), []);
   const isSuperAdmin = userPermissions?.admin;
+  
+  // Debug user data (only log once to prevent console spam)
+  useEffect(() => {
+    console.log('🚀 PERFORMANCE FIX: User data check:', { 
+      userData: userData ? 'exists' : 'null', 
+      org_id: userData?.org_id, 
+      organization_id: userData?.organization_id,
+      email: userData?.email,
+      role_name: userData?.role_name,
+      userDataKeys: userData ? Object.keys(userData) : 'no keys',
+      rawUserData: localStorage.getItem('userData')
+    });
+  }, [userData]);
   
   // Auto-detect user's organization on component mount
   useEffect(() => {
-    if (userData?.org_id && !isSuperAdmin) {
-      setUserOrgId(userData.org_id);
-      setFilters(prev => ({ ...prev, org_id: userData.org_id }));
-      console.log('Dashboard: Auto-detected user organization:', userData.org_id);
+    // Keep default as 'all'; just store user org for backend filtering when needed
+    if (userData?.organization_id) {
+      setUserOrgId(userData.organization_id);
+      console.log('Dashboard: Stored user organization for backend filtering:', userData.organization_id);
     }
-  }, [userData, isSuperAdmin]);
+  }, [userData]);
 
   // Check if user is superuser based on role
   const isSuperUser = userData?.role_name === 'superuser';
-  console.log('Dashboard: User role check:', { 
-    roleName: userData?.role_name, 
-    isSuperUser, 
-    isSuperAdmin: userPermissions?.admin 
-  });
+  
+  // Debug user role (only log once to prevent console spam)
+  useEffect(() => {
+    console.log('Dashboard: User role check:', { 
+      roleName: userData?.role_name, 
+      isSuperUser, 
+      isSuperAdmin: userPermissions?.admin 
+    });
+  }, [userData?.role_name, isSuperUser, isSuperAdmin]);
 
   // Fetch campaigns function
   const fetchCampaigns = async (orgId?: string) => {
@@ -377,6 +405,8 @@ const Dashboard = () => {
 
   // PERFORMANCE FIX: Optimized filter data fetching with caching
   const fetchFilterData = async () => {
+    console.log('🚀 PERFORMANCE FIX: fetchFilterData called!', { filterDataLoading, isFilterDataLoaded, isSuperUser, userData: userData?.org_id });
+    
     // Prevent multiple calls
     if (filterDataLoading || isFilterDataLoaded) {
       console.log('🚀 PERFORMANCE FIX: Filter data already loading or loaded, skipping...');
@@ -385,35 +415,79 @@ const Dashboard = () => {
     
     try {
       setFilterDataLoading(true);
-      console.log('🚀 PERFORMANCE FIX: Starting fetchFilterData...', { isSuperUser, userData: userData?.org_id });
+      console.log('🚀 PERFORMANCE FIX: Starting fetchFilterData...', { isSuperUser, userData: userData?.organization_id });
       
       // PERFORMANCE FIX: Fetch organizations and campaigns in parallel
       const [orgsData, campaignsData] = await Promise.all([
-        // Fetch organizations
-        fetch('http://localhost:8000/api/v1/organizations', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json'
-          },
-        }).then(async (response) => {
-          if (response.ok) {
-            const data = await response.json() as Organization[];
-            console.log('🚀 PERFORMANCE FIX: Organizations loaded:', data.length);
-            return data;
+        // Fetch organizations with role-based filtering
+        (async () => {
+          console.log('🚀 PERFORMANCE FIX: Organizations API call decision:', { 
+            isSuperUser, 
+            isSuperAdmin, 
+            userDataOrgId: userData?.organization_id,
+            roleName: userData?.role_name 
+          });
+          
+          if (isSuperUser || isSuperAdmin) {
+            // Super users can see all organizations
+            const response = await fetch('http://localhost:8000/api/v1/organizations', {
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+                'Content-Type': 'application/json'
+              },
+            });
+            if (response.ok) {
+              const responseData = await response.json();
+              console.log('🚀 PERFORMANCE FIX: Organizations API response:', responseData);
+              
+              // Handle different response formats
+              let data: Organization[];
+              if (Array.isArray(responseData)) {
+                data = responseData;
+              } else if (responseData.value && Array.isArray(responseData.value)) {
+                data = responseData.value;
+              } else {
+                console.error('🚀 PERFORMANCE FIX: Unexpected organizations response format:', responseData);
+                return [];
+              }
+              
+              console.log('🚀 PERFORMANCE FIX: All organizations loaded for superuser:', data.length);
+              return data;
+            } else {
+              console.error('🚀 PERFORMANCE FIX: Organizations API error:', response.status);
+              return [];
+            }
           } else {
-            console.error('🚀 PERFORMANCE FIX: Organizations API error:', response.status);
-            return [];
+            // Non-super users only see their own organization
+            console.log('🚀 PERFORMANCE FIX: Non-superuser path, checking userData.organization_id:', userData?.organization_id);
+            if (userData?.organization_id) {
+              const response = await fetch(`http://localhost:8000/api/v1/organizations/${userData.organization_id}`, {
+                headers: {
+                  'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+                  'Content-Type': 'application/json'
+                },
+              });
+              if (response.ok) {
+                const data = await response.json();
+                console.log('🚀 PERFORMANCE FIX: User organization loaded:', data);
+                return [data]; // Return as array for consistency
+              } else {
+                console.error('🚀 PERFORMANCE FIX: User organization API error:', response.status);
+                return [];
+              }
+            } else {
+              console.log('🚀 PERFORMANCE FIX: No organization ID found for user, returning empty array');
+              return [];
+            }
           }
-        }).catch(error => {
-          console.error('🚀 PERFORMANCE FIX: Organizations fetch error:', error);
-          return [];
-        }),
+        })(),
         
         // Fetch campaigns
         (async () => {
           let campaignUrl = '/campaigns/';
-          if (!isSuperUser && userData?.org_id) {
-            campaignUrl += `?org_id=${userData.org_id}`;
+          if (!isSuperUser && userData?.organization_id) {
+            campaignUrl += `?org_id=${userData.organization_id}`;
+            console.log('🚀 PERFORMANCE FIX: Non-superuser - filtering campaigns by organization:', userData.organization_id);
           }
           
           try {
@@ -424,7 +498,20 @@ const Dashboard = () => {
               },
             });
             if (response.ok) {
-              const data = await response.json();
+              const responseData = await response.json();
+              console.log('🚀 PERFORMANCE FIX: Campaigns API response:', responseData);
+              
+              // Handle different response formats
+              let data: Campaign[];
+              if (Array.isArray(responseData)) {
+                data = responseData;
+              } else if (responseData.value && Array.isArray(responseData.value)) {
+                data = responseData.value;
+              } else {
+                console.error('🚀 PERFORMANCE FIX: Unexpected campaigns response format:', responseData);
+                return [];
+              }
+              
               console.log('🚀 PERFORMANCE FIX: Campaigns loaded:', data.length);
               return data;
             } else {
@@ -439,22 +526,27 @@ const Dashboard = () => {
       ]);
       
       // Set the data
+      console.log('🚀 PERFORMANCE FIX: Setting organizations data:', orgsData);
       if (orgsData && orgsData.length > 0) {
         setOrganizations(orgsData);
+        console.log('🚀 PERFORMANCE FIX: Organizations set successfully, count:', orgsData.length);
         
         // For non-superusers, set their organization as the default filter if available
-        if (!isSuperUser && userData?.org_id) {
-          const userOrg = orgsData.find(org => org.id === userData.org_id);
+        if (!isSuperUser && userData?.organization_id) {
+          const userOrg = orgsData.find(org => org.id === userData.organization_id);
           if (userOrg) {
-            console.log('🚀 PERFORMANCE FIX: Setting user organization as default filter:', userData.org_id);
-            setFilters(prev => ({ ...prev, org_id: userData.org_id }));
+            console.log('🚀 PERFORMANCE FIX: Setting user organization as default filter:', userData.organization_id);
+            setFilters(prev => ({ ...prev, org_id: userData.organization_id }));
           }
         }
       } else {
+        console.log('🚀 PERFORMANCE FIX: No organizations data, setting empty array');
         setOrganizations([]);
       }
       
+      console.log('🚀 PERFORMANCE FIX: Setting campaigns data:', campaignsData);
       setCampaigns(campaignsData);
+      console.log('🚀 PERFORMANCE FIX: Campaigns set successfully, count:', campaignsData.length);
       setIsFilterDataLoaded(true);
       
       console.log('🚀 PERFORMANCE FIX: Filter data loaded successfully');
@@ -507,7 +599,7 @@ const Dashboard = () => {
     });
     
     // Initialize if user data exists and not initialized yet
-    if (userData && !hasInitialized && isMounted) {
+    if (userData && Object.keys(userData).length > 0 && !hasInitialized && isMounted) {
       console.log('🚀 PERFORMANCE FIX: Initializing dashboard with single API call...');
       hasInitializedRef.current = true;
       
@@ -527,7 +619,31 @@ const Dashboard = () => {
       
       initializeDashboard();
     } else {
-      console.log('🚀 PERFORMANCE FIX: Skipping initialization - conditions not met');
+      console.log('🚀 PERFORMANCE FIX: Skipping initialization - conditions not met', {
+        userData: userData ? 'exists' : 'null',
+        userDataKeys: userData ? Object.keys(userData).length : 0,
+        hasInitialized,
+        isMounted
+      });
+      
+      // Fallback: If userData is empty but we have auth token, try to initialize anyway
+      if (!hasInitialized && isMounted && localStorage.getItem('authToken')) {
+        console.log('🚀 PERFORMANCE FIX: Fallback initialization - user has auth token but no userData');
+        hasInitializedRef.current = true;
+        
+        const initializeDashboard = async () => {
+          try {
+            await fetchFilterData();
+            await fetchDashboard();
+            setHasInitialized(true);
+            console.log('🚀 PERFORMANCE FIX: Fallback dashboard initialization complete');
+          } catch (error) {
+            console.error('Fallback dashboard initialization error:', error);
+          }
+        };
+        
+        initializeDashboard();
+      }
     }
     
     return () => {
@@ -590,7 +706,10 @@ const Dashboard = () => {
     }
     
     try {
-      setLoading(true);
+      // Avoid UI flicker: only show full-page loader on the very first load
+      if (isFirstLoad) {
+        setLoading(true);
+      }
       setIsApiCallInProgress(true);
       setError(null);
       
@@ -671,6 +790,10 @@ const Dashboard = () => {
       });
     } finally {
       setLoading(false);
+      // After the first dashboard fetch completes, disable first-load mode
+      if (isFirstLoad) {
+        setIsFirstLoad(false);
+      }
       setIsApiCallInProgress(false);
       console.log('Dashboard: fetchDashboard finished (loading set to false)');
     }
@@ -933,19 +1056,20 @@ const Dashboard = () => {
 
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
 
 
-      {/* Filters */}
-      <Card className="p-4">
-        <div className="flex flex-col lg:flex-row gap-4">
+      {/* Enhanced Filters */}
+      <Card className="p-6 bg-gradient-to-r from-white to-blue-50/30 border border-gray-200/50 shadow-sm">
+        <div className="flex flex-col lg:flex-row gap-6">
           {/* Organization Filter */}
           <div className="flex-1">
-            <label className="text-sm font-medium text-gray-700 mb-2 block">
-              {isSuperUser ? 'Organization' : 'My Organization'}
+            <label className="text-sm font-semibold text-gray-800 mb-3 block flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-blue-600" />
+              Organization
               {filters.org_id !== 'all' && (
-                <span className="ml-2 text-xs text-blue-600 font-medium">
-                  🔒 Filtering: {organizations.find(org => org.id === filters.org_id)?.name}
+                <span className="ml-2 text-xs text-blue-600 font-medium bg-blue-100 px-2 py-1 rounded-full">
+                  🔒 {organizations.find(org => org.id === filters.org_id)?.name}
                 </span>
               )}
             </label>
@@ -985,18 +1109,15 @@ const Dashboard = () => {
                   }
                 }}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder={isSuperUser ? "All Organizations" : "My Organization"}>
-                    {isSuperUser 
-                      ? (filters.org_id === 'all' ? 'All Organizations' : organizations.find(org => org.id === filters.org_id)?.name || 'Select Organization')
-                      : organizations.find(org => org.id === filters.org_id)?.name || 'My Organization'
-                    }
+                <SelectTrigger className="h-11 border-gray-200 bg-white hover:bg-gray-50 focus:border-blue-500 focus:ring-blue-500/20 shadow-sm">
+                  <SelectValue placeholder={"All Organizations"}>
+                    {filters.org_id === 'all' 
+                      ? 'All Organizations' 
+                      : organizations.find(org => org.id === filters.org_id)?.name || 'Select Organization'}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {isSuperUser && (
-                    <SelectItem value="all">All Organizations</SelectItem>
-                  )}
+                  <SelectItem value="all">All Organizations</SelectItem>
                   {organizations.map((org) => (
                     <SelectItem key={org.id} value={org.id}>
                       <div className="flex items-center gap-2">
@@ -1016,13 +1137,21 @@ const Dashboard = () => {
 
           {/* Campaign Filter */}
           <div className="flex-1">
-            <label className="text-sm font-medium text-gray-700 mb-2 block">Campaign</label>
+            <label className="text-sm font-semibold text-gray-800 mb-3 block flex items-center gap-2">
+              <BarChartIcon className="h-4 w-4 text-blue-600" />
+              Campaign
+              {filters.campaign_id !== 'all' && (
+                <span className="ml-2 text-xs text-blue-600 font-medium bg-blue-100 px-2 py-1 rounded-full">
+                  📊 {filteredCampaigns.find(camp => camp.id === filters.campaign_id)?.name}
+                </span>
+              )}
+            </label>
             {filterDataLoading ? (
               <div className="h-10 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-500 flex items-center gap-2">
                 <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
                 Loading campaigns...
               </div>
-            ) : campaigns.length > 0 ? (
+            ) : filteredCampaigns.length > 0 ? (
               <Select
                 value={filters.campaign_id}
                 onValueChange={async (value) => {
@@ -1047,32 +1176,21 @@ const Dashboard = () => {
                 }}
                 disabled={false}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-11 border-gray-200 bg-white hover:bg-gray-50 focus:border-blue-500 focus:ring-blue-500/20 shadow-sm">
                   <SelectValue placeholder="All Campaigns">
-                    {filters.campaign_id === 'all' ? 'All Campaigns' : campaigns.find(camp => camp.id === filters.campaign_id)?.name || 'Select Campaign'}
+                    {filters.campaign_id === 'all' ? 'All Campaigns' : filteredCampaigns.find(camp => camp.id === filters.campaign_id)?.name || 'Select Campaign'}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Campaigns</SelectItem>
-                  {campaigns
-                    .filter(campaign => {
-                      // Filter campaigns based on selected organization
-                      if (filters.org_id === 'all') {
-                        // Show all campaigns if "All Organizations" is selected
-                        return true;
-                      } else {
-                        // Show only campaigns that belong to the selected organization
-                        return campaign.org_id === filters.org_id;
-                      }
-                    })
-                    .map((campaign) => (
-                      <SelectItem key={campaign.id} value={campaign.id}>
-                        <div className="flex items-center gap-2">
-                          <Campaign className="h-4 w-4" />
-                          {campaign.name}
-                        </div>
-                      </SelectItem>
-                    ))}
+                  {filteredCampaigns.map((campaign) => (
+                    <SelectItem key={campaign.id} value={campaign.id}>
+                      <div className="flex items-center gap-2">
+                        <Campaign className="h-4 w-4" />
+                        {campaign.name}
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             ) : (
@@ -1084,7 +1202,16 @@ const Dashboard = () => {
 
           {/* Time Period Filter */}
           <div className="flex-1">
-            <label className="text-sm font-medium text-gray-700 mb-2 block">Time Period</label>
+            <label className="text-sm font-semibold text-gray-800 mb-3 block flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-blue-600" />
+              Time Period
+              <span className="ml-2 text-xs text-blue-600 font-medium bg-blue-100 px-2 py-1 rounded-full">
+                📅 {filters.days === 7 ? 'Last 7 days' : 
+                   filters.days === 30 ? 'Last 30 days' : 
+                   filters.days === 90 ? 'Last 90 days' : 
+                   filters.days === 365 ? 'Last year' : 'Custom'}
+              </span>
+            </label>
             <Select
               value={filters.days.toString()}
               onValueChange={async (value) => {
@@ -1107,7 +1234,7 @@ const Dashboard = () => {
                 }
               }}
             >
-              <SelectTrigger>
+              <SelectTrigger className="h-11 border-gray-200 bg-white hover:bg-gray-50 focus:border-blue-500 focus:ring-blue-500/20 shadow-sm">
                 <SelectValue>
                   {filters.days === 7 ? 'Last 7 days' : 
                    filters.days === 30 ? 'Last 30 days' : 
@@ -1165,7 +1292,7 @@ const Dashboard = () => {
                }}
                variant="outline"
                size="sm"
-               className="h-10"
+               className="h-11 px-4 bg-white hover:bg-gray-50 border-gray-200 text-gray-700 hover:text-gray-900 shadow-sm hover:shadow-md transition-all duration-200"
                title="Reset filters to show all data and refresh"
                disabled={loading}
              >
