@@ -336,7 +336,7 @@ export function AppSidebar() {
               <ChevronDown className="h-4 w-4 text-gray-400 hover:text-gray-600 transition-colors" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-64 ml-4 mb-2 shadow-xl border border-gray-200/50 bg-white/95 backdrop-blur-sm" align="end" forceMount>
+          <DropdownMenuContent className="w-64 ml-4 mt-2 shadow-xl border border-gray-200/50 bg-white/95 backdrop-blur-sm" align="end" side="top" forceMount>
             <div className="flex items-center justify-start gap-3 p-4 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 border-b border-gray-200/50">
               <Avatar className="h-12 w-12 border-2 border-white shadow-lg">
                 <AvatarImage src={userData.avatar} alt={userData.name} />

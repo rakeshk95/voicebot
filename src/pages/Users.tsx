@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { Plus, Search, Eye, Pencil, Trash2, CalendarIcon, Phone, Mail, User as UserIcon, Building2, Lock, EyeOff, Edit, FileDown } from "lucide-react";
+import { Plus, Search, Eye, Pencil, Trash2, CalendarIcon, Phone, Mail, User as UserIcon, Building2, Lock, EyeOff, Edit, FileDown, ChevronRight, Users as UsersIcon, UserCheck, Shield, Calendar as CalendarIcon2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -157,6 +157,9 @@ export default function Users() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [isBulkActionLoading, setIsBulkActionLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -257,37 +260,37 @@ export default function Users() {
   const fetchUsers = async () => {
     try {
       setIsRefreshing(true);
-
+  
       const params = new URLSearchParams();
-
+  
       if (searchTerm) {
         params.append("search", searchTerm);
       }
-
+  
       if (startDate) {
         params.append("start_date", startDate.toISOString());
       }
-
+  
       if (endDate) {
         params.append("end_date", endDate.toISOString());
       }
-
+  
       const response = await fetch(`http://localhost:8000/api/v1/users/?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
           "Content-Type": "application/json",
         },
       });
-
+  
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
+  
       const data: User[] = await response.json();
-
+  
       // Optional: use Map for fast organization name lookup
       const orgMap = new Map(organizations.map((org) => [org.id, org.name]));
-
+  
       const baseUsers = data.map((user) => ({
         ...user,
         organization_name: orgMap.get(user.organization_id) || null,
@@ -296,7 +299,7 @@ export default function Users() {
         mobile_number: user.mobile_number || null,
         status: user.status || "active",
       }));
-
+  
       // Enrich each user with role from roles API if missing
       const enriched = await Promise.all(
         baseUsers.map(async (u) => {
@@ -380,7 +383,7 @@ export default function Users() {
         });
 
         console.log('Users: Organizations API response status:', response.status);
-        
+
         if (!response.ok) {
           const errorText = await response.text();
           console.error('Users: Organizations API error:', response.status, errorText);
@@ -814,8 +817,108 @@ export default function Users() {
     }
   };
 
-  const handleExportToCSV = () => {
+  // Bulk Actions
+  const handleSelectUser = (userId: string) => {
+    setSelectedUsers(prev => 
+      prev.includes(userId) 
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const handleSelectAllUsers = () => {
+    if (selectedUsers.length === users.length) {
+      setSelectedUsers([]);
+    } else {
+      setSelectedUsers(users.map(user => user.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedUsers.length === 0) return;
+    
+    setIsBulkActionLoading(true);
     try {
+      const deletePromises = selectedUsers.map(userId => 
+        fetch(`http://localhost:8000/api/v1/users/${userId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+            'Content-Type': 'application/json'
+          },
+        })
+      );
+      
+      await Promise.all(deletePromises);
+      
+      // Update local state
+      setUsers(users.filter(user => !selectedUsers.includes(user.id)));
+      setSelectedUsers([]);
+      
+      toast({
+        title: "Bulk Delete Successful",
+        description: `Successfully deleted ${selectedUsers.length} users`,
+      });
+    } catch (error) {
+      console.error('Error in bulk delete:', error);
+      toast({
+        title: "Bulk Delete Failed",
+        description: "Failed to delete some users. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkStatusChange = async (status: 'active' | 'inactive') => {
+    if (selectedUsers.length === 0) return;
+    
+    setIsBulkActionLoading(true);
+    try {
+      const updatePromises = selectedUsers.map(userId => 
+        fetch(`http://localhost:8000/api/v1/users/${userId}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status })
+        })
+      );
+      
+      await Promise.all(updatePromises);
+      
+      // Update local state
+      setUsers(users.map(user => 
+        selectedUsers.includes(user.id) 
+          ? { ...user, status }
+          : user
+      ));
+      setSelectedUsers([]);
+      
+      toast({
+        title: "Bulk Update Successful",
+        description: `Successfully updated ${selectedUsers.length} users to ${status}`,
+      });
+    } catch (error) {
+      console.error('Error in bulk status change:', error);
+      toast({
+        title: "Bulk Update Failed",
+        description: "Failed to update some users. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBulkActionLoading(false);
+    }
+  };
+
+  const handleExportToCSV = async () => {
+    setIsExporting(true);
+    try {
+      // Simulate processing time for better UX
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       // Convert users data to CSV format
       const headers = ['Name', 'Email', 'Role', 'Status', 'Mobile', 'Organization', 'Campaigns', 'Created Date'];
       const csvData = users.map(user => [
@@ -851,23 +954,25 @@ export default function Users() {
       document.body.removeChild(link);
 
       toast({
-        title: "Success",
-        description: "Users data exported successfully",
+        title: "Export Successful",
+        description: `Successfully exported ${users.length} users to CSV`,
       });
     } catch (error) {
       console.error('Error exporting data:', error);
       toast({
-        title: "Error",
+        title: "Export Failed",
         description: "Failed to export users data",
         variant: "destructive",
       });
+    } finally {
+      setIsExporting(false);
     }
   };
 
   // Helpers to resolve role via id or fallback to user's role string
   const resolveRoleName = (roleId?: string, roleNameFallback?: string) => {
     if (roleId) {
-      const role = roles.find(r => r.id === roleId);
+    const role = roles.find(r => r.id === roleId);
       if (role?.name) return role.name;
     }
     if (roleNameFallback) return roleNameFallback;
@@ -915,14 +1020,104 @@ export default function Users() {
         </div>
       ) : (
         <>
-        <div className="mb-4">
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold text-blue-600">Users</h1>
-          <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-100">
-            {users.length} Total
+        {/* Premium Header Section */}
+        <div className="relative mb-8 overflow-hidden">
+          {/* Background Gradient */}
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50/30 to-purple-50/20 rounded-2xl"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(59,130,246,0.1),transparent_50%)] rounded-2xl"></div>
+          
+          {/* Content */}
+          <div className="relative p-8">
+            {/* Breadcrumb */}
+            <nav className="flex items-center space-x-2 text-sm text-gray-500 mb-4">
+              <span className="hover:text-blue-600 cursor-pointer transition-colors">Dashboard</span>
+              <ChevronRight className="h-4 w-4" />
+              <span className="text-blue-600 font-medium">Users</span>
+            </nav>
+            
+            {/* Main Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+                  <UsersIcon className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-indigo-800 bg-clip-text text-transparent">
+                    User Management
+                  </h1>
+                  <p className="text-gray-600 mt-1 font-medium">Manage your users and their permissions</p>
+                </div>
+              </div>
+              
+              {/* Animated Counter Badge */}
+              <div className="flex items-center space-x-3">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full blur opacity-30 animate-pulse"></div>
+                  <Badge className="relative bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-0 px-4 py-2 text-sm font-semibold shadow-lg">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                      <span>{users.length} Total Users</span>
+                    </div>
           </Badge>
         </div>
-        <p className="text-sm text-gray-500">Manage your users and their permissions</p>
+              </div>
+            </div>
+            
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+              <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-white/50 shadow-sm hover:shadow-md transition-all duration-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Active Users</p>
+                    <p className="text-2xl font-bold text-green-600">{users.filter(u => u.status === 'active').length}</p>
+                  </div>
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <UserCheck className="h-5 w-5 text-green-600" />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-white/50 shadow-sm hover:shadow-md transition-all duration-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Admin Users</p>
+                    <p className="text-2xl font-bold text-blue-600">{users.filter(u => u.role === 'superuser' || u.role === 'org_admin').length}</p>
+                  </div>
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Shield className="h-5 w-5 text-blue-600" />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-white/50 shadow-sm hover:shadow-md transition-all duration-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Organizations</p>
+                    <p className="text-2xl font-bold text-purple-600">{new Set(users.map(u => u.organization_id)).size}</p>
+                  </div>
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <Building2 className="h-5 w-5 text-purple-600" />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-white/50 shadow-sm hover:shadow-md transition-all duration-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">This Month</p>
+                    <p className="text-2xl font-bold text-orange-600">{users.filter(u => {
+                      const createdDate = new Date(u.created_at);
+                      const now = new Date();
+                      return createdDate.getMonth() === now.getMonth() && createdDate.getFullYear() === now.getFullYear();
+                    }).length}</p>
+                  </div>
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <CalendarIcon2 className="h-5 w-5 text-orange-600" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
       </div>
 
       <div className="flex items-center justify-between mb-4">
@@ -982,122 +1177,359 @@ export default function Users() {
           </div>
       </div>
 
-        <div className="flex items-center gap-2">
+        {/* Premium Action Buttons */}
+        <div className="flex items-center gap-3">
+          {/* Export Button with Premium Styling */}
           <Button 
             onClick={handleExportToCSV}
             variant="outline" 
-            className="h-9 text-gray-600 border-gray-200"
+            disabled={isExporting}
+            className="h-10 px-4 text-gray-700 border-gray-300 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all duration-200 group relative overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <FileDown className="w-4 h-4 mr-2" />
-            Export
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/5 to-blue-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+            {isExporting ? (
+              <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2" />
+            ) : (
+              <FileDown className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform duration-200" />
+            )}
+            <span className="font-medium">{isExporting ? 'Exporting...' : 'Export'}</span>
           </Button>
+          
+          {/* Add User Button with Premium Styling */}
           {canWriteUsers && (
             <Button 
               onClick={handleAddUserClick} 
-              className="bg-blue-600 hover:bg-blue-700 text-white h-9"
+              className="h-10 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 group relative overflow-hidden"
             >
-              <Plus className="w-4 h-4 mr-2" />
-              Add User
+              <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+              <Plus className="w-4 h-4 mr-2 group-hover:rotate-90 transition-transform duration-200" />
+              <span>Add User</span>
+            </Button>
+          )}
+          
+          {/* Bulk Actions Button */}
+          {canWriteUsers && users.length > 0 && (
+            <Button 
+              variant="outline"
+              className="h-10 px-4 text-gray-700 border-gray-300 hover:border-purple-400 hover:text-purple-600 hover:bg-purple-50 transition-all duration-200 group relative overflow-hidden"
+              onClick={() => setSelectedUsers(users.map(user => user.id))}
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/5 to-purple-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+              <div className="w-4 h-4 mr-2 border-2 border-current rounded-sm group-hover:scale-110 transition-transform duration-200"></div>
+              <span className="font-medium">Select All</span>
             </Button>
           )}
         </div>
       </div>
 
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
+      {/* Bulk Actions Bar */}
+      {selectedUsers.length > 0 && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mb-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                {selectedUsers.length}
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">
+                  {selectedUsers.length} user{selectedUsers.length > 1 ? 's' : ''} selected
+                </p>
+                <p className="text-sm text-gray-600">Choose an action to perform on selected users</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBulkStatusChange('active')}
+                disabled={isBulkActionLoading}
+                className="text-green-600 border-green-200 hover:bg-green-50"
+              >
+                <UserCheck className="h-4 w-4 mr-2" />
+                Activate
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBulkStatusChange('inactive')}
+                disabled={isBulkActionLoading}
+                className="text-orange-600 border-orange-200 hover:bg-orange-50"
+              >
+                <UserIcon className="h-4 w-4 mr-2" />
+                Deactivate
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBulkDelete}
+                disabled={isBulkActionLoading}
+                className="text-red-600 border-red-200 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedUsers([])}
+                className="text-gray-600"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Premium Table Container */}
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden backdrop-blur-sm">
+        {/* Table Header with Premium Styling */}
+        <div className="bg-gradient-to-r from-gray-50 via-gray-100/30 to-gray-50 border-b border-gray-200/70 shadow-sm">
           <Table>
             <TableHeader>
-            <TableRow className="bg-gray-50 hover:bg-gray-50">
-              <TableHead className="font-medium text-gray-600 py-3 px-4">Name</TableHead>
-              <TableHead className="font-medium text-gray-600">Email</TableHead>
-              <TableHead className="font-medium text-gray-600">Role</TableHead>
-              <TableHead className="font-medium text-gray-600">Status</TableHead>
-              <TableHead className="font-medium text-gray-600">Mobile</TableHead>
-              <TableHead className="font-medium text-gray-600">Organization</TableHead>
-              <TableHead className="font-medium text-gray-600">Campaigns</TableHead>
-              <TableHead className="font-medium text-gray-600">Created Date</TableHead>
-              <TableHead className="font-medium text-gray-600 text-right pr-4">Actions</TableHead>
+            <TableRow className="hover:bg-transparent border-none">
+              <TableHead className="font-semibold text-gray-700 py-4 px-6 text-sm uppercase tracking-wide w-12">
+                <div className="flex items-center justify-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedUsers.length === users.length && users.length > 0}
+                    onChange={handleSelectAllUsers}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                  />
+                </div>
+              </TableHead>
+              <TableHead className="font-semibold text-gray-700 py-4 px-6 text-sm uppercase tracking-wide">
+                <div className="flex items-center space-x-2">
+                  <UserIcon className="h-4 w-4 text-gray-500" />
+                  <span>Name</span>
+                </div>
+              </TableHead>
+              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
+                <div className="flex items-center space-x-2">
+                  <Mail className="h-4 w-4 text-gray-500" />
+                  <span>Email</span>
+                </div>
+              </TableHead>
+              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
+                <div className="flex items-center space-x-2">
+                  <Shield className="h-4 w-4 text-gray-500" />
+                  <span>Role</span>
+                </div>
+              </TableHead>
+              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span>Status</span>
+                </div>
+              </TableHead>
+              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
+                <div className="flex items-center space-x-2">
+                  <Phone className="h-4 w-4 text-gray-500" />
+                  <span>Mobile</span>
+                </div>
+              </TableHead>
+              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
+                <div className="flex items-center space-x-2">
+                  <Building2 className="h-4 w-4 text-gray-500" />
+                  <span>Organization</span>
+                </div>
+              </TableHead>
+              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
+                <div className="flex items-center space-x-2">
+                  <CalendarIcon className="h-4 w-4 text-gray-500" />
+                  <span>Campaigns</span>
+                </div>
+              </TableHead>
+              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
+                <div className="flex items-center space-x-2">
+                  <CalendarIcon2 className="h-4 w-4 text-gray-500" />
+                  <span>Created Date</span>
+                </div>
+              </TableHead>
+              <TableHead className="font-semibold text-gray-700 py-4 px-6 text-sm uppercase tracking-wide text-right">
+                <div className="flex items-center justify-end space-x-2">
+                  <Edit className="h-4 w-4 text-gray-500" />
+                  <span>Actions</span>
+                </div>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isInitialLoading ? (
-              <TableRow>
-                <TableCell colSpan={9} className="text-center py-8">
-                  <div className="flex items-center justify-center">
-                    <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2" />
-                    <span className="text-gray-500">Loading users...</span>
+              // Premium Loading Skeletons
+              Array.from({ length: 5 }).map((_, index) => (
+                <TableRow key={index} className="border-b border-gray-100">
+                  <TableCell className="py-4 px-6">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 bg-gray-200 rounded-full animate-pulse"></div>
+                      <div className="space-y-2">
+                        <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>
+                        <div className="h-3 bg-gray-100 rounded animate-pulse w-16"></div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-4 px-4">
+                    <div className="h-4 bg-gray-200 rounded animate-pulse w-32"></div>
+                  </TableCell>
+                  <TableCell className="py-4 px-4">
+                    <div className="h-6 bg-gray-200 rounded-full animate-pulse w-16"></div>
+                  </TableCell>
+                  <TableCell className="py-4 px-4">
+                    <div className="h-6 bg-gray-200 rounded-full animate-pulse w-12"></div>
+                  </TableCell>
+                  <TableCell className="py-4 px-4">
+                    <div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div>
+                  </TableCell>
+                  <TableCell className="py-4 px-4">
+                    <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>
+                  </TableCell>
+                  <TableCell className="py-4 px-4">
+                    <div className="h-6 bg-gray-200 rounded-full animate-pulse w-16"></div>
+                  </TableCell>
+                  <TableCell className="py-4 px-4">
+                    <div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div>
+                  </TableCell>
+                  <TableCell className="py-4 px-6">
+                    <div className="flex justify-end space-x-2">
+                      <div className="h-8 w-8 bg-gray-200 rounded animate-pulse"></div>
+                      <div className="h-8 w-8 bg-gray-200 rounded animate-pulse"></div>
+                      <div className="h-8 w-8 bg-gray-200 rounded animate-pulse"></div>
                   </div>
                 </TableCell>
               </TableRow>
+              ))
             ) : users.length === 0 ? (
+              // Premium Empty State
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8">
-                  <div className="flex flex-col items-center justify-center text-gray-500">
-                    <UserIcon className="h-8 w-8 mb-2 text-gray-400" />
-                    <p className="text-lg font-medium">No users found</p>
-                    <p className="text-sm text-gray-400">Try adjusting your search or filters</p>
+                <TableCell colSpan={9} className="text-center py-16">
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center mb-4">
+                      <UserIcon className="h-8 w-8 text-blue-500" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No users found</h3>
+                    <p className="text-gray-500 mb-6 max-w-sm">Try adjusting your search criteria or create a new user to get started.</p>
+                    <Button onClick={handleAddUserClick} className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add First User
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((user) => (
-                <TableRow key={user.id} className="hover:bg-gray-50/50">
-                  <TableCell className="py-3 px-4">
-                    <span className="font-medium text-gray-900">
-                      {`${user.first_name} ${user.last_name}`.trim() || "Not Set"}
-                    </span>
+              users.map((user, index) => (
+                <TableRow 
+                  key={user.id} 
+                  className="border-b border-gray-100/50 hover:bg-gradient-to-r hover:from-blue-50/40 hover:to-indigo-50/30 transition-all duration-300 group hover:shadow-sm"
+                >
+                  <TableCell className="py-4 px-6 w-12">
+                    <div className="flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedUsers.includes(user.id)}
+                        onChange={() => handleSelectUser(user.id)}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                      />
+                    </div>
                   </TableCell>
-                  <TableCell className="text-gray-600">{user.email}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={cn(
-                      "capitalize font-medium",
-                      getRoleBadgeVariantFromIdOrName(user.role_id, user.role as any)
-                    )}>
+                  <TableCell className="py-4 px-6">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-md group-hover:shadow-lg transition-all duration-200">
+                        {`${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`.toUpperCase() || 'U'}
+                      </div>
+                      <div>
+                        <div className="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">
+                      {`${user.first_name} ${user.last_name}`.trim() || "Not Set"}
+                        </div>
+                        <div className="text-xs text-gray-500">ID: {user.id.slice(0, 8)}...</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-4 px-4">
+                    <div className="flex items-center space-x-2">
+                      <Mail className="h-4 w-4 text-gray-400" />
+                      <span className="text-gray-700 font-medium">{user.email}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-4 px-4">
+                    <Badge 
+                      variant="outline" 
+                      className={cn(
+                        "capitalize font-semibold px-3 py-1 rounded-full border-2 transition-all duration-200 shadow-sm hover:shadow-md",
+                        getRoleBadgeVariantFromIdOrName(user.role_id, user.role as any)
+                      )}
+                    >
                       {getRoleDisplayNameFromIdOrName(user.role_id, user.role as any)}
                     </Badge>
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={cn(
-                      "capitalize font-medium",
-                      user.status === 'active' 
-                        ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
-                        : "bg-gray-50 text-gray-600 border-gray-200"
-                    )}>
-                      {user.status}
+                  <TableCell className="py-4 px-4">
+                    <Badge 
+                      variant="outline" 
+                      className={cn(
+                        "capitalize font-semibold px-3 py-1 rounded-full border-2 transition-all duration-200 shadow-sm hover:shadow-md",
+                        user.status === 'active' 
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" 
+                          : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
+                      )}
+                    >
+                      <div className="flex items-center space-x-1">
+                        <div className={cn(
+                          "w-2 h-2 rounded-full",
+                          user.status === 'active' ? "bg-emerald-500" : "bg-red-500"
+                        )}></div>
+                        <span>{user.status}</span>
+                      </div>
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-gray-600">{user.mobile_number || 'Not Set'}</TableCell>
-                  <TableCell className="text-gray-600">{user.organization_name || 'Not Set'}</TableCell>
-                  <TableCell className="text-gray-600">
+                  <TableCell className="py-4 px-4">
+                    <div className="flex items-center space-x-2">
+                      <Phone className="h-4 w-4 text-gray-400" />
+                      <span className="text-gray-700">{user.mobile_number || 'Not Set'}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-4 px-4">
+                    <div className="flex items-center space-x-2">
+                      <Building2 className="h-4 w-4 text-gray-400" />
+                      <span className="text-gray-700">{user.organization_name || 'Not Set'}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-4 px-4">
                     {user.campaign_ids && user.campaign_ids.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {user.campaign_ids.slice(0, 2).map((campaignId) => {
                           const campaign = campaigns.find(c => c.id === campaignId);
                           return campaign ? (
-                            <Badge key={campaignId} variant="outline" className="text-xs">
+                            <Badge key={campaignId} variant="secondary" className="text-xs px-2 py-1 bg-blue-100 text-blue-700 border-blue-200">
                               {campaign.name}
                             </Badge>
                           ) : null;
                         })}
                         {user.campaign_ids.length > 2 && (
-                          <Badge variant="outline" className="text-xs">
+                          <Badge variant="secondary" className="text-xs px-2 py-1 bg-gray-100 text-gray-600">
                             +{user.campaign_ids.length - 2} more
                           </Badge>
                         )}
                       </div>
                     ) : (
-                      'Not Set'
+                      <span className="text-gray-500 italic">Not Set</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-gray-600">{formatDate(user.created_at)}</TableCell>
-                  <TableCell className="text-right pr-4">
+                  <TableCell className="py-4 px-4">
+                    <div className="flex items-center space-x-2">
+                      <CalendarIcon2 className="h-4 w-4 text-gray-400" />
+                      <span className="text-gray-700">{formatDate(user.created_at)}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-4 px-6">
                     <div className="flex items-center justify-end gap-1">
                       <Button 
                         variant="ghost" 
                         size="sm"
                         onClick={() => setViewingUser(user)}
-                        className="h-8 w-8 p-0 text-gray-600 hover:text-blue-600 hover:bg-blue-50"
+                        className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200 group/btn rounded-lg shadow-sm hover:shadow-md"
+                        title="View User"
                       >
-                        <Eye className="h-4 w-4" />
+                        <Eye className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
                       </Button>
                       {canWriteUsers && (
                         <>
@@ -1105,17 +1537,19 @@ export default function Users() {
                             variant="ghost" 
                             size="sm"
                             onClick={() => handleEdit(user)}
-                            className="h-8 w-8 p-0 text-gray-600 hover:text-amber-600 hover:bg-amber-50"
+                            className="h-8 w-8 p-0 hover:bg-emerald-50 hover:text-emerald-600 transition-all duration-200 group/btn rounded-lg shadow-sm hover:shadow-md"
+                            title="Edit User"
                           >
-                            <Edit className="h-4 w-4" />
+                            <Edit className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => setDeletingUser(user)}
-                            className="h-8 w-8 p-0 text-gray-600 hover:text-red-600 hover:bg-red-50"
+                            className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600 transition-all duration-200 group/btn rounded-lg shadow-sm hover:shadow-md"
+                            title="Delete User"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
                           </Button>
                         </>
                       )}
@@ -1126,6 +1560,7 @@ export default function Users() {
             )}
             </TableBody>
           </Table>
+        </div>
       </div>
 
       {/* Edit/Create Dialog */}
@@ -1530,72 +1965,155 @@ export default function Users() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Premium Delete Confirmation Dialog */}
       <AlertDialog open={!!deletingUser} onOpenChange={(open) => !open && setDeletingUser(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the user's account
-              and remove their data from the system.
+        <AlertDialogContent className="sm:max-w-[500px] border-0 shadow-2xl">
+          <div className="relative">
+            {/* Background Gradient */}
+            <div className="absolute inset-0 bg-gradient-to-br from-red-50 via-orange-50/30 to-yellow-50/20 rounded-lg"></div>
+            
+            <div className="relative p-6">
+              <AlertDialogHeader className="text-center">
+                <div className="mx-auto w-16 h-16 bg-gradient-to-br from-red-100 to-orange-100 rounded-full flex items-center justify-center mb-4">
+                  <Trash2 className="h-8 w-8 text-red-500" />
+                </div>
+                <AlertDialogTitle className="text-xl font-bold text-gray-900">
+                  Delete User Account
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-gray-600 mt-2">
+                  <div className="space-y-2">
+                    <p>You are about to permanently delete:</p>
+                    <div className="bg-gray-50 rounded-lg p-3 border">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                          {deletingUser ? `${deletingUser.first_name?.[0] || ''}${deletingUser.last_name?.[0] || ''}`.toUpperCase() : 'U'}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">
+                            {deletingUser ? `${deletingUser.first_name} ${deletingUser.last_name}`.trim() : 'Unknown User'}
+                          </p>
+                          <p className="text-sm text-gray-500">{deletingUser?.email}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-sm text-red-600 font-medium">
+                      ⚠️ This action cannot be undone and will permanently remove all user data.
+                    </p>
+                  </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              
+              <AlertDialogFooter className="flex-col sm:flex-row gap-3 mt-6">
+                <AlertDialogCancel 
+                  disabled={isDeleting}
+                  className="w-full sm:w-auto bg-gray-100 hover:bg-gray-200 text-gray-700 border-0 font-medium"
+                >
+                  Cancel
+                </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deletingUser && handleDeleteUser(deletingUser)}
               disabled={isDeleting}
-              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                  className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 focus:ring-red-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
             >
               {isDeleting ? (
-                <>
+                    <div className="flex items-center justify-center">
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                  Deleting...
-                </>
+                      Deleting User...
+                    </div>
               ) : (
-                'Delete User'
+                    <div className="flex items-center justify-center">
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete User
+                    </div>
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
+            </div>
+          </div>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Create User Dialog */}
+      {/* Premium Create User Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Create New User</DialogTitle>
-            <DialogDescription>
-              Add a new user to your organization. Fill in the required information below.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="sm:max-w-[700px] border-0 shadow-2xl overflow-hidden">
+          <div className="relative">
+            {/* Background Gradient */}
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50/30 to-purple-50/20"></div>
+              <DialogHeader className="text-center pb-6 border-b border-gray-200/50">
+                <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mb-4 shadow-lg">
+                  <Plus className="h-8 w-8 text-white" />
+                </div>
+                <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-indigo-800 bg-clip-text text-transparent">
+                  Create New User
+                </DialogTitle>
+                <DialogDescription className="text-gray-600 mt-2 max-w-md mx-auto">
+                  Add a new user to your organization. Fill in the required information below to get started.
+                </DialogDescription>
+              </DialogHeader>
 
-          <form onSubmit={handleCreateUser} className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              {/* Basic Information */}
+              <form onSubmit={handleCreateUser} className="space-y-6 py-6">
+                {/* Progress Indicator */}
+                <div className="flex items-center justify-center space-x-2 mb-6">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                      1
+                    </div>
+                    <span className="text-sm font-medium text-gray-600">Basic Info</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-gray-200"></div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 text-sm font-semibold">
+                      2
+                    </div>
+                    <span className="text-sm font-medium text-gray-500">Organization</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-gray-200"></div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 text-sm font-semibold">
+                      3
+                    </div>
+                    <span className="text-sm font-medium text-gray-500">Review</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Basic Information Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-2 mb-4">
+                      <UserIcon className="h-5 w-5 text-blue-600" />
+                      <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
+                    </div>
+                    
+                    <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="first_name">First Name</Label>
-                <div className="relative">
-                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                        <Label htmlFor="first_name" className="text-sm font-medium text-gray-700">
+                          First Name <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="relative group">
+                          <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
                   <Input
                     id="first_name"
                     value={createFormData.first_name}
                     onChange={(e) => setCreateFormData({ ...createFormData, first_name: e.target.value })}
-                    className="pl-9"
+                            className="pl-9 h-11 border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
+                            placeholder="Enter first name"
                     required
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="last_name">Last Name</Label>
-                <div className="relative">
-                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                        <Label htmlFor="last_name" className="text-sm font-medium text-gray-700">
+                          Last Name <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="relative group">
+                          <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
                   <Input
                     id="last_name"
                     value={createFormData.last_name}
                     onChange={(e) => setCreateFormData({ ...createFormData, last_name: e.target.value })}
-                    className="pl-9"
+                            className="pl-9 h-11 border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
+                            placeholder="Enter last name"
                     required
                   />
                 </div>
@@ -1656,9 +2174,21 @@ export default function Users() {
                   </button>
                 </div>
               </div>
+                    </div>
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="organization">Organization</Label>
+                  {/* Organization & Role Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-2 mb-4">
+                      <Building2 className="h-5 w-5 text-purple-600" />
+                      <h3 className="text-lg font-semibold text-gray-900">Organization & Role</h3>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="organization" className="text-sm font-medium text-gray-700">
+                          Organization <span className="text-red-500">*</span>
+                        </Label>
                 <Select
                   value={createFormData.organization_id || ""}
                   onValueChange={(value) => setCreateFormData({ ...createFormData, organization_id: value })}
@@ -1746,10 +2276,10 @@ export default function Users() {
                         return selectedOrg ? c.org_id === selectedOrg : true;
                       })
                       .map((campaign) => (
-                        <SelectItem key={campaign.id} value={campaign.id}>
-                          {campaign.name}
-                        </SelectItem>
-                      ))}
+                      <SelectItem key={campaign.id} value={campaign.id}>
+                        {campaign.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 {createFormData.campaign_ids && createFormData.campaign_ids.length > 0 && (
@@ -1775,34 +2305,43 @@ export default function Users() {
                     })}
                   </div>
                 )}
-              </div>
-            </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-            <DialogFooter className="mt-6">
+            <DialogFooter className="mt-8 pt-6 border-t border-gray-200/50">
+                <div className="flex flex-col sm:flex-row gap-3 w-full">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setIsCreateDialogOpen(false)}
                 disabled={isCreateSubmitting}
+                    className="w-full sm:w-auto bg-gray-100 hover:bg-gray-200 text-gray-700 border-0 font-medium h-11"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 disabled={isCreateSubmitting}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700"
+                    className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 h-11"
               >
                 {isCreateSubmitting ? (
-                  <>
+                      <div className="flex items-center justify-center">
                     <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                    Creating...
-                  </>
+                        Creating User...
+                      </div>
                 ) : (
-                  "Create User"
+                      <div className="flex items-center justify-center">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create User
+                      </div>
                 )}
               </Button>
-            </DialogFooter>
-          </form>
+                </div>
+              </DialogFooter>
+              </form>
+          </div>
         </DialogContent>
       </Dialog>
       </>
