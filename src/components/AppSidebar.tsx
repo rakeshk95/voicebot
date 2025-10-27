@@ -215,15 +215,15 @@ export function AppSidebar() {
   }
 
   return (
-    <div className="fixed left-0 top-0 h-screen w-64 bg-gradient-to-b from-white via-slate-50/50 to-gray-100/30 border-r border-gray-200/50 shadow-xl flex flex-col z-30">
+    <div className="fixed left-0 top-0 h-screen w-64 bg-gradient-to-b from-white via-blue-50/40 to-teal-50/30 border-r-2 border-blue-200/60 shadow-2xl flex flex-col z-30">
       {/* Logo Container */}
       <div className="pt-4 shrink-0">
-        <div className="px-6 pb-4 border-b border-gray-200/30">
-          <div className="flex items-center">
+        <div className="px-4 pb-4 border-b-2 border-blue-200/50">
+          <div className="flex items-center justify-start w-full">
             <img 
               src={voxiflowLogo} 
               alt="Voxiflow" 
-              className="w-[140px] h-auto"
+              className="w-[180px] h-auto"
             />
           </div>
           <p className="text-xs text-gray-500 mt-2 font-medium">
@@ -238,18 +238,18 @@ export function AppSidebar() {
           <div className="space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent pr-1">
             {organizedSidebarItems.map((section, index) => (
               <div key={section.section} className="space-y-1">
-                {index > 0 && <Separator className="my-2 bg-gray-200/50" />}
+                {index > 0 && <Separator className="my-2 bg-blue-200/50" />}
                 
                 {/* Collapsible Section Header */}
                 <button
                   onClick={() => toggleSection(section.section)}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-gray-600 uppercase tracking-wider bg-gray-100/50 hover:bg-gray-200/50 rounded-md transition-all duration-200 group"
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-blue-700 uppercase tracking-wider bg-gradient-to-r from-blue-100/60 to-teal-100/40 hover:from-blue-200/60 hover:to-teal-200/40 rounded-md transition-all duration-200 group border border-blue-200/50"
                 >
                   <span>{section.section.replace('_', ' ')}</span>
                   {expandedSections[section.section] ? (
-                    <ChevronDown className="h-3 w-3 text-gray-500 group-hover:text-gray-700 transition-colors" />
+                    <ChevronDown className="h-3 w-3 text-blue-600 group-hover:text-blue-800 transition-colors" />
                   ) : (
-                    <ChevronRight className="h-3 w-3 text-gray-500 group-hover:text-gray-700 transition-colors" />
+                    <ChevronRight className="h-3 w-3 text-blue-600 group-hover:text-blue-800 transition-colors" />
                   )}
                 </button>
                 
@@ -265,7 +265,7 @@ export function AppSidebar() {
                             "flex items-center px-3 py-2 text-sm font-medium rounded-xl transition-all duration-300 group relative overflow-hidden",
                             isActive
                               ? "text-white bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/25 border border-blue-500/20"
-                              : "text-gray-700 hover:text-gray-900 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50/30 hover:shadow-sm border border-transparent hover:border-gray-200/50"
+                              : "text-gray-700 hover:text-blue-800 hover:bg-gradient-to-r hover:from-blue-50/60 hover:to-teal-50/40 hover:shadow-sm border border-transparent hover:border-blue-200/50"
                           )
                         }
                         // PERFORMANCE FIX: Prevent multiple navigation triggers

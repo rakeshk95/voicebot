@@ -8,49 +8,15 @@ import { authorizedFetch } from './api';
 import { BatchCallStartRequest, BatchCallOperation, BatchOperationsList, BatchCallSummary } from '@/types/batchCalling';
 
 // Base URL for unified batch calling API - use local backend
-const UNIFIED_BATCH_CALLS_BASE_URL = 'http://localhost:8000/api/v1/unified-batch-calls';
+const UNIFIED_BATCH_CALLS_BASE_URL = 'http://localhost:8000/api/v1/batch-calls';
 
-// Custom fetch function for local backend
+// Use the standard authorizedFetch function which handles authentication properly
 async function localAuthorizedFetch<T>(url: string, options?: RequestInit): Promise<Response> {
-  const token = localStorage.getItem('authToken');
-  
-  console.log('🔍 localAuthorizedFetch - Token:', token ? 'Present' : 'Missing');
   console.log('🔍 localAuthorizedFetch - URL:', url);
   console.log('🔍 localAuthorizedFetch - Method:', options?.method || 'GET');
   
-  // Don't set Content-Type for FormData - let browser set it automatically with boundary
-  const headers: Record<string, string> = {
-    'Authorization': token ? `Bearer ${token}` : '',
-  };
-  
-  // Only set Content-Type for non-FormData requests
-  if (!(options?.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
-  }
-  
-  // Merge any additional headers from options
-  if (options?.headers) {
-    Object.assign(headers, options.headers);
-  }
-
-  console.log('🔍 localAuthorizedFetch - Headers:', headers);
-
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
-
-  console.log('🔍 localAuthorizedFetch - Response Status:', response.status);
-  console.log('🔍 localAuthorizedFetch - Response Headers:', Object.fromEntries(response.headers.entries()));
-
-  if (response.status === 401) {
-    console.error('❌ Unauthorized access to local backend - Token may be invalid or expired');
-    const errorText = await response.text();
-    console.error('❌ Error response:', errorText);
-    throw new Error("Unauthorized");
-  }
-
-  return response;
+  // Use the standard authorizedFetch which handles authentication correctly
+  return await authorizedFetch<T>(url, options);
 }
 
 export interface UnifiedBatchCallResponse {
@@ -198,26 +164,32 @@ export async function createUnifiedBatchOperation(
       formData.append('batch_size', request.batch_size.toString());
     }
 
-    // Debug: Log FormData contents
-    console.log('🔍 FormData contents:');
-    for (let [key, value] of formData.entries()) {
-      if (value instanceof File) {
-        console.log(`  ${key}: [File] ${value.name} (${value.size} bytes)`);
-      } else {
-        console.log(`  ${key}: ${value}`);
-      }
+  // Debug: Log FormData contents
+  console.log('🔍 FormData contents:');
+  for (let [key, value] of formData.entries()) {
+    if (value instanceof File) {
+      console.log(`  ${key}: [File] ${value.name} (${value.size} bytes)`);
+    } else {
+      console.log(`  ${key}: ${value}`);
     }
+  }
+  
+  // Additional debug: Check if file is actually in FormData
+  const fileEntry = formData.get('file');
+  console.log('🔍 File entry in FormData:', fileEntry);
+  console.log('🔍 File entry type:', typeof fileEntry);
+  console.log('🔍 File entry instanceof File:', fileEntry instanceof File);
 
-    console.log('🔍 Request URL:', `${UNIFIED_BATCH_CALLS_BASE_URL}/create`);
+    console.log('🔍 Request URL:', `/batch-calls/create`);
     console.log('🔍 Request method: POST');
     console.log('🔍 FormData type:', formData.constructor.name);
     console.log('🔍 FormData size:', formData.toString().length);
 
-  // First test the FormData without authentication
+  // First test the FormData with authentication
   console.log('🧪 Testing FormData with test endpoint first...');
   
   try {
-    const testResponse = await fetch(`${UNIFIED_BATCH_CALLS_BASE_URL}/test`, {
+    const testResponse = await localAuthorizedFetch(`/batch-calls/test`, {
       method: 'POST',
       body: formData,
     });
@@ -227,7 +199,7 @@ export async function createUnifiedBatchOperation(
     console.log('🧪 Test endpoint response:', testResult);
     
     if (testResponse.ok) {
-      console.log('✅ FormData is working correctly - authentication is the issue');
+      console.log('✅ FormData is working correctly');
     } else {
       console.log('❌ FormData has issues:', testResult);
     }
@@ -236,7 +208,7 @@ export async function createUnifiedBatchOperation(
   }
 
   const response = await localAuthorizedFetch<UnifiedBatchCallResponse>(
-    `${UNIFIED_BATCH_CALLS_BASE_URL}/create`,
+    `/batch-calls/create`,
     {
       method: 'POST',
       body: formData,
@@ -283,7 +255,7 @@ export async function getUnifiedOperationsList(
     if (filters?.limit) params.append('limit', filters.limit.toString());
     if (filters?.offset) params.append('offset', filters.offset.toString());
 
-    const url = `${UNIFIED_BATCH_CALLS_BASE_URL}/operations${params.toString() ? `?${params.toString()}` : ''}`;
+    const url = `/batch-calls/operations${params.toString() ? `?${params.toString()}` : ''}`;
     
     const response = await localAuthorizedFetch<UnifiedOperationsList>(url);
 
@@ -322,7 +294,7 @@ export async function getUnifiedOperationStatus(operationId: string): Promise<{
       source: 'memory' | 'database';
       data: UnifiedOperationStatus;
       note: string;
-    }>(`${UNIFIED_BATCH_CALLS_BASE_URL}/operations/${operationId}`);
+    }>(`/batch-calls/operations/${operationId}`);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -352,7 +324,7 @@ export async function pauseUnifiedOperation(operationId: string): Promise<{ mess
     console.log('⏸️ Pausing unified operation:', operationId);
     
     const response = await localAuthorizedFetch<{ message: string; status: string }>(
-      `${UNIFIED_BATCH_CALLS_BASE_URL}/operations/${operationId}/pause`,
+      `/batch-calls/operations/${operationId}/pause`,
       {
         method: 'POST',
       }
@@ -382,7 +354,7 @@ export async function resumeUnifiedOperation(operationId: string): Promise<{ mes
     console.log('▶️ Resuming unified operation:', operationId);
     
     const response = await localAuthorizedFetch<{ message: string; status: string }>(
-      `${UNIFIED_BATCH_CALLS_BASE_URL}/operations/${operationId}/resume`,
+      `/batch-calls/operations/${operationId}/resume`,
       {
         method: 'POST',
       }
@@ -412,7 +384,7 @@ export async function cancelUnifiedOperation(operationId: string): Promise<{ mes
     console.log('🛑 Cancelling unified operation:', operationId);
     
     const response = await localAuthorizedFetch<{ message: string; status: string }>(
-      `${UNIFIED_BATCH_CALLS_BASE_URL}/operations/${operationId}/cancel`,
+      `/batch-calls/operations/${operationId}/cancel`,
       {
         method: 'POST',
       }
@@ -450,7 +422,7 @@ export async function getUnifiedOperationsSummary(
     if (filters?.org_id) params.append('org_id', filters.org_id);
     if (filters?.user_id) params.append('user_id', filters.user_id);
 
-    const url = `${UNIFIED_BATCH_CALLS_BASE_URL}/summary${params.toString() ? `?${params.toString()}` : ''}`;
+    const url = `/batch-calls/summary${params.toString() ? `?${params.toString()}` : ''}`;
     
     const response = await localAuthorizedFetch<UnifiedOperationsSummary>(url);
 
@@ -496,7 +468,7 @@ export async function cleanupUnifiedOperations(maxAgeHours: number = 24): Promis
       max_age_hours: number;
       timestamp: string;
     }>(
-      `${UNIFIED_BATCH_CALLS_BASE_URL}/cleanup?max_age_hours=${maxAgeHours}`,
+      `/batch-calls/cleanup?max_age_hours=${maxAgeHours}`,
       {
         method: 'POST',
       }
@@ -526,7 +498,7 @@ export async function getUnifiedSystemHealth(): Promise<UnifiedSystemHealth> {
     console.log('🏥 Getting unified system health status');
     
     const response = await localAuthorizedFetch<UnifiedSystemHealth>(
-      `${UNIFIED_BATCH_CALLS_BASE_URL}/health`
+      `/batch-calls/health`
     );
 
     if (!response.ok) {

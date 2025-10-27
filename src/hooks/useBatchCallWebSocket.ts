@@ -57,14 +57,12 @@ export function useBatchCallWebSocket(
   // Get WebSocket URL
   const getWebSocketUrl = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const baseUrl = `${protocol}//${host}`;
+    // Use backend port 8000 for WebSocket connections
+    const baseUrl = `${protocol}//localhost:8000`;
     
-    if (operationId) {
-      return `${baseUrl}/ws/batch-calls/${operationId}`;
-    } else {
-      return `${baseUrl}/ws/batch-calls`;
-    }
+    const url = operationId ? `${baseUrl}/ws/batch-calls/${operationId}` : `${baseUrl}/ws/batch-calls`;
+    console.log('🔗 Generated WebSocket URL:', url);
+    return url;
   }, [operationId]);
 
   // Connect to WebSocket
@@ -82,7 +80,7 @@ export function useBatchCallWebSocket(
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('✅ WebSocket connected');
+        console.log('✅ WebSocket connected successfully');
         setIsConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
@@ -123,7 +121,7 @@ export function useBatchCallWebSocket(
       };
 
       ws.onerror = (event) => {
-        console.error('❌ WebSocket error:', event);
+        console.error('❌ WebSocket error event:', event);
         setError('WebSocket connection error');
       };
 

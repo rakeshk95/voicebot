@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auth Test</title>
+</head>
+<body>
+    <h1>Authentication Test</h1>
+    <div id="status">Checking...</div>
+    <div id="details"></div>
+    
+    <script>
+        const statusDiv = document.getElementById('status');
+        const detailsDiv = document.getElementById('details');
+        
+        function addDetail(message) {
+            const p = document.createElement('p');
+            p.textContent = new Date().toLocaleTimeString() + ': ' + message;
+            detailsDiv.appendChild(p);
+        }
+        
+        // Check if user is logged in
+        const token = localStorage.getItem('authToken');
+        addDetail('Auth token: ' + (token ? 'Present' : 'Missing'));
+        
+        if (token) {
+            addDetail('Token preview: ' + token.substring(0, 20) + '...');
+            statusDiv.textContent = 'User is logged in';
+            statusDiv.style.color = 'green';
+            
+            // Test API call
+            addDetail('Testing API call...');
+            fetch('http://localhost:8000/api/v1/batch-calls/summary', {
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                addDetail('API Response Status: ' + response.status);
+                return response.text();
+            })
+            .then(text => {
+                addDetail('API Response: ' + text.substring(0, 200));
+                if (text.includes('Unauthorized')) {
+                    statusDiv.textContent = 'Token is invalid/expired';
+                    statusDiv.style.color = 'red';
+                } else {
+                    statusDiv.textContent = 'API call successful';
+                    statusDiv.style.color = 'green';
+                }
+            })
+            .catch(error => {
+                addDetail('API Error: ' + error.message);
+                statusDiv.textContent = 'API call failed';
+                statusDiv.style.color = 'red';
+            });
+        } else {
+            statusDiv.textContent = 'User is not logged in';
+            statusDiv.style.color = 'red';
+            addDetail('Please log in first');
+        }
+    </script>
+</body>
+</html>

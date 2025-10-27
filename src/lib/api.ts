@@ -15,26 +15,49 @@ const pendingRequests = new Map<string, Promise<any>>();
 
 export async function authorizedFetch<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
     const token = localStorage.getItem('authToken');
-    const headers = {
+    const isFormData = options?.body instanceof FormData;
+
+    // Build headers without forcing Content-Type for FormData
+    const headers: Record<string, any> = {
         ...options?.headers,
         'Authorization': token ? `Bearer ${token}` : '',
-        'Content-Type': options?.body instanceof FormData ? undefined : 'application/json',
     };
+    if (!isFormData) {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    console.log('🔍 authorizedFetch - URL:', url);
+    console.log('🔍 authorizedFetch - Token present:', !!token);
+    console.log('🔍 authorizedFetch - Method:', options?.method || 'GET');
+    console.log('🔍 authorizedFetch - Is FormData:', isFormData);
 
     const response: ApiResponse<T> = await fetch(`${API_BASE_URL}${url}`, {
         ...options,
         headers,
     });
 
+    console.log('🔍 authorizedFetch - Response status:', response.status);
+
     if (response.status === 401) {
-        toast({
-            title: "Session Expired",
-            description: "Your session has expired. Please log in again.",
-            variant: "destructive",
-        });
-        localStorage.removeItem('authToken');
-        // Redirect to login page
-        window.location.href = '/login'; // Assuming your login page is at /login
+        // Check if we have a token - if not, don't redirect (might be intentional)
+        const token = localStorage.getItem('authToken');
+        if (token) {
+            console.warn('Received 401 response with valid token - session may have expired');
+            
+            // Only redirect if we're not already on the login page and not in a batch calling context
+            if (!window.location.pathname.includes('/login')) {
+                // Add a small delay to prevent rapid redirects
+                setTimeout(() => {
+                    toast({
+                        title: "Session Expired",
+                        description: "Your session has expired. Please log in again.",
+                        variant: "destructive",
+                    });
+                    localStorage.removeItem('authToken');
+                    window.location.href = '/login';
+                }, 100);
+            }
+        }
         throw new Error("Unauthorized"); // Prevent further processing
     }
 

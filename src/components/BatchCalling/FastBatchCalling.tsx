@@ -199,6 +199,16 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
       return;
     }
 
+    // Check if file is selected
+    if (!file) {
+      toast({
+        title: 'No File Selected',
+        description: 'Please select an Excel file to upload.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setStarting(true);
     try {
       // Get user ID from localStorage
@@ -207,6 +217,7 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
       
       console.log('🔍 Debug - Auth Token:', authToken ? 'Present' : 'Missing');
       console.log('🔍 Debug - User Data Raw:', userDataRaw);
+      console.log('🔍 Debug - File:', file ? `${file.name} (${file.size} bytes)` : 'No file');
       
       if (!authToken) {
         toast({
@@ -346,68 +357,7 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
           </div>
         </div>
 
-        {/* Enhanced Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-green-50 to-emerald-50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-green-700 uppercase tracking-wide">Active</p>
-                  <p className="text-3xl font-bold text-green-600">{summary.active}</p>
-                  <p className="text-xs text-green-600 font-medium">{summary.total} total operations</p>
-                </div>
-                <div className="p-3 bg-green-100 rounded-full">
-                  <Activity className="h-6 w-6 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-blue-50 to-cyan-50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide">Completed</p>
-                  <p className="text-3xl font-bold text-blue-600">{summary.completed}</p>
-                  <p className="text-xs text-blue-600 font-medium">successful calls</p>
-                </div>
-                <div className="p-3 bg-blue-100 rounded-full">
-                  <Activity className="h-6 w-6 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-red-50 to-pink-50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-red-700 uppercase tracking-wide">Failed</p>
-                  <p className="text-3xl font-bold text-red-600">{summary.failed}</p>
-                  <p className="text-xs text-red-600 font-medium">failed calls</p>
-                </div>
-                <div className="p-3 bg-red-100 rounded-full">
-                  <Activity className="h-6 w-6 text-red-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-orange-50 to-amber-50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-orange-700 uppercase tracking-wide">Pending</p>
-                  <p className="text-3xl font-bold text-orange-600">{summary.pending}</p>
-                  <p className="text-xs text-orange-600 font-medium">queued calls</p>
-                </div>
-                <div className="p-3 bg-orange-100 rounded-full">
-                  <Activity className="h-6 w-6 text-orange-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Summary Cards Removed - Showing only on main dashboard to avoid redundancy */}
 
         {/* Enhanced Start New Batch Form */}
         <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">

@@ -1286,70 +1286,71 @@ export default function Users() {
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden backdrop-blur-sm">
         {/* Table Header with Premium Styling */}
         <div className="bg-gradient-to-r from-gray-50 via-gray-100/30 to-gray-50 border-b border-gray-200/70 shadow-sm">
-          <Table>
+          <div className="overflow-hidden">
+            <Table className="w-full table-fixed">
             <TableHeader>
             <TableRow className="hover:bg-transparent border-none">
-              <TableHead className="font-semibold text-gray-700 py-4 px-6 text-sm uppercase tracking-wide w-12">
+              <TableHead className="font-semibold text-gray-700 py-3 px-1 text-xs uppercase tracking-wide w-8">
                 <div className="flex items-center justify-center">
                   <input
                     type="checkbox"
                     checked={selectedUsers.length === users.length && users.length > 0}
                     onChange={handleSelectAllUsers}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                    className="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
                   />
                 </div>
               </TableHead>
-              <TableHead className="font-semibold text-gray-700 py-4 px-6 text-sm uppercase tracking-wide">
-                <div className="flex items-center space-x-2">
-                  <UserIcon className="h-4 w-4 text-gray-500" />
+              <TableHead className="font-semibold text-gray-700 py-3 px-1 text-xs uppercase tracking-wide w-32">
+                <div className="flex items-center space-x-1">
+                  <UserIcon className="h-3 w-3 text-gray-500" />
                   <span>Name</span>
                 </div>
               </TableHead>
-              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
-                <div className="flex items-center space-x-2">
-                  <Mail className="h-4 w-4 text-gray-500" />
+              <TableHead className="font-semibold text-gray-700 py-3 px-1 text-xs uppercase tracking-wide w-36">
+                <div className="flex items-center space-x-1">
+                  <Mail className="h-3 w-3 text-gray-500" />
                   <span>Email</span>
                 </div>
               </TableHead>
-              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
-                <div className="flex items-center space-x-2">
-                  <Shield className="h-4 w-4 text-gray-500" />
+              <TableHead className="font-semibold text-gray-700 py-3 px-1 text-xs uppercase tracking-wide w-20">
+                <div className="flex items-center space-x-1">
+                  <Shield className="h-3 w-3 text-gray-500" />
                   <span>Role</span>
                 </div>
               </TableHead>
-              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <TableHead className="font-semibold text-gray-700 py-3 px-1 text-xs uppercase tracking-wide w-16">
+                <div className="flex items-center space-x-1">
+                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
                   <span>Status</span>
                 </div>
               </TableHead>
-              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
-                <div className="flex items-center space-x-2">
-                  <Phone className="h-4 w-4 text-gray-500" />
+              <TableHead className="font-semibold text-gray-700 py-3 px-1 text-xs uppercase tracking-wide w-24">
+                <div className="flex items-center space-x-1">
+                  <Phone className="h-3 w-3 text-gray-500" />
                   <span>Mobile</span>
                 </div>
               </TableHead>
-              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
-                <div className="flex items-center space-x-2">
-                  <Building2 className="h-4 w-4 text-gray-500" />
-                  <span>Organization</span>
+              <TableHead className="font-semibold text-gray-700 py-3 px-1 text-xs uppercase tracking-wide w-28">
+                <div className="flex items-center space-x-1">
+                  <Building2 className="h-3 w-3 text-gray-500" />
+                  <span>Org</span>
                 </div>
               </TableHead>
-              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
-                <div className="flex items-center space-x-2">
-                  <CalendarIcon className="h-4 w-4 text-gray-500" />
+              <TableHead className="font-semibold text-gray-700 py-3 px-1 text-xs uppercase tracking-wide w-20">
+                <div className="flex items-center space-x-1">
+                  <CalendarIcon className="h-3 w-3 text-gray-500" />
                   <span>Campaigns</span>
                 </div>
               </TableHead>
-              <TableHead className="font-semibold text-gray-700 py-4 px-4 text-sm uppercase tracking-wide">
-                <div className="flex items-center space-x-2">
-                  <CalendarIcon2 className="h-4 w-4 text-gray-500" />
-                  <span>Created Date</span>
+              <TableHead className="font-semibold text-gray-700 py-3 px-1 text-xs uppercase tracking-wide w-24">
+                <div className="flex items-center space-x-1">
+                  <CalendarIcon2 className="h-3 w-3 text-gray-500" />
+                  <span>Created</span>
                 </div>
               </TableHead>
-              <TableHead className="font-semibold text-gray-700 py-4 px-6 text-sm uppercase tracking-wide text-right">
-                <div className="flex items-center justify-end space-x-2">
-                  <Edit className="h-4 w-4 text-gray-500" />
+              <TableHead className="font-semibold text-gray-700 py-3 px-1 text-xs uppercase tracking-wide text-right w-16">
+                <div className="flex items-center justify-end space-x-1">
+                  <Edit className="h-3 w-3 text-gray-500" />
                   <span>Actions</span>
                 </div>
               </TableHead>
@@ -1422,51 +1423,51 @@ export default function Users() {
                   key={user.id} 
                   className="border-b border-gray-100/50 hover:bg-gradient-to-r hover:from-blue-50/40 hover:to-indigo-50/30 transition-all duration-300 group hover:shadow-sm"
                 >
-                  <TableCell className="py-4 px-6 w-12">
+                  <TableCell className="py-3 px-1 w-8">
                     <div className="flex items-center justify-center">
                       <input
                         type="checkbox"
                         checked={selectedUsers.includes(user.id)}
                         onChange={() => handleSelectUser(user.id)}
-                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                        className="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
                       />
                     </div>
                   </TableCell>
-                  <TableCell className="py-4 px-6">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-md group-hover:shadow-lg transition-all duration-200">
+                  <TableCell className="py-3 px-1 w-32">
+                    <div className="flex items-center space-x-1">
+                      <div className="w-6 h-6 bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-xs shadow-md group-hover:shadow-lg transition-all duration-200 flex-shrink-0">
                         {`${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`.toUpperCase() || 'U'}
                       </div>
-                      <div>
-                        <div className="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors truncate text-xs">
                       {`${user.first_name} ${user.last_name}`.trim() || "Not Set"}
                         </div>
-                        <div className="text-xs text-gray-500">ID: {user.id.slice(0, 8)}...</div>
+                        <div className="text-xs text-gray-500 truncate">ID: {user.id.slice(0, 4)}...</div>
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="py-4 px-4">
-                    <div className="flex items-center space-x-2">
-                      <Mail className="h-4 w-4 text-gray-400" />
-                      <span className="text-gray-700 font-medium">{user.email}</span>
+                  <TableCell className="py-3 px-1 w-36">
+                    <div className="flex items-center space-x-1 min-w-0">
+                      <Mail className="h-2 w-2 text-gray-400 flex-shrink-0" />
+                      <span className="text-gray-700 font-medium truncate text-xs">{user.email}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="py-4 px-4">
+                  <TableCell className="py-3 px-1 w-20">
                     <Badge 
                       variant="outline" 
                       className={cn(
-                        "capitalize font-semibold px-3 py-1 rounded-full border-2 transition-all duration-200 shadow-sm hover:shadow-md",
+                        "capitalize font-semibold px-1 py-0.5 rounded-full border transition-all duration-200 shadow-sm hover:shadow-md text-xs",
                         getRoleBadgeVariantFromIdOrName(user.role_id, user.role as any)
                       )}
                     >
-                      {getRoleDisplayNameFromIdOrName(user.role_id, user.role as any)}
+                      <span className="truncate">{getRoleDisplayNameFromIdOrName(user.role_id, user.role as any)}</span>
                     </Badge>
                   </TableCell>
-                  <TableCell className="py-4 px-4">
+                  <TableCell className="py-3 px-1 w-16">
                     <Badge 
                       variant="outline" 
                       className={cn(
-                        "capitalize font-semibold px-3 py-1 rounded-full border-2 transition-all duration-200 shadow-sm hover:shadow-md",
+                        "capitalize font-semibold px-1 py-0.5 rounded-full border transition-all duration-200 shadow-sm hover:shadow-md text-xs",
                         user.status === 'active' 
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" 
                           : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
@@ -1474,62 +1475,62 @@ export default function Users() {
                     >
                       <div className="flex items-center space-x-1">
                         <div className={cn(
-                          "w-2 h-2 rounded-full",
+                          "w-1 h-1 rounded-full",
                           user.status === 'active' ? "bg-emerald-500" : "bg-red-500"
                         )}></div>
                         <span>{user.status}</span>
                       </div>
                     </Badge>
                   </TableCell>
-                  <TableCell className="py-4 px-4">
-                    <div className="flex items-center space-x-2">
-                      <Phone className="h-4 w-4 text-gray-400" />
-                      <span className="text-gray-700">{user.mobile_number || 'Not Set'}</span>
+                  <TableCell className="py-3 px-1 w-24">
+                    <div className="flex items-center space-x-1 min-w-0">
+                      <Phone className="h-2 w-2 text-gray-400 flex-shrink-0" />
+                      <span className="text-gray-700 truncate text-xs">{user.mobile_number || 'Not Set'}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="py-4 px-4">
-                    <div className="flex items-center space-x-2">
-                      <Building2 className="h-4 w-4 text-gray-400" />
-                      <span className="text-gray-700">{user.organization_name || 'Not Set'}</span>
+                  <TableCell className="py-3 px-1 w-28">
+                    <div className="flex items-center space-x-1 min-w-0">
+                      <Building2 className="h-2 w-2 text-gray-400 flex-shrink-0" />
+                      <span className="text-gray-700 truncate text-xs">{user.organization_name || 'Not Set'}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="py-4 px-4">
+                  <TableCell className="py-3 px-1 w-20">
                     {user.campaign_ids && user.campaign_ids.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {user.campaign_ids.slice(0, 2).map((campaignId) => {
+                      <div className="flex flex-wrap gap-0.5">
+                        {user.campaign_ids.slice(0, 1).map((campaignId) => {
                           const campaign = campaigns.find(c => c.id === campaignId);
                           return campaign ? (
-                            <Badge key={campaignId} variant="secondary" className="text-xs px-2 py-1 bg-blue-100 text-blue-700 border-blue-200">
+                            <Badge key={campaignId} variant="secondary" className="text-xs px-1 py-0.5 bg-blue-100 text-blue-700 border-blue-200 truncate">
                               {campaign.name}
                             </Badge>
                           ) : null;
                         })}
-                        {user.campaign_ids.length > 2 && (
-                          <Badge variant="secondary" className="text-xs px-2 py-1 bg-gray-100 text-gray-600">
-                            +{user.campaign_ids.length - 2} more
+                        {user.campaign_ids.length > 1 && (
+                          <Badge variant="secondary" className="text-xs px-1 py-0.5 bg-gray-100 text-gray-600">
+                            +{user.campaign_ids.length - 1}
                           </Badge>
                         )}
                       </div>
                     ) : (
-                      <span className="text-gray-500 italic">Not Set</span>
+                      <span className="text-gray-500 italic text-xs">Not Set</span>
                     )}
                   </TableCell>
-                  <TableCell className="py-4 px-4">
-                    <div className="flex items-center space-x-2">
-                      <CalendarIcon2 className="h-4 w-4 text-gray-400" />
-                      <span className="text-gray-700">{formatDate(user.created_at)}</span>
+                  <TableCell className="py-3 px-1 w-24">
+                    <div className="flex items-center space-x-1 min-w-0">
+                      <CalendarIcon2 className="h-2 w-2 text-gray-400 flex-shrink-0" />
+                      <span className="text-gray-700 truncate text-xs">{formatDate(user.created_at)}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="py-4 px-6">
-                    <div className="flex items-center justify-end gap-1">
+                  <TableCell className="py-3 px-1 w-16">
+                    <div className="flex items-center justify-end gap-0.5">
                       <Button 
                         variant="ghost" 
                         size="sm"
                         onClick={() => setViewingUser(user)}
-                        className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200 group/btn rounded-lg shadow-sm hover:shadow-md"
+                        className="h-6 w-6 p-0 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200 group/btn rounded shadow-sm hover:shadow-md"
                         title="View User"
                       >
-                        <Eye className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
+                        <Eye className="h-3 w-3 group-hover/btn:scale-110 transition-transform" />
                       </Button>
                       {canWriteUsers && (
                         <>
@@ -1537,19 +1538,19 @@ export default function Users() {
                             variant="ghost" 
                             size="sm"
                             onClick={() => handleEdit(user)}
-                            className="h-8 w-8 p-0 hover:bg-emerald-50 hover:text-emerald-600 transition-all duration-200 group/btn rounded-lg shadow-sm hover:shadow-md"
+                            className="h-6 w-6 p-0 hover:bg-emerald-50 hover:text-emerald-600 transition-all duration-200 group/btn rounded shadow-sm hover:shadow-md"
                             title="Edit User"
                           >
-                            <Edit className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
+                            <Edit className="h-3 w-3 group-hover/btn:scale-110 transition-transform" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => setDeletingUser(user)}
-                            className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600 transition-all duration-200 group/btn rounded-lg shadow-sm hover:shadow-md"
+                            className="h-6 w-6 p-0 hover:bg-red-50 hover:text-red-600 transition-all duration-200 group/btn rounded shadow-sm hover:shadow-md"
                             title="Delete User"
                           >
-                            <Trash2 className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
+                            <Trash2 className="h-3 w-3 group-hover/btn:scale-110 transition-transform" />
                           </Button>
                         </>
                       )}
@@ -1560,6 +1561,7 @@ export default function Users() {
             )}
             </TableBody>
           </Table>
+          </div>
         </div>
       </div>
 
@@ -1645,116 +1647,54 @@ export default function Users() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="role_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Role</FormLabel>
-                      <Select 
-                        onValueChange={field.onChange} 
-                        value={field.value}
-                        disabled={isLoadingCreateData || (roles || []).length === 0}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select role">
-                              {field.value ? getRoleDisplayNameFromIdOrName(field.value, field.value) : "Select role"}
-                            </SelectValue>
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {(roles || []).map((role) => (
-                            <SelectItem key={role.id} value={role.id}>
-                              {getRoleDisplayNameFromIdOrName(role.id, role.name)}
-                            </SelectItem>
-                          ))}
-                          {(!roles || roles.length === 0) && (
-                            <div className="px-3 py-2 text-xs text-gray-500">No roles available. Create roles in Roles tab.</div>
-                          )}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="organization_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Organization</FormLabel>
-                      <Select 
-                        onValueChange={async (value) => {
-                          const val = value === 'none' ? null : value;
-                          field.onChange(val);
-                          setCreateFormData(prev => ({ ...prev, organization_id: val }));
-                          // Refetch campaigns for selected org to keep dialog in sync
-                          try {
-                            let url = 'http://localhost:8000/api/v1/campaigns/';
-                            if (val) url += `?org_id=${val}`;
-                            const resp = await fetch(url, {
-                              headers: {
-                                'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-                                'Content-Type': 'application/json'
-                              },
-                            });
-                            const data = await resp.json();
-                            const list = Array.isArray(data) ? data : (Array.isArray(data?.value) ? data.value : []);
-                            setCampaigns(list);
-                          } catch (_e) {}
-                        }} 
-                        value={field.value || 'none'}
-                        disabled={isLoadingCreateData || (organizations || []).length === 0}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="pl-9">
-                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-                            <SelectValue placeholder="Select organization" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="none">Not Set</SelectItem>
-                          {(organizations || []).map((org) => (
-                            <SelectItem key={org.id} value={org.id}>
-                              {org.name}
-                            </SelectItem>
-                          ))}
-                          {(!organizations || organizations.length === 0) && (
-                            <div className="px-3 py-2 text-xs text-gray-500">No organizations available.</div>
-                          )}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Role</label>
+                  <select 
+                    className="w-full h-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={createFormData.role_id || ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setCreateFormData(prev => ({ ...prev, role_id: value }));
+                    }}
+                  >
+                    <option value="">Select role</option>
+                    <option value="role1">Test Role 1</option>
+                    <option value="role2">Test Role 2</option>
+                    <option value="role3">Test Role 3</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Organization *</label>
+                  <select 
+                    className="w-full h-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={createFormData.organization_id || ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setCreateFormData(prev => ({ ...prev, organization_id: value }));
+                    }}
+                  >
+                    <option value="">Select organization</option>
+                    <option value="org1">Test Organization 1</option>
+                    <option value="org2">Test Organization 2</option>
+                    <option value="org3">Test Organization 3</option>
+                  </select>
+                </div>
 
                 {editingUser && (
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Status</FormLabel>
-                        <Select 
-                          onValueChange={field.onChange} 
-                          value={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select status" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="active">Active</SelectItem>
-                            <SelectItem value="inactive">Inactive</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Status</label>
+                  <select 
+                    className="w-full h-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={createFormData.status}
+                    onChange={(e) => {
+                      const value = e.target.value as 'active' | 'inactive';
+                      setCreateFormData(prev => ({ ...prev, status: value }));
+                    }}
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
                 )}
 
                 <FormField

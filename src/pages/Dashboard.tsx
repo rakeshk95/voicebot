@@ -1056,26 +1056,32 @@ const Dashboard = () => {
 
 
   return (
-    <div className="space-y-6 overflow-x-hidden">
+    <div className="space-y-3 overflow-x-hidden bg-gradient-to-br from-slate-100 via-blue-100 to-teal-100 min-h-screen relative p-2">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 -left-4 w-96 h-96 bg-blue-300/20 rounded-full mix-blend-multiply filter blur-xl animate-blob"></div>
+        <div className="absolute top-0 -right-4 w-96 h-96 bg-teal-300/20 rounded-full mix-blend-multiply filter blur-xl animate-blob animation-delay-2000"></div>
+        <div className="absolute -bottom-8 left-20 w-96 h-96 bg-cyan-300/20 rounded-full mix-blend-multiply filter blur-xl animate-blob animation-delay-4000"></div>
+      </div>
 
 
       {/* Enhanced Filters */}
-      <Card className="p-6 bg-gradient-to-r from-white to-blue-50/30 border border-gray-200/50 shadow-sm">
-        <div className="flex flex-col lg:flex-row gap-6">
+      <Card className="p-4 bg-gradient-to-r from-white via-blue-100/60 to-teal-100/50 border-2 border-blue-300/50 shadow-2xl backdrop-blur-sm relative z-10">
+        <div className="flex flex-col lg:flex-row gap-3">
           {/* Organization Filter */}
           <div className="flex-1">
             <label className="text-sm font-semibold text-gray-800 mb-3 block flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-blue-600" />
+              <Building2 className="h-4 w-4 text-blue-500" />
               Organization
               {filters.org_id !== 'all' && (
-                <span className="ml-2 text-xs text-blue-600 font-medium bg-blue-100 px-2 py-1 rounded-full">
+                <span className="ml-2 text-xs text-blue-600 font-medium bg-gradient-to-r from-blue-100 to-teal-100 px-2 py-1 rounded-full border border-blue-200/50">
                   🔒 {organizations.find(org => org.id === filters.org_id)?.name}
                 </span>
               )}
             </label>
             {filterDataLoading ? (
-              <div className="h-10 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-500 flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              <div className="h-10 px-3 py-2 text-sm border border-blue-200 rounded-md bg-gradient-to-r from-blue-50 to-teal-50 text-blue-600 flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                 Loading organizations...
               </div>
             ) : organizations.length > 0 ? (
@@ -1109,7 +1115,7 @@ const Dashboard = () => {
                   }
                 }}
               >
-                <SelectTrigger className="h-11 border-gray-200 bg-white hover:bg-gray-50 focus:border-blue-500 focus:ring-blue-500/20 shadow-sm">
+                <SelectTrigger className="h-11 border-blue-200 bg-gradient-to-r from-white to-blue-50/30 hover:from-blue-50/50 hover:to-teal-50/30 focus:border-blue-500 focus:ring-blue-500/20 shadow-sm transition-all duration-200">
                   <SelectValue placeholder={"All Organizations"}>
                     {filters.org_id === 'all' 
                       ? 'All Organizations' 
@@ -1138,17 +1144,17 @@ const Dashboard = () => {
           {/* Campaign Filter */}
           <div className="flex-1">
             <label className="text-sm font-semibold text-gray-800 mb-3 block flex items-center gap-2">
-              <BarChartIcon className="h-4 w-4 text-blue-600" />
+              <BarChartIcon className="h-4 w-4 text-teal-500" />
               Campaign
               {filters.campaign_id !== 'all' && (
-                <span className="ml-2 text-xs text-blue-600 font-medium bg-blue-100 px-2 py-1 rounded-full">
+                <span className="ml-2 text-xs text-teal-600 font-medium bg-gradient-to-r from-teal-100 to-cyan-100 px-2 py-1 rounded-full border border-teal-200/50">
                   📊 {filteredCampaigns.find(camp => camp.id === filters.campaign_id)?.name}
                 </span>
               )}
             </label>
             {filterDataLoading ? (
-              <div className="h-10 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-500 flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              <div className="h-10 px-3 py-2 text-sm border border-teal-200 rounded-md bg-gradient-to-r from-teal-50 to-cyan-50 text-teal-600 flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
                 Loading campaigns...
               </div>
             ) : filteredCampaigns.length > 0 ? (
@@ -1176,7 +1182,7 @@ const Dashboard = () => {
                 }}
                 disabled={false}
               >
-                <SelectTrigger className="h-11 border-gray-200 bg-white hover:bg-gray-50 focus:border-blue-500 focus:ring-blue-500/20 shadow-sm">
+                <SelectTrigger className="h-11 border-teal-200 bg-gradient-to-r from-white to-teal-50/30 hover:from-teal-50/50 hover:to-cyan-50/30 focus:border-teal-500 focus:ring-teal-500/20 shadow-sm transition-all duration-200">
                   <SelectValue placeholder="All Campaigns">
                     {filters.campaign_id === 'all' ? 'All Campaigns' : filteredCampaigns.find(camp => camp.id === filters.campaign_id)?.name || 'Select Campaign'}
                   </SelectValue>
@@ -1203,9 +1209,9 @@ const Dashboard = () => {
           {/* Time Period Filter */}
           <div className="flex-1">
             <label className="text-sm font-semibold text-gray-800 mb-3 block flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-blue-600" />
+              <Calendar className="h-4 w-4 text-cyan-500" />
               Time Period
-              <span className="ml-2 text-xs text-blue-600 font-medium bg-blue-100 px-2 py-1 rounded-full">
+              <span className="ml-2 text-xs text-cyan-600 font-medium bg-gradient-to-r from-cyan-100 to-blue-100 px-2 py-1 rounded-full border border-cyan-200/50">
                 📅 {filters.days === 7 ? 'Last 7 days' : 
                    filters.days === 30 ? 'Last 30 days' : 
                    filters.days === 90 ? 'Last 90 days' : 
@@ -1234,7 +1240,7 @@ const Dashboard = () => {
                 }
               }}
             >
-              <SelectTrigger className="h-11 border-gray-200 bg-white hover:bg-gray-50 focus:border-blue-500 focus:ring-blue-500/20 shadow-sm">
+              <SelectTrigger className="h-11 border-cyan-200 bg-gradient-to-r from-white to-cyan-50/30 hover:from-cyan-50/50 hover:to-blue-50/30 focus:border-cyan-500 focus:ring-cyan-500/20 shadow-sm transition-all duration-200">
                 <SelectValue>
                   {filters.days === 7 ? 'Last 7 days' : 
                    filters.days === 30 ? 'Last 30 days' : 
@@ -1292,7 +1298,7 @@ const Dashboard = () => {
                }}
                variant="outline"
                size="sm"
-               className="h-11 px-4 bg-white hover:bg-gray-50 border-gray-200 text-gray-700 hover:text-gray-900 shadow-sm hover:shadow-md transition-all duration-200"
+               className="h-11 px-4 bg-gradient-to-r from-white to-blue-50/30 hover:from-blue-50/50 hover:to-teal-50/30 border-blue-200 text-blue-700 hover:text-blue-900 shadow-sm hover:shadow-md transition-all duration-200"
                title="Reset filters to show all data and refresh"
                disabled={loading}
              >
@@ -1305,14 +1311,14 @@ const Dashboard = () => {
 
      
       {/* Core Performance Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="hover:shadow-lg transition-shadow duration-200">
-          <CardContent className="p-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="hover:shadow-xl transition-all duration-300 border-2 border-blue-400/60 bg-gradient-to-br from-white to-blue-200/40 shadow-lg relative z-10">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <div className="p-3 rounded-lg bg-gradient-to-br from-blue-600 to-blue-400">
+              <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 shadow-xl">
                 <Phone className="h-5 w-5 text-white" />
               </div>
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs bg-gradient-to-r from-blue-200 to-teal-200 text-blue-800 border-2 border-blue-300/70 font-semibold">
                 {safeValue(metrics?.core_performance_metrics?.success_percentage, 0)}% Success
               </Badge>
             </div>
@@ -1324,13 +1330,13 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow duration-200">
-          <CardContent className="p-6">
+        <Card className="hover:shadow-xl transition-all duration-300 border-2 border-teal-400/60 bg-gradient-to-br from-white to-teal-200/40 shadow-lg relative z-10">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <div className="p-3 rounded-lg bg-gradient-to-br from-green-600 to-green-400">
+              <div className="p-3 rounded-lg bg-gradient-to-br from-teal-500 to-teal-600 shadow-xl">
                 <Target className="h-5 w-5 text-white" />
               </div>
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs bg-gradient-to-r from-teal-200 to-cyan-200 text-teal-800 border-2 border-teal-300/70 font-semibold">
                 {safeValue(metrics?.core_performance_metrics?.pickup_percentage, 0)}% Pickup
               </Badge>
             </div>
@@ -1344,13 +1350,13 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow duration-200">
-          <CardContent className="p-6">
+        <Card className="hover:shadow-xl transition-all duration-300 border-2 border-cyan-400/60 bg-gradient-to-br from-white to-cyan-200/40 shadow-lg relative z-10">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <div className="p-3 rounded-lg bg-gradient-to-br from-purple-600 to-purple-400">
+              <div className="p-3 rounded-lg bg-gradient-to-br from-cyan-500 to-cyan-600 shadow-xl">
                 <Clock className="h-5 w-5 text-white" />
               </div>
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs bg-gradient-to-r from-cyan-200 to-blue-200 text-cyan-800 border-2 border-cyan-300/70 font-semibold">
                 {(() => {
                   const formatted = metrics?.core_performance_metrics?.avg_handle_time_formatted;
                   const minutes = metrics?.core_performance_metrics?.avg_handle_time_minutes;
@@ -1408,13 +1414,13 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow duration-200">
-          <CardContent className="p-6">
+        <Card className="hover:shadow-xl transition-all duration-300 border-2 border-indigo-400/60 bg-gradient-to-br from-white to-indigo-200/40 shadow-lg relative z-10">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <div className="p-3 rounded-lg bg-gradient-to-br from-orange-600 to-orange-400">
+              <div className="p-3 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-xl">
                 <BarChart3 className="h-5 w-5 text-white" />
               </div>
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs bg-gradient-to-r from-indigo-200 to-blue-200 text-indigo-800 border-2 border-indigo-300/70 font-semibold">
                 {(() => {
                   const rate = metrics?.core_performance_metrics?.call_completion_rate;
                   
@@ -1468,10 +1474,10 @@ const Dashboard = () => {
 
       {/* Call Status Breakdown */}
       {metrics?.core_performance_metrics?.call_status_breakdown && (
-        <Card className="hover:shadow-lg transition-shadow duration-200">
+        <Card className="hover:shadow-xl transition-all duration-300 border-2 border-blue-400/60 bg-gradient-to-br from-white to-blue-200/40 shadow-lg relative z-10">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-blue-500" />
+              <BarChart3 className="h-5 w-5 text-blue-600" />
               Call Status Breakdown
             </CardTitle>
           </CardHeader>
@@ -1534,12 +1540,12 @@ const Dashboard = () => {
       )}
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Call Activity Chart */}
-        <Card className="hover:shadow-lg transition-shadow duration-200">
+        <Card className="hover:shadow-xl transition-all duration-300 border-2 border-blue-400/60 bg-gradient-to-br from-white to-blue-200/40 shadow-lg relative z-10">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-blue-500" />
+              <Activity className="h-5 w-5 text-blue-600" />
               Call Activity ({filters.days === 7 ? 'Hourly' : 'Daily'})
             </CardTitle>
           </CardHeader>
@@ -1599,10 +1605,10 @@ const Dashboard = () => {
         </Card>
 
         {/* AI Performance Metrics */}
-        <Card className="hover:shadow-lg transition-shadow duration-200">
+        <Card className="hover:shadow-xl transition-all duration-300 border-2 border-teal-400/60 bg-gradient-to-br from-white to-teal-200/40 shadow-lg relative z-10">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Brain className="h-5 w-5 text-purple-500" />
+              <Brain className="h-5 w-5 text-teal-600" />
               AI Performance
             </CardTitle>
           </CardHeader>
@@ -1645,12 +1651,12 @@ const Dashboard = () => {
       </div>
 
       {/* Additional Metrics Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* User Interaction Metrics */}
-        <Card className="hover:shadow-lg transition-shadow duration-200">
+        <Card className="hover:shadow-lg transition-all duration-300 border border-cyan-200/30 bg-gradient-to-br from-white to-cyan-50/20">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Users className="h-5 w-5 text-green-500" />
+              <Users className="h-5 w-5 text-cyan-500" />
               User Interaction
             </CardTitle>
           </CardHeader>
@@ -1687,10 +1693,10 @@ const Dashboard = () => {
         </Card>
 
         {/* Business Outcomes */}
-        <Card className="hover:shadow-lg transition-shadow duration-200">
+        <Card className="hover:shadow-lg transition-all duration-300 border border-teal-200/30 bg-gradient-to-br from-white to-teal-50/20">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <TrendingUp className="h-5 w-5 text-blue-500" />
+              <TrendingUp className="h-5 w-5 text-teal-500" />
               Business Outcomes
             </CardTitle>
           </CardHeader>
@@ -1715,10 +1721,10 @@ const Dashboard = () => {
         </Card>
 
         {/* Failure Analysis */}
-        <Card className="hover:shadow-lg transition-shadow duration-200">
+        <Card className="hover:shadow-lg transition-all duration-300 border border-indigo-200/30 bg-gradient-to-br from-white to-indigo-50/20">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <AlertCircle className="h-5 w-5 text-red-500" />
+              <AlertCircle className="h-5 w-5 text-indigo-500" />
               Failure Analysis
             </CardTitle>
           </CardHeader>
@@ -1750,12 +1756,12 @@ const Dashboard = () => {
 
       {/* Additional Performance Metrics */}
       {metrics?.core_performance_metrics && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           {/* Call Transfer & Human Handoff */}
-          <Card className="hover:shadow-lg transition-shadow duration-200">
+          <Card className="hover:shadow-lg transition-all duration-300 border border-teal-200/30 bg-gradient-to-br from-white to-teal-50/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Users className="h-5 w-5 text-green-500" />
+                <Users className="h-5 w-5 text-teal-500" />
                 Call Transfers
               </CardTitle>
             </CardHeader>
@@ -1782,7 +1788,7 @@ const Dashboard = () => {
           </Card>
 
           {/* Call Volume & Performance */}
-          <Card className="hover:shadow-lg transition-shadow duration-200">
+          <Card className="hover:shadow-lg transition-all duration-300 border border-blue-200/30 bg-gradient-to-br from-white to-blue-50/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <BarChart3 className="h-5 w-5 text-blue-500" />
@@ -1812,10 +1818,10 @@ const Dashboard = () => {
           </Card>
 
           {/* User Interaction Details */}
-          <Card className="hover:shadow-lg transition-shadow duration-200">
+          <Card className="hover:shadow-lg transition-all duration-300 border border-cyan-200/30 bg-gradient-to-br from-white to-cyan-50/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Brain className="h-5 w-5 text-purple-500" />
+                <Brain className="h-5 w-5 text-cyan-500" />
                 AI Performance
               </CardTitle>
             </CardHeader>
@@ -1837,8 +1843,35 @@ const Dashboard = () => {
         </div>
       )}
 
-           </div>
-     
+      {/* Enhanced Custom CSS for animations */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          @keyframes blob {
+            0% {
+              transform: translate(0px, 0px) scale(1);
+            }
+            33% {
+              transform: translate(30px, -50px) scale(1.1);
+            }
+            66% {
+              transform: translate(-20px, 20px) scale(0.9);
+            }
+            100% {
+              transform: translate(0px, 0px) scale(1);
+            }
+          }
+          .animate-blob {
+            animation: blob 7s infinite;
+          }
+          .animation-delay-2000 {
+            animation-delay: 2s;
+          }
+          .animation-delay-4000 {
+            animation-delay: 4s;
+          }
+        `
+      }} />
+    </div>
   );
 };
 
