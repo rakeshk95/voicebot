@@ -30,7 +30,7 @@ export default function Login() {
       formBody.append('username', formData.email);
       formBody.append('password', formData.password);
 
-      const response = await fetch('http://localhost:8000/api/v1/auth/login', {
+      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -55,7 +55,7 @@ export default function Login() {
       setAuthTokens(accessToken, refreshToken);
 
       // Fetch user and role
-      const userResponse = await fetch(`http://localhost:8000/api/v1/users/${userId}`, {
+      const userResponse = await fetch(`https://platform.voxiflow.com/backend/api/v1/users/${userId}`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
@@ -72,7 +72,7 @@ export default function Login() {
       // Fetch role(s)
       let primaryRole = null;
       try {
-        const permissionsResponse = await fetch(`http://localhost:8000/api/v1/roles/user/${userId}`, {
+        const permissionsResponse = await fetch(`https://platform.voxiflow.com/backend/api/v1/roles/user/${userId}`, {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json'

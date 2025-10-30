@@ -8,7 +8,7 @@ import { authorizedFetch } from './api';
 import { BatchCallStartRequest, BatchCallOperation, BatchOperationsList, BatchCallSummary } from '@/types/batchCalling';
 
 // Base URL for unified batch calling API - use local backend
-const UNIFIED_BATCH_CALLS_BASE_URL = 'http://localhost:8000/api/v1/batch-calls';
+const UNIFIED_BATCH_CALLS_BASE_URL = 'https://platform.voxiflow.com/backend/api/v1/batch-calls';
 
 // Use the standard authorizedFetch function which handles authentication properly
 async function localAuthorizedFetch<T>(url: string, options?: RequestInit): Promise<Response> {

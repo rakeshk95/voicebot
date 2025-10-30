@@ -56,7 +56,7 @@ const CampaignDetails = ({ campaign, onUpdate }: CampaignDetailsProps) => {
     const loadOrganizations = async () => {
       setLoadingOrganizations(true);
       try {
-        const response = await fetch('http://localhost:8000/api/v1/organizations', {
+        const response = await fetch('https://platform.voxiflow.com/backend/api/v1/organizations', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`
           }
@@ -81,7 +81,7 @@ const CampaignDetails = ({ campaign, onUpdate }: CampaignDetailsProps) => {
   const loadVoices = async () => {
     setLoadingVoices(true);
     try {
-      const response = await fetch('http://localhost:8000/api/v1/voices', {
+      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/voices', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         }

@@ -19,7 +19,7 @@ import { RabbitMQBatchApiService, BatchCallRequest } from './rabbitmqBatchApi';
 import { cacheService, CacheKeys, cacheHelpers } from './cacheService';
 
 // API configuration
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = 'https://platform.voxiflow.com/backend/api/v1';
 const BACKGROUND_SERVER_URL = 'http://13.200.143.144:9000';
 const BATCH_CALLS_BASE_URL = '/bulk-calls';
 

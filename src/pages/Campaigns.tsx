@@ -550,7 +550,7 @@ const Campaigns = () => {
         }
 
         // Build API URL with organization filter for non-superusers
-        let campaignUrl = 'http://localhost:8000/api/v1/campaigns/';
+        let campaignUrl = 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
         if (!isSuperUser && userData?.org_id) {
           campaignUrl += `?org_id=${userData.org_id}`;
           console.log('Campaigns: Non-superuser - filtering by organization:', userData.org_id);
@@ -678,7 +678,7 @@ const Campaigns = () => {
         }
         
         // Build organizations API URL with role-based filtering
-        let orgUrl = 'http://localhost:8000/api/v1/organizations/';
+        let orgUrl = 'https://platform.voxiflow.com/backend/api/v1/organizations/';
         if (!isSuperUser && userData?.org_id) {
           // For non-superusers, still fetch organizations to get the proper name
           console.log('Campaigns: Non-superuser - fetching organizations for proper names');
@@ -982,8 +982,8 @@ const Campaigns = () => {
       // Remove FormData and Excel template logic for campaign create/edit
       // Send JSON body instead
       const url = editingCampaign 
-        ? `http://localhost:8000/api/v1/campaigns/${editingCampaign.id}`
-        : 'http://localhost:8000/api/v1/campaigns/';
+        ? `https://platform.voxiflow.com/backend/api/v1/campaigns/${editingCampaign.id}`
+        : 'https://platform.voxiflow.com/backend/api/v1/campaigns/';
 
       const response = await fetch(url, {
         method: editingCampaign ? 'PUT' : 'POST',
@@ -1074,7 +1074,7 @@ const Campaigns = () => {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
 
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1125,7 +1125,7 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaignId}/upload`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaignId}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1205,7 +1205,7 @@ const Campaigns = () => {
         file: bulkCallFile.name
       });
 
-      const response = await fetch('http://localhost:8000/api/v1/rabbitmq-bulk-calls/rabbitmq-bulk-calls', {
+      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/rabbitmq-bulk-calls/rabbitmq-bulk-calls', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1282,7 +1282,7 @@ const Campaigns = () => {
     };
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/calls/', {
+      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1456,7 +1456,7 @@ const Campaigns = () => {
       
       console.log('🔍 Debug - Final dynamic variables:', dynamicVariables);
       
-      const response = await fetch('http://localhost:8000/api/v1/calls', {
+      const response = await fetch('https://platform.voxiflow.com/backend/api/v1/calls', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1504,7 +1504,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/backend/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
