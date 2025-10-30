@@ -54,8 +54,8 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
   const [isLiveRefreshing, setIsLiveRefreshing] = useState(false);
 
   // Optional webhook for notifications (provided by user)
-  const WEBHOOK_URL = 'https://platform.voxiflow.com/backend/api/v1/webhook';
-  const WEBHOOK_TOKEN = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBleGFtcGxlLmNvbSIsImV4cCI6MTc2MDQ1Mjk3OX0.MEHqgirY--vqHynXmXwvfjpsQlu73wR1N00PYLIxeK0';
+  const WEBHOOK_URL = import.meta.env.VITE_WEBHOOK_URL || 'https://platform.voxiflow.com/backend/api/v1/webhook';
+  const WEBHOOK_TOKEN = import.meta.env.VITE_WEBHOOK_TOKEN ? `Bearer ${import.meta.env.VITE_WEBHOOK_TOKEN}` : '';
 
   // Org/campaigns: loading/error state
   const [orgsLoading, setOrgsLoading] = useState(false);
