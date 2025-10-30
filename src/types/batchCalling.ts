@@ -112,12 +112,13 @@ export interface BatchCallSummary {
 }
 
 export interface BatchCallStartRequest {
-  file: File;
   campaign_id: string;
   org_id: string;
   user_id: string; // This will be automatically set from backend
   channels?: number; // Number of channels for parallel processing
   sleep_seconds?: number;
+  worker_prefetch?: number;
+  batch_size?: number;
   external_call_url?: string;
   external_username?: string;
   external_password?: string;

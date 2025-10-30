@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { UseFormReturn } from "react-hook-form";
-import { Plus, X, Globe } from 'lucide-react';
+import { Plus, X, Globe, TestTube } from 'lucide-react';
 import { KeyValuePair } from "@/types/campaign";
 
 interface StepPostCallProps {
@@ -53,6 +53,51 @@ const StepPostCall = ({
   categoriesSystemPrompt,
   setCategoriesSystemPrompt
 }: StepPostCallProps) => {
+  const [isTestingWebhook, setIsTestingWebhook] = useState(false);
+  const [webhookTestResult, setWebhookTestResult] = useState<string | null>(null);
+
+  const testWebhook = async () => {
+    const webhookUrl = form.getValues('callback_endpoint');
+    if (!webhookUrl) {
+      setWebhookTestResult('Please enter a webhook URL first');
+      return;
+    }
+
+    setIsTestingWebhook(true);
+    setWebhookTestResult(null);
+
+    try {
+      const testPayload = {
+        event: "test",
+        data: {
+          call_id: "123e4567-e89b-12d3-a456-426614174000",
+          status: "initiated",
+          timestamp: new Date().toISOString(),
+          test: true
+        }
+      };
+
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        },
+        body: JSON.stringify(testPayload)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setWebhookTestResult(`✅ Webhook test successful! Response: ${JSON.stringify(result)}`);
+      } else {
+        setWebhookTestResult(`❌ Webhook test failed: ${response.status} ${response.statusText}`);
+      }
+    } catch (error) {
+      setWebhookTestResult(`❌ Webhook test error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsTestingWebhook(false);
+    }
+  };
   return (
     <div className="bg-white rounded-lg border shadow-sm">
       <div className="p-4 space-y-3">
@@ -91,18 +136,40 @@ const StepPostCall = ({
                   <div className="relative">
                     <Input 
                       {...field} 
-                      placeholder="https://your-callback-url.com/webhook"
+                      placeholder="https://platform.voxiflow.com/backend/api/v1/webhook"
                       className="pl-8 h-9 text-sm"
                     />
                     <Globe className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
                   </div>
                   <FormDescription className="text-xs text-gray-500 mt-1">
-                    The webhook URL that will receive post-call data
+                    The webhook URL that will receive call status updates and post-call data
                   </FormDescription>
                 </FormItem>
               )}
             />
+            <div className="flex items-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={testWebhook}
+                disabled={isTestingWebhook}
+                className="h-9 px-3 text-xs border-gray-300 hover:bg-gray-50"
+              >
+                <TestTube className="w-3 h-3 mr-1" />
+                {isTestingWebhook ? 'Testing...' : 'Test Webhook'}
+              </Button>
+            </div>
           </div>
+          {webhookTestResult && (
+            <div className={`p-2 rounded text-xs ${
+              webhookTestResult.startsWith('✅') 
+                ? 'bg-green-50 text-green-700 border border-green-200' 
+                : 'bg-red-50 text-red-700 border border-red-200'
+            }`}>
+              {webhookTestResult}
+            </div>
+          )}
           {/* Auth Token below */}
           <FormField
             control={form.control}

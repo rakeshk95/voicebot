@@ -18,6 +18,7 @@ import {
   Info
 } from 'lucide-react';
 import { authorizedFetch } from '@/lib/api';
+import * as XLSX from 'xlsx-js-style';
 
 interface BatchOperationLog {
   id: string;
@@ -105,6 +106,63 @@ export const BatchOperationLogs: React.FC<BatchOperationLogsProps> = ({
     }
   };
 
+  const toRows = (items: BatchOperationLog[]) => {
+    return items.map((l) => ({
+      id: l.id,
+      level: l.log_level,
+      type: l.log_type,
+      message: l.message,
+      details: l.details || '',
+      call_index: l.call_index ?? '',
+      phone_number: l.phone_number || '',
+      call_id: l.call_id || '',
+      timestamp: l.timestamp,
+      duration_ms: l.duration_ms ?? '',
+      error_code: l.error_code || '',
+      error_message: l.error_message || '',
+      external_api_url: l.external_api_url || '',
+      external_api_response_code: l.external_api_response_code ?? '',
+      worker_id: l.worker_id || '',
+      queue_name: l.queue_name || ''
+    }));
+  };
+
+  const downloadCSV = (rows: any[], filename: string) => {
+    const headers = Object.keys(rows[0] || {});
+    const csv = [headers.join(',')]
+      .concat(rows.map(r => headers.map(h => JSON.stringify(r[h] ?? '')).join(',')))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadXLSX = (rows: any[], filename: string) => {
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Logs');
+    const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExport = (format: 'csv' | 'xlsx') => {
+    const rows = toRows(logs);
+    if (rows.length === 0) return;
+    const filename = `batch_logs_${batchOperationId}_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.${format}`;
+    if (format === 'csv') downloadCSV(rows, filename);
+    else downloadXLSX(rows, filename);
+  };
+
   useEffect(() => {
     fetchLogs();
   }, [batchOperationId]);
@@ -185,6 +243,9 @@ export const BatchOperationLogs: React.FC<BatchOperationLogsProps> = ({
             <Button onClick={fetchLogs} variant="outline" size="sm">
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
+            </Button>
+            <Button onClick={() => handleExport('xlsx')} variant="outline" size="sm">
+              Export Excel
             </Button>
             {onClose && (
               <Button onClick={onClose} variant="outline" size="sm">

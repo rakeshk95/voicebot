@@ -21,7 +21,10 @@ import {
   Filter,
   RefreshCw,
   Building2,
-  Target
+  Target,
+  ChevronLeft,
+  ChevronRight,
+  BarChart3
 } from 'lucide-react';
 import { BatchOperationsList } from '@/types/batchCalling';
 
@@ -97,6 +100,10 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
   const [orgFilter, setOrgFilter] = useState<string>('all');
   const [campaignFilter, setCampaignFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Filter operations based on selected filters
   const filteredOperations = useMemo(() => {
@@ -118,14 +125,16 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
         return false;
       }
 
-      // Search term filter
+      // Search term filter - search by operation ID, batch name, organization, and campaign
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
         const operationIdLower = operationId.toLowerCase();
+        const batchName = (operation.operation_name || '').toLowerCase();
         const orgName = organizations.find(org => org.id === operation.org_id)?.name?.toLowerCase() || '';
         const campaignName = campaigns.find(camp => camp.id === operation.campaign_id)?.name?.toLowerCase() || '';
         
         if (!operationIdLower.includes(searchLower) && 
+            !batchName.includes(searchLower) &&
             !orgName.includes(searchLower) && 
             !campaignName.includes(searchLower)) {
           return false;
@@ -135,6 +144,17 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
       return true;
     });
   }, [operations, statusFilter, orgFilter, campaignFilter, searchTerm, organizations, campaigns]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredOperations.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedOperations = filteredOperations.slice(startIndex, endIndex);
+
+  // Reset to first page when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, orgFilter, campaignFilter, searchTerm]);
 
   if (!operations || operations.total_operations === 0) {
     return (
@@ -167,29 +187,29 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filters
+      <Card className="border-0 shadow-sm bg-gradient-to-r from-blue-50 to-indigo-50">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-800">
+            <Filter className="h-5 w-5 text-blue-600" />
+            Filters & Search
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {/* Search */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500" />
               <Input
                 placeholder="Search operations..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                className="pl-10 border-gray-200 focus:border-blue-500 focus:ring-blue-500 bg-white shadow-sm"
               />
             </div>
 
             {/* Status Filter */}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
+              <SelectTrigger className="border-gray-200 focus:border-blue-500 focus:ring-blue-500 bg-white shadow-sm">
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
               <SelectContent>
@@ -205,7 +225,7 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
 
             {/* Organization Filter */}
             <Select value={orgFilter} onValueChange={setOrgFilter}>
-              <SelectTrigger>
+              <SelectTrigger className="border-gray-200 focus:border-blue-500 focus:ring-blue-500 bg-white shadow-sm">
                 <SelectValue placeholder="All Organizations" />
               </SelectTrigger>
               <SelectContent>
@@ -223,7 +243,7 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
 
             {/* Campaign Filter */}
             <Select value={campaignFilter} onValueChange={setCampaignFilter}>
-              <SelectTrigger>
+              <SelectTrigger className="border-gray-200 focus:border-blue-500 focus:ring-blue-500 bg-white shadow-sm">
                 <SelectValue placeholder="All Campaigns" />
               </SelectTrigger>
               <SelectContent>
@@ -250,7 +270,7 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
                 setCampaignFilter('all');
                 setSearchTerm('');
               }}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 border-gray-200 hover:bg-gray-50 hover:border-gray-300 bg-white shadow-sm"
             >
               <RefreshCw className="h-4 w-4" />
               Clear Filters
@@ -260,50 +280,63 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
       </Card>
 
       {/* Summary */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between bg-white rounded-lg p-4 shadow-sm border border-gray-100">
         <div>
-          <h3 className="text-lg font-semibold">Batch Operations</h3>
-          <p className="text-sm text-muted-foreground">
+          <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <BarChart3 className="h-6 w-6 text-blue-600" />
+            Batch Operations
+          </h3>
+          <p className="text-sm text-gray-600 mt-1">
             {filteredOperations.length} of {operations.total_operations} operations shown
+            {filteredOperations.length > itemsPerPage && (
+              <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                Page {currentPage} of {totalPages}
+              </span>
+            )}
           </p>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+          <span>Live Updates</span>
         </div>
       </div>
 
       {/* Operations Table */}
-      <Card>
+      <Card className="border-0 shadow-lg">
         <CardContent className="p-0">
           <div className="relative overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-gray-50">
-                  <TableHead className="font-semibold">Operation ID</TableHead>
-                  <TableHead className="font-semibold">Status</TableHead>
-                  <TableHead className="font-semibold">Organization</TableHead>
-                  <TableHead className="font-semibold">Campaign</TableHead>
-                  <TableHead className="font-semibold">Progress</TableHead>
-                  <TableHead className="font-semibold">Calls</TableHead>
-                  <TableHead className="font-semibold">Started At</TableHead>
-                  <TableHead className="font-semibold">Actions</TableHead>
+                <TableRow className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+                  <TableHead className="font-bold text-gray-800 py-4">Operation ID</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4">Batch Name</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4">Status</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4">Organization</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4">Campaign</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4">Progress</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4">Calls</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4">Started At</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       <div className="flex items-center justify-center">
                         <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
                         Loading operations...
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : filteredOperations.length === 0 ? (
+                ) : paginatedOperations.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       No operations match the selected filters
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredOperations.map(([operationId, operation]) => {
+                  paginatedOperations.map(([operationId, operation]) => {
                     const isSelected = selectedOperation === operationId;
                     // Calculate progress percentage using actual total (completed calls or total calls, whichever is higher)
                     const completed = operation.completed_calls || 0;
@@ -314,18 +347,24 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
                     
                     const orgName = organizations.find(org => org.id === operation.org_id)?.name || 'N/A';
                     const campaignName = campaigns.find(camp => camp.id === operation.campaign_id)?.name || 'N/A';
+                    const batchName = operation.operation_name || `Operation ${operationId.slice(-8)}`;
 
                     return (
                       <TableRow 
                         key={operationId} 
-                        className={`cursor-pointer hover:bg-gray-50 ${
-                          isSelected ? 'bg-blue-50' : ''
+                        className={`cursor-pointer hover:bg-blue-50 transition-colors duration-200 ${
+                          isSelected ? 'bg-blue-100 border-l-4 border-l-blue-500' : 'hover:border-l-2 hover:border-l-blue-300'
                         }`}
                         onClick={() => onOperationSelect(operationId)}
                       >
                         <TableCell>
                           <div className="font-mono text-sm">
                             {operationId.slice(-8)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium text-gray-900 max-w-xs truncate" title={batchName}>
+                            {batchName}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -439,6 +478,99 @@ export const BatchOperationsTable: React.FC<BatchOperationsTableProps> = ({
           </div>
         </CardContent>
       </Card>
+
+      {/* Pagination Controls */}
+      {!loading && filteredOperations.length > 0 && (
+        <Card className="border-0 shadow-sm bg-gradient-to-r from-gray-50 to-blue-50">
+          <CardContent className="pt-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-700 font-medium">
+                  Showing {startIndex + 1} to {Math.min(endIndex, filteredOperations.length)} of {filteredOperations.length} operations
+                </span>
+                
+                {/* Items per page dropdown */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600 whitespace-nowrap">Show:</span>
+                  <Select
+                    value={itemsPerPage.toString()}
+                    onValueChange={(value) => {
+                      setItemsPerPage(Number(value));
+                      setCurrentPage(1); // Reset to first page when changing items per page
+                    }}
+                  >
+                    <SelectTrigger className="w-[80px] h-9 text-sm border-gray-200 focus:border-blue-500 focus:ring-blue-500 bg-white shadow-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-4 h-9 text-sm border-gray-200 hover:bg-blue-50 hover:border-blue-300 bg-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Previous
+                </Button>
+                
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`px-3 h-9 text-sm ${
+                          currentPage === pageNum 
+                            ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md" 
+                            : "border-gray-200 hover:bg-blue-50 hover:border-blue-300 bg-white shadow-sm"
+                        }`}
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-4 h-9 text-sm border-gray-200 hover:bg-blue-50 hover:border-blue-300 bg-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

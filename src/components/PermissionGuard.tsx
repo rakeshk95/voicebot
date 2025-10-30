@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { usePermissions } from '@/contexts/PermissionContext';
+import { usePermissions } from '@/contexts/PermissionProvider';
 
 interface PermissionGuardProps {
   children: ReactNode;

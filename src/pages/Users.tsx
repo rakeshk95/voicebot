@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { Plus, Search, Eye, Pencil, Trash2, CalendarIcon, Phone, Mail, User as UserIcon, Building2, Lock, EyeOff, Edit, FileDown, ChevronRight, Users as UsersIcon, UserCheck, Shield, Calendar as CalendarIcon2 } from "lucide-react";
+import { Plus, Search, Eye, Pencil, Trash2, CalendarIcon, Phone, Mail, User as UserIcon, Building2, Lock, EyeOff, Edit, FileDown, ChevronRight, Users as UsersIcon, UserCheck, Shield, Calendar as CalendarIcon2, ChevronLeft } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -59,7 +59,7 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { usePermissions } from "@/contexts/PermissionContext";
+import { usePermissions } from '@/contexts/PermissionProvider';
 
 interface Role {
   id: string;
@@ -138,6 +138,7 @@ export default function Users() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -274,6 +275,11 @@ export default function Users() {
       if (endDate) {
         params.append("end_date", endDate.toISOString());
       }
+
+      // Fetch all users for client-side pagination
+      // This is a temporary solution until backend supports proper pagination
+      params.append("skip", "0");
+      params.append("limit", "1000"); // Get all users
   
       const response = await fetch(`http://localhost:8000/api/v1/users/?${params.toString()}`, {
         headers: {
@@ -286,12 +292,13 @@ export default function Users() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
   
-      const data: User[] = await response.json();
+      // Backend returns a plain array, not a paginated response
+      const allUsers: User[] = await response.json();
   
       // Optional: use Map for fast organization name lookup
       const orgMap = new Map(organizations.map((org) => [org.id, org.name]));
   
-      const baseUsers = data.map((user) => ({
+      const baseUsers = allUsers.map((user) => ({
         ...user,
         organization_name: orgMap.get(user.organization_id) || null,
         first_name: user.first_name || "",
@@ -327,9 +334,12 @@ export default function Users() {
         })
       );
 
-      setUsers(enriched);
+      // Store all users and implement client-side pagination
+      setAllUsers(enriched);
       setTotalItems(enriched.length);
-      setTotalPages(1); // only 1 page since <10 users
+      setTotalPages(Math.ceil(enriched.length / pageSize));
+      
+      // Pagination will be handled by useEffect
     } catch (error) {
       console.error("Error fetching users:", error);
       toast({
@@ -369,6 +379,18 @@ export default function Users() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm, startDate, endDate, organizations, campaigns, roles]);
+
+  // Handle pagination when currentPage or pageSize changes
+  useEffect(() => {
+    if (allUsers.length > 0) {
+      const startIndex = (currentPage - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const paginatedUsers = allUsers.slice(startIndex, endIndex);
+      setUsers(paginatedUsers);
+      setTotalItems(allUsers.length);
+      setTotalPages(Math.ceil(allUsers.length / pageSize));
+    }
+  }, [allUsers, currentPage, pageSize]);
 
   // Pre-fetch organizations, campaigns, and roles only once when component mounts
   useEffect(() => {
@@ -1564,6 +1586,95 @@ export default function Users() {
           </div>
         </div>
       </div>
+
+      {/* Pagination Controls */}
+      {!isInitialLoading && totalItems > 0 && (
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 px-2">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-600">
+              Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalItems)} of {totalItems} users
+            </span>
+            
+            {/* Items per page dropdown */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600 whitespace-nowrap">Show:</span>
+              <Select
+                value={pageSize.toString()}
+                onValueChange={(value) => {
+                  setPageSize(Number(value));
+                  setCurrentPage(1); // Reset to first page when changing page size
+                }}
+              >
+                <SelectTrigger className="w-[80px] h-9 text-sm border-gray-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-4 h-9 text-sm border-gray-200 hover:bg-gray-50"
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Previous
+            </Button>
+            
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={currentPage === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`px-3 h-9 text-sm ${
+                      currentPage === pageNum 
+                        ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                        : "border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="px-4 h-9 text-sm border-gray-200 hover:bg-gray-50"
+            >
+              Next
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Edit/Create Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

@@ -1,9 +1,11 @@
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { PermissionProvider } from "@/contexts/PermissionContext";
+import { PermissionProvider } from "./contexts/PermissionProvider";
+import { AuthProvider, useAuth } from "./contexts/AuthProvider";
 import { Layout } from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Campaigns from "./pages/Campaigns";
@@ -29,9 +31,17 @@ const queryClient = new QueryClient();
 
 // Protected Route component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const token = localStorage.getItem('authToken');
-  
-  if (!token) {
+  const { hydrated, isAuthenticated } = useAuth();
+
+  if (!hydrated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
@@ -42,8 +52,9 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <PermissionProvider>
-          <Router>
+        <AuthProvider>
+          <PermissionProvider>
+            <Router>
             <div className="min-h-screen overflow-x-hidden">
               <Routes>
                 <Route path="/login" element={<Login />} />
@@ -83,8 +94,9 @@ const App = () => {
             </div>
             <Toaster />
             <Sonner />
-          </Router>
-        </PermissionProvider>
+            </Router>
+          </PermissionProvider>
+        </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

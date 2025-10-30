@@ -33,7 +33,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { usePermissions } from '@/contexts/PermissionContext';
+import { usePermissions } from '@/contexts/PermissionProvider';
+import { safeParseJSON } from '@/utils/localStorage';
 import { refreshUserPermissions } from '@/utils/refreshPermissions';
 import voxiflowLogo from '../assets/voxiflow-logo.png';
 
@@ -180,9 +181,7 @@ export function AppSidebar() {
   console.log('AppSidebar: Generated organized sidebar items:', organizedSidebarItems);
 
   // Get user data from localStorage
-  const userData = localStorage.getItem('userData') 
-    ? JSON.parse(localStorage.getItem('userData') || '{}')
-    : { name: 'Guest', email: 'guest@example.com' };
+  const userData = safeParseJSON('userData', { name: 'Guest', email: 'guest@example.com' });
 
   const handleLogout = () => {
     localStorage.removeItem('authToken');

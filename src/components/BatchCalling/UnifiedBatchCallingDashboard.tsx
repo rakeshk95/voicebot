@@ -351,9 +351,7 @@ export const UnifiedBatchCallingDashboard: React.FC = () => {
         const hasActiveOperations = Object.values(operations.operations).some(op => 
           op.status === 'processing' || op.status === 'starting' || op.status === 'paused'
         );
-        
         setAutoRefreshActive(hasActiveOperations);
-        
         const now = Date.now();
         if (hasActiveOperations && !isFetchingRef.current && (now - lastFetchTimeRef.current > FETCH_COOLDOWN_MS)) {
           console.log('🚀 PERFORMANCE FIX: Auto-refresh triggered for active operations');
@@ -361,20 +359,26 @@ export const UnifiedBatchCallingDashboard: React.FC = () => {
         }
       }
     };
-    
-    const interval = setInterval(checkAndRefresh, 180000); // 3 minutes
-    
+    // Reduce interval to 3 seconds (3000 ms)
+    const interval = setInterval(checkAndRefresh, 3000); // 3 seconds
     if (summary && operations) {
       const hasActiveOperations = Object.values(operations.operations).some(op => 
         op.status === 'processing' || op.status === 'starting' || op.status === 'paused'
       );
       setAutoRefreshActive(hasActiveOperations);
     }
-    
     return () => {
       clearInterval(interval);
     };
   }, [summary, operations]);
+
+  useEffect(() => {
+    const onBatchStarted = () => {
+      fetchData();
+    };
+    window.addEventListener('batch:started', onBatchStarted);
+    return () => window.removeEventListener('batch:started', onBatchStarted);
+  }, []);
 
   const handleManualRefresh = async () => {
     if (refreshing) return;
@@ -684,15 +688,23 @@ export const UnifiedBatchCallingDashboard: React.FC = () => {
                 <div className="flex items-center space-x-4">
                   <Label htmlFor="logs-operation-select">Select Operation:</Label>
                   <Select value={selectedLogsOperation} onValueChange={setSelectedLogsOperation}>
-                    <SelectTrigger className="w-[300px]">
+                    <SelectTrigger className="w-[400px]">
                       <SelectValue placeholder="Choose an operation to view logs" />
                     </SelectTrigger>
                     <SelectContent>
-                      {operations?.operations ? Object.entries(operations.operations).map(([opId, opData]) => (
-                        <SelectItem key={opId} value={opId}>
-                          {opData.operation_name || `Operation ${opId.slice(-8)}`} - {opData.status}
-                        </SelectItem>
-                      )) : (
+                      {operations?.operations ? Object.entries(operations.operations).map(([opId, opData]) => {
+                        const orgName = organizations.find(org => org.id === opData.org_id)?.name || 'N/A';
+                        const campaignName = campaigns.find(camp => camp.id === opData.campaign_id)?.name || 'N/A';
+                        const batchName = opData.operation_name || `Operation ${opId.slice(-8)}`;
+                        return (
+                          <SelectItem key={opId} value={opId}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{batchName}</span>
+                              <span className="text-xs text-gray-500">{orgName} • {campaignName} • {opData.status}</span>
+                            </div>
+                          </SelectItem>
+                        );
+                      }) : (
                         <SelectItem value="no-ops" disabled>No operations available</SelectItem>
                       )}
                     </SelectContent>
@@ -729,15 +741,23 @@ export const UnifiedBatchCallingDashboard: React.FC = () => {
                 <div className="flex items-center space-x-4">
                   <Label htmlFor="call-details-operation-select">Select Operation:</Label>
                   <Select value={selectedCallDetailsOperation} onValueChange={setSelectedCallDetailsOperation}>
-                    <SelectTrigger className="w-[300px]">
+                    <SelectTrigger className="w-[400px]">
                       <SelectValue placeholder="Choose an operation to view call details" />
                     </SelectTrigger>
                     <SelectContent>
-                      {operations?.operations ? Object.entries(operations.operations).map(([opId, opData]) => (
-                        <SelectItem key={opId} value={opId}>
-                          {opData.operation_name || `Operation ${opId.slice(-8)}`} - {opData.status}
-                        </SelectItem>
-                      )) : (
+                      {operations?.operations ? Object.entries(operations.operations).map(([opId, opData]) => {
+                        const orgName = organizations.find(org => org.id === opData.org_id)?.name || 'N/A';
+                        const campaignName = campaigns.find(camp => camp.id === opData.campaign_id)?.name || 'N/A';
+                        const batchName = opData.operation_name || `Operation ${opId.slice(-8)}`;
+                        return (
+                          <SelectItem key={opId} value={opId}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{batchName}</span>
+                              <span className="text-xs text-gray-500">{orgName} • {campaignName} • {opData.status}</span>
+                            </div>
+                          </SelectItem>
+                        );
+                      }) : (
                         <SelectItem value="no-ops" disabled>No operations available</SelectItem>
                       )}
                     </SelectContent>

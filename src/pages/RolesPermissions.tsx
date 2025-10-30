@@ -25,7 +25,7 @@ import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
-import { usePermissions, PERMISSION_RESOURCES } from "@/contexts/PermissionContext";
+import { usePermissions, PERMISSION_RESOURCES } from '@/contexts/PermissionProvider';
 import {
   AlertDialog,
   AlertDialogAction,

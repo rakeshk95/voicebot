@@ -39,7 +39,8 @@ import {
   Mic,
   Volume2,
   Clock,
-  Hourglass
+  Hourglass,
+  Copy
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format, addDays, subDays, startOfDay, endOfDay, startOfToday, endOfToday } from 'date-fns';
@@ -48,7 +49,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { DialogFooter } from '@/components/ui/dialog';
-import { usePermissions } from '@/contexts/PermissionContext';
+import { usePermissions } from '@/contexts/PermissionProvider';
 import * as z from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -267,7 +268,7 @@ const defaultValues: Partial<CampaignFormValues> = {
     provider: "nova-2"
   },
   llm: {
-    provider: "OPENAI",
+    provider: "openai",
     model: "gpt-4.1"
   },
   telephonic_provider: "czentrix",
@@ -365,6 +366,7 @@ const Campaigns = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { hasPermission, userRole } = usePermissions();
+  const COPY_STORAGE_KEY = 'VOXIFLOW_COPIED_CAMPAIGN';
   
   console.log('Campaigns component mounted');
   
@@ -379,6 +381,10 @@ const Campaigns = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  
   // Get user data and check role
   const userData = JSON.parse(localStorage.getItem('userData') || '{}');
   const isSuperUser = userData?.role_name === 'superuser';
@@ -389,6 +395,11 @@ const Campaigns = () => {
   });
   const [selectedOrgFilter, setSelectedOrgFilter] = useState<string>('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
+
+  // Reset to page 1 when filters or items per page change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, startDate, endDate, selectedOrgFilter, selectedStatusFilter, itemsPerPage]);
   const [currentStep, setCurrentStep] = useState(1);
   const [activeFlowTab, setActiveFlowTab] = useState<'context' | 'graph' | 'responses' | 'variables' | 'knowledgeBase'>('context');
   const [responses, setResponses] = useState<ResponseItem[]>([]);
@@ -412,6 +423,7 @@ const Campaigns = () => {
   const [isBulkCalling, setIsBulkCalling] = useState(false);
   const [allowInterruptions, setAllowInterruptions] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [testCallVariables, setTestCallVariables] = useState<Record<string, string>>({});
   const [isCalling, setIsCalling] = useState(false);
   const [phoneError, setPhoneError] = useState('');
   const [ambientStatus, setAmbientStatus] = useState(false);
@@ -773,6 +785,12 @@ const Campaigns = () => {
     return matchesSearch && matchesDateRange && matchesOrgFilter && matchesStatusFilter;
   }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); // Sort by created_at in descending order
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredCampaigns.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedCampaigns = filteredCampaigns.slice(startIndex, endIndex);
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Active': return 'bg-green-100 text-green-800';
@@ -780,6 +798,23 @@ const Campaigns = () => {
       case 'Completed': return 'bg-blue-100 text-blue-800';
       case 'Paused': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handleCopyCampaign = async (campaign: any) => {
+    try {
+      const payload = {
+        copiedAt: new Date().toISOString(),
+        version: 1,
+        campaign,
+      };
+      const text = JSON.stringify(payload, null, 2);
+      localStorage.setItem(COPY_STORAGE_KEY, text);
+      try { await navigator.clipboard.writeText(text); } catch {}
+      toast({ title: 'Campaign copied', description: `"${campaign.name}" details saved for new campaign prefill.` });
+    } catch (e) {
+      console.error('Failed to copy campaign', e);
+      toast({ title: 'Copy failed', description: 'Could not copy campaign data', variant: 'destructive' });
     }
   };
 
@@ -1360,6 +1395,7 @@ const Campaigns = () => {
     setSelectedCampaignForCall(campaign);
     setPhoneNumber('');
     setPhoneError('');
+    setTestCallVariables({}); // Reset variables when opening dialog
     setIsCallDialogOpen(true);
   };
 
@@ -1406,7 +1442,20 @@ const Campaigns = () => {
 
     setIsCalling(true);
     
+    // Debug: Log campaign data
+    console.log('🔍 Debug - Selected campaign:', selectedCampaignForCall);
+    console.log('🔍 Debug - Campaign LLM:', selectedCampaignForCall.llm);
+    console.log('🔍 Debug - Prompt Variables:', selectedCampaignForCall.llm?.promptJson?.promptVariables);
+    
     try {
+      // Use testCallVariables from dialog inputs instead of campaign defaults
+      const dynamicVariables = {
+        mobile_number: phoneNumber,
+        ...testCallVariables
+      };
+      
+      console.log('🔍 Debug - Final dynamic variables:', dynamicVariables);
+      
       const response = await fetch('http://localhost:8000/api/v1/calls', {
         method: 'POST',
         headers: {
@@ -1416,9 +1465,7 @@ const Campaigns = () => {
         body: JSON.stringify({
           campaign_id: selectedCampaignForCall.id,
           to_number: phoneNumber,
-          dynamic_variables: {
-            mobile_number: phoneNumber
-          },
+          dynamic_variables: dynamicVariables,
           call_metadata: {
             org_id: selectedCampaignForCall.org_id || 'org_1',
             user_id: localStorage.getItem('userId') || 'user_1'
@@ -1855,8 +1902,8 @@ const Campaigns = () => {
                   <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 via-blue-900 to-indigo-900 bg-clip-text text-transparent">
                     Campaigns
                   </h1>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {filteredCampaigns.length} Total Campaigns • Voice automation & management
+                        <p className="text-sm text-gray-600 mt-1">
+                    {filteredCampaigns.length} Total Campaigns • Showing {startIndex + 1}-{Math.min(endIndex, filteredCampaigns.length)} • Voice automation & management
                   </p>
                 </div>
               </div>
@@ -2039,7 +2086,7 @@ const Campaigns = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredCampaigns.map((campaign, index) => (
+                  paginatedCampaigns.map((campaign, index) => (
                     <TableRow 
                       key={campaign.id} 
                       className={`group hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/30 transition-all duration-200 border-t border-gray-100/50 ${
@@ -2154,6 +2201,15 @@ const Campaigns = () => {
                               <Edit className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
                             </Button>
                           )}
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => handleCopyCampaign(campaign)}
+                            className="h-9 w-9 bg-purple-50 hover:bg-purple-100 text-purple-600 hover:text-purple-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
+                            title="Copy Campaign"
+                          >
+                            <Copy className="h-4 w-4 group-hover/btn:scale-110 transition-transform" />
+                          </Button>
                           {hasPermission('delete', 'campaigns') && (
                             <Button
                               variant="ghost"
@@ -2174,6 +2230,89 @@ const Campaigns = () => {
             </Table>
           </div>
         </div>
+
+        {/* Pagination Controls */}
+        {!isLoading && filteredCampaigns.length > 0 && (
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 px-2">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-600">
+                Showing {startIndex + 1} to {Math.min(endIndex, filteredCampaigns.length)} of {filteredCampaigns.length} campaigns
+              </span>
+              
+              {/* Items per page dropdown */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600 whitespace-nowrap">Show:</span>
+                <Select
+                  value={itemsPerPage.toString()}
+                  onValueChange={(value) => setItemsPerPage(Number(value))}
+                >
+                  <SelectTrigger className="w-[80px] h-9 text-sm border-gray-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="px-4 h-9 text-sm border-gray-200 hover:bg-gray-50"
+              >
+                Previous
+              </Button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-3 h-9 text-sm ${
+                        currentPage === pageNum 
+                          ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                          : "border-gray-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="px-4 h-9 text-sm border-gray-200 hover:bg-gray-50"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* View Campaign Dialog */}
@@ -2354,8 +2493,8 @@ const Campaigns = () => {
 
       {/* Call Dialog */}
       <Dialog open={isCallDialogOpen} onOpenChange={setIsCallDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="text-xl font-bold text-primary flex items-center gap-2">
               <Phone className="h-5 w-5 text-green-600" />
               Make Test Call
@@ -2365,7 +2504,7 @@ const Campaigns = () => {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="phone-number" className="text-sm font-medium">
                 Phone Number
@@ -2390,6 +2529,35 @@ const Campaigns = () => {
               </p>
             </div>
 
+            {/* Dynamic Variables Input Fields - Directly below phone number */}
+            {selectedCampaignForCall?.llm?.promptJson?.promptVariables && 
+             Object.keys(selectedCampaignForCall.llm.promptJson.promptVariables).length > 0 && (
+              <div className="space-y-3">
+                {Object.keys(selectedCampaignForCall.llm.promptJson.promptVariables).map((key) => (
+                  <div key={key} className="space-y-1">
+                    <Label htmlFor={`variable-${key}`} className="text-sm font-medium text-gray-600">
+                      {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </Label>
+                    <Input
+                      id={`variable-${key}`}
+                      type="text"
+                      placeholder={`Enter ${key.replace(/_/g, ' ')}`}
+                      value={testCallVariables[key] || ''}
+                      onChange={(e) => setTestCallVariables(prev => ({
+                        ...prev,
+                        [key]: e.target.value
+                      }))}
+                      disabled={isCalling}
+                      className="text-sm"
+                    />
+                  </div>
+                ))}
+                <p className="text-xs text-gray-500">
+                  Fill in the values for campaign variables. These will be used to personalize the call.
+                </p>
+              </div>
+            )}
+
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <div className="flex items-start gap-2">
                 <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
@@ -2405,7 +2573,7 @@ const Campaigns = () => {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex-shrink-0 flex justify-end gap-3 pt-4 border-t">
             <Button
               variant="outline"
               onClick={() => {

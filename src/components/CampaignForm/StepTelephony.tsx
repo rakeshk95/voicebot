@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { UseFormReturn } from "react-hook-form";
+import { fetchWithAuth } from "@/auth/authorizedFetch";
 
 interface StepTelephonyProps {
   form: UseFormReturn<any>;
@@ -11,6 +12,10 @@ interface StepTelephonyProps {
 const StepTelephony = ({ form }: StepTelephonyProps) => {
   const [selectedLLMProvider, setSelectedLLMProvider] = useState<string>('');
   const [selectedSTTVendor, setSelectedSTTVendor] = useState<string>('');
+  const [llmModelsByProvider, setLlmModelsByProvider] = useState<Record<string, { value: string; label: string }[]>>({});
+  const [sttModelsByVendor, setSttModelsByVendor] = useState<Record<string, { value: string; label: string }[]>>({});
+  const [telephonyProviders, setTelephonyProviders] = useState<{ value: string; label: string }[]>([]);
+  const fetchedOnceRef = useRef(false);
   
   // Debug: Log form values
   useEffect(() => {
@@ -25,101 +30,122 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
     return () => subscription.unsubscribe();
   }, [form]);
 
-  // Get available STT models based on STT vendor
+  // Load external models/vendors dynamically
+  useEffect(() => {
+    async function loadExternalModels() {
+      try {
+        const res = await fetchWithAuth('/api/v1/external/models');
+        if (!res.ok) throw new Error(`Failed to load models: ${res.status}`);
+        const data = await res.json();
+
+        const llmMap: Record<string, { value: string; label: string }[]> = {};
+        const sttMap: Record<string, { value: string; label: string }[]> = {};
+
+        // Preferred: data.models.{llm,stt,telephony}
+        if (data?.models) {
+          // llm providers
+          if (Array.isArray(data.models.llm)) {
+            data.models.llm.forEach((provider: any) => {
+              const providerKey = (provider.id || provider.display_name || '').toString().toLowerCase();
+              const models = Array.isArray(provider.models) ? provider.models : [];
+              llmMap[providerKey] = models.map((m: any) => {
+                const val = (m.id || m.display_name || m.name)?.toString();
+                const label = (m.display_name || m.name || m.id || val)?.toString();
+                return { value: val, label };
+              });
+            });
+          }
+
+          // stt vendors
+          if (Array.isArray(data.models.stt)) {
+            data.models.stt.forEach((vendor: any) => {
+              const vendorKey = (vendor.id || vendor.display_name || '').toString().toLowerCase();
+              const models = Array.isArray(vendor.models) ? vendor.models : [];
+              sttMap[vendorKey] = models.map((m: any) => {
+                const val = (m.id || m.display_name || m.name)?.toString();
+                const label = (m.display_name || m.name || m.id || val)?.toString();
+                return { value: val, label };
+              });
+            });
+          }
+
+          // telephony providers
+          if (Array.isArray(data.models.telephony)) {
+            setTelephonyProviders(
+              data.models.telephony.map((p: any) => {
+                const label = (p?.display_name || p)?.toString();
+                const value = (p?.id || p)?.toString().toLowerCase();
+                return { value, label };
+              })
+            );
+          }
+        }
+
+        // Heuristics to normalize various other shapes
+        const candidates: any[] = Array.isArray(data) ? data : ([] as any[])
+          .concat(data.items || [])
+          .concat(Array.isArray(data.models) ? data.models : [])
+          .concat(data.data || [])
+          .concat(data.llm || [])
+          .concat(data.stt || []);
+
+        if (!Object.keys(llmMap).length && !Object.keys(sttMap).length && !candidates.length) {
+          const tryGroup = (group: any, target: Record<string, { value: string; label: string }[]>) => {
+            Object.keys(group || {}).forEach((k) => {
+              const list = group[k];
+              if (Array.isArray(list)) {
+                target[k.toLowerCase()] = list.map((m: any) => {
+                  const val = (m?.value || m?.id || m?.name || m)?.toString();
+                  const label = (m?.label || m?.name || m?.display || val)?.toString();
+                  return { value: val, label };
+                });
+              }
+            });
+          };
+          if (data?.vendors?.llm) tryGroup(data.vendors.llm, llmMap);
+          if (data?.vendors?.stt) tryGroup(data.vendors.stt, sttMap);
+        }
+
+        // Case: flat array of model entries
+        (candidates || []).forEach((m: any) => {
+          const type = (m?.type || m?.category || '').toString().toLowerCase();
+          const provider = (m?.provider || m?.vendor || m?.source || '').toString().toLowerCase();
+          const val = (m?.value || m?.id || m?.model || m?.name)?.toString();
+          const label = (m?.label || m?.display || m?.name || m?.model || val)?.toString();
+          if (!provider || !val) return;
+          if (type === 'llm' || (!type && (m?.provider || '').toLowerCase() === provider)) {
+            llmMap[provider] = llmMap[provider] || [];
+            llmMap[provider].push({ value: val, label });
+          } else if (type === 'stt') {
+            sttMap[provider] = sttMap[provider] || [];
+            sttMap[provider].push({ value: val, label });
+          }
+        });
+
+        setLlmModelsByProvider(llmMap);
+        setSttModelsByVendor(sttMap);
+      } catch (e) {
+        console.warn('Failed to load external models, using defaults', e);
+      }
+    }
+    if (!fetchedOnceRef.current) {
+      fetchedOnceRef.current = true; // guard against React 18 StrictMode double-effect
+      loadExternalModels();
+    }
+  }, []);
+
+  // Get available STT models based on STT vendor (dynamic only)
   const getSTTModels = (sttVendor: string) => {
     console.log('getSTTModels called with vendor:', sttVendor);
-    switch (sttVendor.toLowerCase()) {
-      case 'google':
-        return [
-          { value: 'google-speech', label: 'Google Speech' },
-          { value: 'google-speech-v2', label: 'Google Speech V2' },
-          { value: 'google-speech-advanced', label: 'Google Speech Advanced' }
-        ];
-      case 'whisper':
-      case 'openai':
-        return [
-          { value: 'whisper-1', label: 'Whisper-1' },
-          { value: 'whisper-large-v3', label: 'Whisper Large V3' },
-          { value: 'whisper-turbo', label: 'Whisper Turbo' }
-        ];
-      case 'anthropic':
-        return [
-          { value: 'claude-sonnet', label: 'Claude Sonnet' },
-          { value: 'claude-opus', label: 'Claude Opus' },
-          { value: 'claude-haiku', label: 'Claude Haiku' }
-        ];
-      case 'azure':
-        return [
-          { value: 'azure-cognitive', label: 'Azure Cognitive' },
-          { value: 'azure-speech', label: 'Azure Speech' }
-        ];
-      case 'aws':
-        return [
-          { value: 'amazon-transcribe', label: 'Amazon Transcribe' },
-          { value: 'amazon-transcribe-medical', label: 'Amazon Transcribe Medical' }
-        ];
-      case 'deepgram':
-        return [
-          { value: 'nova-2', label: 'Nova-2' },
-          { value: 'nova-2-exp', label: 'Nova-2 Experimental' },
-          { value: 'enhanced', label: 'Enhanced' }
-        ];
-      default:
-        return [
-          { value: 'nova-2', label: 'Nova-2 (Deepgram)' },
-          { value: 'whisper-1', label: 'Whisper-1 (OpenAI)' },
-          { value: 'whisper-large-v3', label: 'Whisper Large V3' },
-          { value: 'google-speech', label: 'Google Speech' },
-          { value: 'azure-cognitive', label: 'Azure Cognitive' }
-        ];
-    }
+    const dynamic = sttModelsByVendor[sttVendor?.toLowerCase?.() || ''];
+    return dynamic && dynamic.length ? dynamic : [];
   };
 
-  // Get available LLM models based on provider
+  // Get available LLM models based on provider (dynamic only)
   const getLLMModels = (provider: string) => {
     console.log('getLLMModels called with provider:', provider);
-    switch (provider.toLowerCase()) {
-      case 'openai':
-        return [
-          { value: 'gpt-4.1', label: 'GPT-4.1' },
-          { value: 'gpt-4o', label: 'GPT-4o' },
-          { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-          { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
-          { value: 'gpt-4', label: 'GPT-4' }
-        ];
-      case 'gemini':
-        return [
-          { value: 'gemini-pro', label: 'Gemini Pro' },
-          { value: 'gemini-pro-vision', label: 'Gemini Pro Vision' },
-          { value: 'gemini-flash', label: 'Gemini Flash' }
-        ];
-      case 'anthropic':
-        return [
-          { value: 'claude-3-opus', label: 'Claude 3 Opus' },
-          { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet' },
-          { value: 'claude-3-haiku', label: 'Claude 3 Haiku' }
-        ];
-      case 'azure':
-        return [
-          { value: 'gpt-4.1', label: 'GPT-4.1' },
-          { value: 'gpt-4o', label: 'GPT-4o' },
-          { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-          { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
-          { value: 'gpt-4', label: 'GPT-4' }
-        ];
-      case 'aws':
-        return [
-          { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet (AWS)' },
-          { value: 'claude-3-haiku', label: 'Claude 3 Haiku (AWS)' },
-          { value: 'llama-2-70b', label: 'Llama 2 70B' }
-        ];
-      default:
-        return [
-          { value: 'gpt-4o', label: 'GPT-4o (OpenAI)' },
-          { value: 'gemini-pro', label: 'Gemini Pro (Google)' },
-          { value: 'claude-3-opus', label: 'Claude 3 Opus (Anthropic)' }
-        ];
-    }
+    const dynamic = llmModelsByProvider[provider?.toLowerCase?.() || ''];
+    return dynamic && dynamic.length ? dynamic : [];
   };
 
   return (
@@ -167,13 +193,13 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="czentrix">Czentrix</SelectItem>
-                    <SelectItem value="exotel">Exotel</SelectItem>
-                    <SelectItem value="twilio">Twilio</SelectItem>
-                    <SelectItem value="servotel">ServoTel</SelectItem>
-                    <SelectItem value="plivo">Plivo</SelectItem>
-                    <SelectItem value="sampark">Sampark</SelectItem>
-                    <SelectItem value="smallestai">SmallestAI</SelectItem>
+                    {telephonyProviders.length > 0 ? (
+                      telephonyProviders.map((p) => (
+                        <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem disabled value="__no_telephony__">No providers loaded</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
                 <FormMessage className="text-xs" />
@@ -312,11 +338,18 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {getSTTModels(form.watch('stt.vendor') || selectedSTTVendor).map((model) => (
-                        <SelectItem key={model.value} value={model.value}>
-                          {model.label}
-                        </SelectItem>
-                      ))}
+                      {(() => {
+                        const list = getSTTModels(form.watch('stt.vendor') || selectedSTTVendor);
+                        return list.length > 0 ? (
+                          list.map((model) => (
+                            <SelectItem key={model.value} value={model.value}>
+                              {model.label}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem disabled value="__no_stt_models__">No models available</SelectItem>
+                        );
+                      })()}
                     </SelectContent>
                   </Select>
                   <FormMessage className="text-xs" />
@@ -377,11 +410,18 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {getLLMModels(form.watch('llm.provider') || selectedLLMProvider).map((model) => (
-                        <SelectItem key={model.value} value={model.value}>
-                          {model.label}
-                        </SelectItem>
-                      ))}
+                      {(() => {
+                        const list = getLLMModels(form.watch('llm.provider') || selectedLLMProvider);
+                        return list.length > 0 ? (
+                          list.map((model) => (
+                            <SelectItem key={model.value} value={model.value}>
+                              {model.label}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem disabled value="__no_llm_models__">No models available</SelectItem>
+                        );
+                      })()}
                     </SelectContent>
                   </Select>
                   <FormMessage className="text-xs" />

@@ -8,9 +8,10 @@ import { useToast } from '@/hooks/use-toast';
 import { authorizedFetch } from '../../lib/api';
 import { 
   createUnifiedBatchOperation,
-  getUnifiedOperationsSummary
+  getUnifiedOperationsSummary,
+  getUnifiedOperationsList
 } from '@/lib/unifiedBatchCallingApi';
-import { Play, Upload, RefreshCw, Activity } from 'lucide-react';
+import { Play, Upload, RefreshCw, Activity, Download, FileSpreadsheet } from 'lucide-react';
 
 interface FastBatchCallingProps {}
 
@@ -20,7 +21,7 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
   // Core state
   const [orgs, setOrgs] = useState<Array<{ id: string; name: string }>>([]);
   const [campaigns, setCampaigns] = useState<Array<{ id: string; name: string; description?: string; org_id?: string }>>([]);
-  const [orgId, setOrgId] = useState('default_org');
+  const [orgId, setOrgId] = useState('');
   const [campaignId, setCampaignId] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [starting, setStarting] = useState(false);
@@ -28,9 +29,10 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
   // Batch configuration
   const [batchName, setBatchName] = useState('');
   const [batchSize, setBatchSize] = useState('50');
-  const [workerChannels, setWorkerChannels] = useState('16');
-  const [workerPrefetch, setWorkerPrefetch] = useState('5');
+  const [workerChannels, setWorkerChannels] = useState('2');
+  const [workerPrefetch, setWorkerPrefetch] = useState('1');
   const [sleepSeconds, setSleepSeconds] = useState('5');
+  const [detectedRows, setDetectedRows] = useState<number | null>(null);
   
   // Summary state (lightweight)
   const [summary, setSummary] = useState({
@@ -42,76 +44,121 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
   });
   
   
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [recentOps, setRecentOps] = useState<any[]>([]);
   const lastFetchRef = useRef(0);
   const FETCH_COOLDOWN = 15000; // 15 seconds
+  const [banner, setBanner] = useState<{ type: 'info' | 'success' | 'warning' | 'error'; message: string } | null>(null);
+  const [webhookTesting, setWebhookTesting] = useState(false);
+  const [isLiveRefreshing, setIsLiveRefreshing] = useState(false);
 
-  // Load initial data once
+  // Optional webhook for notifications (provided by user)
+  const WEBHOOK_URL = 'https://platform.voxiflow.com/backend/api/v1/webhook';
+  const WEBHOOK_TOKEN = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBleGFtcGxlLmNvbSIsImV4cCI6MTc2MDQ1Mjk3OX0.MEHqgirY--vqHynXmXwvfjpsQlu73wR1N00PYLIxeK0';
+
+  // Org/campaigns: loading/error state
+  const [orgsLoading, setOrgsLoading] = useState(false);
+  const [orgsError, setOrgsError] = useState<string | null>(null);
+  const [campaignsLoading, setCampaignsLoading] = useState(false);
+  const [campaignsError, setCampaignsError] = useState<string | null>(null);
+
+  // Download Excel template for selected campaign
+  const downloadTemplate = async () => {
+    if (!campaignId) {
+      toast({
+        title: "No Campaign Selected",
+        description: "Please select a campaign first to download its template.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setDownloadingTemplate(true);
+    try {
+      const response = await authorizedFetch(`/excel-template/campaigns/${campaignId}/excel-template`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to download template');
+      }
+
+      // Get filename from response headers or use default
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = 'batch_template.xlsx';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast({
+        title: "Template Downloaded",
+        description: `Excel template for ${campaigns.find(c => c.id === campaignId)?.name || 'campaign'} has been downloaded successfully.`
+      });
+
+    } catch (error) {
+      console.error('Error downloading template:', error);
+      toast({
+        title: "Download Failed",
+        description: "Failed to download template. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  };
+
+  // Analyze Excel on file selection and auto-tune configuration
   useEffect(() => {
-    const loadInitialData = async () => {
+    if (!file) { setDetectedRows(null); return; }
+    const analyze = async () => {
       try {
-        console.log('🔄 Loading organizations and campaigns from API...');
-        
-        // Try to load organizations from API
-        try {
-          const orgRes = await authorizedFetch('/organizations/');
-          console.log('📊 Organizations response:', orgRes.status, orgRes.ok);
-          
-          if (orgRes.ok) {
-            const orgData = await orgRes.json();
-            console.log('✅ Organizations loaded from API:', orgData);
-            setOrgs(orgData.map((org: any) => ({ id: org.id, name: org.name })));
-          } else {
-            console.warn('⚠️ Failed to load organizations from API:', orgRes.status);
-            // Fallback to default organization
-            setOrgs([{ id: 'default_org', name: 'Default Organization' }]);
-          }
-        } catch (orgError) {
-          console.warn('⚠️ Organizations API call failed:', orgError);
-          setOrgs([{ id: 'default_org', name: 'Default Organization' }]);
-        }
-        
-        // Try to load campaigns from API
-        try {
-          const campRes = await authorizedFetch('/campaigns/');
-          console.log('📊 Campaigns response:', campRes.status, campRes.ok);
-          
-          if (campRes.ok) {
-            const campData = await campRes.json();
-            console.log('✅ Campaigns loaded from API:', campData);
-            setCampaigns(campData.map((camp: any) => ({ 
-              id: camp.id, 
-              name: camp.name, 
-              description: camp.description,
-              org_id: camp.org_id 
-            })));
-          } else {
-            console.warn('⚠️ Failed to load campaigns from API:', campRes.status);
-            // Fallback to database campaign
-            setCampaigns([
-              { id: 'cf821e28-bae9-4500-93bf-2d755c7d0b7c', name: 'Default Campaign', description: 'Default campaign for testing', org_id: 'org_3966895b' }
-            ]);
-          }
-        } catch (campError) {
-          console.warn('⚠️ Campaigns API call failed:', campError);
-          // Fallback to database campaign
-          setCampaigns([
-            { id: 'cf821e28-bae9-4500-93bf-2d755c7d0b7c', name: 'Default Campaign', description: 'Default campaign for testing', org_id: 'org_3966895b' }
-          ]);
-        }
-        
+        const buf = await file.arrayBuffer();
+        // dynamic import to keep bundle light
+        const XLSX = await import('xlsx');
+        const wb = XLSX.read(buf, { type: 'array' });
+        const wsName = wb.SheetNames[0];
+        const ws = wb.Sheets[wsName];
+        const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        const rows = json.length;
+        setDetectedRows(rows);
+
+        // Auto-tune: conservative defaults that scale with size
+        // baseline batch size 50
+        const bs = Math.min(50, Math.max(10, Math.ceil(rows / 4)));
+        // channels scale up but capped to 8
+        const ch = Math.min(8, Math.max(2, Math.ceil(rows / 200)));
+        // prefetch small for stability
+        const pf = Math.min(5, Math.max(1, Math.ceil(rows / (ch * 200))));
+        const sleep = rows > 2000 ? 8 : rows > 1000 ? 6 : 5;
+
+        setBatchSize(String(bs));
+        setWorkerChannels(String(ch));
+        setWorkerPrefetch(String(pf));
+        setSleepSeconds(String(sleep));
+
+        toast({
+          title: 'Excel analyzed',
+          description: `Detected ${rows} rows. Auto-tuned config: batch=${bs}, channels=${ch}, prefetch=${pf}, sleep=${sleep}s. You can adjust before starting.`,
+        });
       } catch (e) {
-        console.warn('❌ Failed to load initial data:', e);
-        // Final fallback
-        setOrgs([{ id: 'default_org', name: 'Default Organization' }]);
-        setCampaigns([
-          { id: 'cf821e28-bae9-4500-93bf-2d755c7d0b7c', name: 'Default Campaign', description: 'Default campaign for testing', org_id: 'org_3966895b' }
-        ]);
+        console.warn('Failed to analyze Excel, keeping defaults', e);
       }
     };
-    
-    loadInitialData();
-  }, []);
+    analyze();
+  }, [file]);
 
   // Fast data fetching with cooldown
   const fetchData = async () => {
@@ -140,28 +187,193 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
       if (opsRes) {
         const recent = Object.entries(opsRes.operations || {})
           .slice(0, 5)
-          .map(([id, op]: [string, any]) => ({
-            id,
-            status: op.status,
-            progress: op.progress_percentage || 0,
-            calls: `${op.completed_calls || 0}/${op.total_calls || 0}`,
-            successful: op.successful_calls || 0,
-            failed: op.failed_calls || 0,
-            total: op.total_calls || 0,
-            canPause: op.can_pause || false,
-            canResume: op.can_resume || false,
-            canCancel: op.can_cancel || false,
-            startedAt: op.started_at,
-            operationName: op.operation_name || `Operation ${id.slice(0, 8)}`
-          }));
+          .map(([id, op]: [string, any]) => ({ id, ...op }));
         setRecentOps(recent);
+
+        // Update banner with most recent op status
+        if (recent.length > 0) {
+          const r = recent[0];
+          const status = (r.status || '').toUpperCase();
+          const total = r.total_calls ?? r.expected_total_calls ?? 0;
+          const done = r.completed_calls ?? 0;
+          const progress = r.progress_percentage ?? (total > 0 ? Math.round((done / total) * 100) : 0);
+          const text = `Latest operation ${r.operation_name || r.id.slice(-8)}: ${status} — ${done} / ${total} (${progress}% complete)`;
+          if (status === 'STARTING' || status === 'PROCESSING') setBanner({ type: 'info', message: text });
+          else if (status === 'COMPLETED') setBanner({ type: 'success', message: text });
+          else if (status === 'FAILED' || status === 'CANCELLED') setBanner({ type: 'error', message: text });
+          else setBanner({ type: 'warning', message: text });
+        }
       }
-    } catch (e) {
-      console.warn('Failed to fetch data:', e);
+      
+    } catch (error) {
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Start batch operation
+  const startBatchOperation = async () => {
+    if (!orgId || !campaignId || !file || !batchName.trim()) {
+      toast({
+        title: 'Missing Information',
+        description: 'Please select organization, campaign, enter batch name, and upload Excel file',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Check if file is selected
+    if (!file) {
+      toast({
+        title: 'No File Selected',
+        description: 'Please select an Excel file to upload',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setStarting(true);
+    
+    try {
+      const userId = localStorage.getItem('userId') || 'user_1';
+      
+      const result = await createUnifiedBatchOperation(
+        file,
+        {
+          org_id: orgId,
+          campaign_id: campaignId,
+          user_id: userId,
+          operation_name: batchName || `Batch ${new Date().toLocaleString()}`,
+          sleep_seconds: parseInt(sleepSeconds),
+          channels: parseInt(workerChannels),
+          worker_prefetch: parseInt(workerPrefetch),
+          batch_size: parseInt(batchSize)
+        },
+        'rabbitmq'
+      );
+      
+      // result is the JSON payload from backend
+      const opName = (result as any).operation_name || 'Batch Operation';
+      toast({
+        title: 'Batch Operation Started',
+        description: `Operation "${opName}" has been queued successfully.`,
+      });
+
+      // Show live banner and short-interval polling for 30s
+      setBanner({ type: 'info', message: `Starting ${opName}… polling for status` });
+      setIsLiveRefreshing(true);
+      const startedAt = Date.now();
+      const liveTimer = setInterval(async () => {
+        await fetchData();
+        if (Date.now() - startedAt > 30000) {
+          clearInterval(liveTimer);
+          setIsLiveRefreshing(false);
+        }
+      }, 3000);
+
+      // Optional: notify external webhook "batch_started"
+      try {
+        await fetch(WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': WEBHOOK_TOKEN },
+          body: JSON.stringify({ event: 'batch_started', data: { operation_name: opName, campaign_id: campaignId, org_id: orgId, timestamp: new Date().toISOString() } })
+        });
+      } catch {}
+      
+      // Reset form
+      setFile(null);
+      setOrgId('');
+      setCampaignId('');
+      setBatchName('');
+      
+      // Refresh data
+      lastFetchRef.current = 0; // Reset cooldown
+      fetchData();
+      
+    } catch (error) {
+      console.error('Error starting batch operation:', error);
+      toast({
+        title: 'Operation Failed',
+        description: error instanceof Error ? error.message : 'Failed to start batch operation',
+        variant: 'destructive'
+      });
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const testWebhook = async () => {
+    setWebhookTesting(true);
+    try {
+      const resp = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': WEBHOOK_TOKEN },
+        body: JSON.stringify({
+          event: 'test',
+          data: {
+            call_id: '123e4567-e89b-12d3-a456-426614174000',
+            status: 'initiated',
+            timestamp: new Date().toISOString()
+          }
+        })
+      });
+      toast({ title: 'Webhook', description: `Test webhook sent: ${resp.status} ${resp.ok ? 'OK' : ''}` });
+    } catch (e: any) {
+      toast({ title: 'Webhook failed', description: e?.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setWebhookTesting(false);
+    }
+  };
+
+  // Filter campaigns by organization (ensure single declaration)
+  const filteredCampaigns = campaigns.filter(campaign => 
+    !orgId || orgId === 'default_org' || campaign.org_id === orgId
+  );
+
+  // Load initial data once, with retry logic
+  useEffect(() => {
+    const loadInitialData = async () => {
+      setOrgsLoading(true); setOrgsError(null);
+      setCampaignsLoading(true); setCampaignsError(null);
+      try {
+        // Orgs
+        try {
+          const orgRes = await authorizedFetch('/organizations/');
+          if (orgRes.ok) {
+            const orgData = await orgRes.json() as any[];
+            setOrgs(orgData.map((org: any) => ({ id: org.id, name: org.name })));
+            setOrgsError(null);
+          } else throw new Error(`API returned: ${orgRes.status}`);
+        } catch (orgError: any) {
+          setOrgs([{ id: 'default_org', name: 'Default Organization' }]);
+          setOrgsError('Failed to load organizations.');
+        } finally { setOrgsLoading(false); }
+        // Campaigns (defer until orgs loaded to use orgId as filter if needed)
+        try {
+          const campRes = await authorizedFetch('/campaigns/');
+          if (campRes.ok) {
+            const campData = await campRes.json() as any[];
+            setCampaigns(campData.map((camp: any) => ({ id: camp.id, name: camp.name, description: camp.description, org_id: camp.org_id })));
+            setCampaignsError(null);
+          } else throw new Error(`API returned: ${campRes.status}`);
+        } catch (campError: any) {
+          setCampaigns([{ id: 'cf821e28-bae9-4500-93bf-2d755c7d0b7c', name: 'Default Campaign', description: 'Default for testing', org_id: 'org_3966895b'}]);
+          setCampaignsError('Failed to load campaigns.');
+        } finally { setCampaignsLoading(false); }
+      } catch (e) {
+        setOrgs([{ id: 'default_org', name: 'Default Organization' }]);
+        setCampaigns([{ id: 'cf821e28-bae9-4500-93bf-2d755c7d0b7c', name: 'Default Campaign', description: 'Default for testing', org_id: 'org_3966895b'}]);
+        setOrgsError('Unexpected error.');
+        setCampaignsError('Unexpected error.');
+        setOrgsLoading(false);
+        setCampaignsLoading(false);
+      }
+    };
+    loadInitialData();
+  }, []);
+
+  // remove duplicate fetchData block (was defined earlier)
 
   // Initial load and periodic refresh
   useEffect(() => {
@@ -291,21 +503,7 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
 
   // Operation controls
 
-  // Filter campaigns based on selected organization
-  const filteredCampaigns = campaigns.filter(campaign => {
-    // If no organization is selected, show all campaigns
-    if (!orgId || orgId === 'default_org') {
-      return true;
-    }
-    
-    // Filter campaigns by organization ID
-    // Campaigns now have org_id field that matches the selected organization
-    const matches = campaign.org_id === orgId;
-    console.log(`Campaign ${campaign.name} (org: ${campaign.org_id}) matches ${orgId}: ${matches}`);
-    return matches;
-  });
-  
-  console.log(`Filtered campaigns: ${filteredCampaigns.length} out of ${campaigns.length} campaigns for org ${orgId}`);
+  // [duplicate filteredCampaigns removed]
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
@@ -325,6 +523,16 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
                   <p className="text-gray-600">Start and monitor bulk call operations with ease</p>
                 </div>
               </div>
+              {banner && (
+                <div className={`mt-3 text-sm rounded-md px-3 py-2 shadow ${
+                  banner.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' :
+                  banner.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
+                  banner.type === 'warning' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                  'bg-blue-50 text-blue-700 border border-blue-200'
+                }`}>
+                  {banner.message} {isLiveRefreshing ? '⏱️' : ''}
+                </div>
+              )}
             </div>
             <div className="flex space-x-2">
               <Button 
@@ -352,6 +560,9 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
                 className="shadow-sm hover:shadow-md transition-shadow"
               >
                 Debug
+              </Button>
+              <Button onClick={testWebhook} disabled={webhookTesting} variant="outline" size="sm">
+                {webhookTesting ? 'Testing…' : 'Test Webhook'}
               </Button>
             </div>
           </div>
@@ -398,40 +609,36 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
                           <SelectItem value="loading" disabled>Loading organizations...</SelectItem>
                         )}
                       </SelectContent>
+                      {orgsError && <div className="text-xs text-red-500 mt-1">{orgsError} <button className="ml-2 underline text-blue-700" onClick={()=>{setOrgsLoading(true);setOrgsError(null);authorizedFetch('/organizations/').then(res=>res.ok?res.json():Promise.reject()).then((orgData: any[]) => { setOrgs(orgData.map((o: any) => ({ id: o.id, name: o.name }))); setOrgsError(null); }, ()=>setOrgsError('Retry failed.')).finally(()=>setOrgsLoading(false));}}>Retry</button></div>}
                     </Select>
-                    {orgs.length > 0 && (
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-green-600">✅ {orgs.length} organizations loaded</p>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => {
-                            console.log('🔄 Retrying organizations API call...');
-                            authorizedFetch('/organizations/')
-                              .then(res => {
-                                if (res.ok) {
-                                  return res.json();
-                                }
-                                throw new Error(`API returned ${res.status}`);
-                              })
-                              .then(data => {
-                                console.log('✅ Organizations retry successful:', data);
-                                setOrgs(data.map((org: any) => ({ id: org.id, name: org.name })));
-                              })
-                              .catch(err => {
-                                console.error('❌ Organizations retry failed:', err);
-                              });
-                          }}
-                          className="text-xs h-6 px-2"
-                        >
-                          Retry
-                        </Button>
-                      </div>
-                    )}
                   </div>
                   
                   <div className="space-y-3">
-                    <Label className="text-sm font-semibold text-gray-700">Campaign</Label>
+                      <div className="flex items-center justify-between">
+                      <Label className="text-sm font-semibold text-gray-700">Campaign</Label>
+                      {campaignId && (
+                        <Button 
+                          type="button"
+                          variant="outline"
+                          size="sm" 
+                          onClick={downloadTemplate}
+                          disabled={downloadingTemplate}
+                          className="flex items-center gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
+                        >
+                          {downloadingTemplate ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 animate-spin" />
+                              Downloading...
+                            </>
+                          ) : (
+                            <>
+                              <Download className="h-4 w-4" />
+                              Download Template
+                            </>
+                          )}
+                        </Button>
+                    )}
+                  </div>
                     <Select value={campaignId} onValueChange={setCampaignId}>
                       <SelectTrigger className="h-12 border-2 border-gray-200 focus:border-blue-500 transition-colors">
                         <SelectValue placeholder={
@@ -455,54 +662,28 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
                           <SelectItem value="loading" disabled>Loading campaigns...</SelectItem>
                         )}
                       </SelectContent>
+                      {campaignsError && <div className="text-xs text-red-500 mt-1">{campaignsError}<button className="ml-2 underline text-blue-700" onClick={()=>{setCampaignsLoading(true);setCampaignsError(null);authorizedFetch('/campaigns/').then(res=>res.ok?res.json():Promise.reject()).then((campData: any[]) => { setCampaigns(campData.map((c: any) => ({ id: c.id, name: c.name, description: c.description, org_id: c.org_id }))); setCampaignsError(null); }, ()=>setCampaignsError('Retry failed.')).finally(()=>setCampaignsLoading(false));}}>Retry</button></div>}
                     </Select>
-                    {filteredCampaigns.length > 0 && (
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-green-600">
-                          ✅ {filteredCampaigns.length} campaigns loaded
-                          {orgId && orgId !== 'default_org' && ` (filtered by organization)`}
-                        </p>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => {
-                            console.log('🔄 Retrying campaigns API call...');
-                            authorizedFetch('/campaigns/')
-                              .then(res => {
-                                if (res.ok) {
-                                  return res.json();
-                                }
-                                throw new Error(`API returned ${res.status}`);
-                              })
-                              .then(data => {
-                                console.log('✅ Campaigns retry successful:', data);
-                                setCampaigns(data.map((camp: any) => ({ 
-                                  id: camp.id, 
-                                  name: camp.name, 
-                                  description: camp.description,
-                                  org_id: camp.org_id 
-                                })));
-                              })
-                              .catch(err => {
-                                console.error('❌ Campaigns retry failed:', err);
-                              });
-                          }}
-                          className="text-xs h-6 px-2"
-                        >
-                          Retry
-                        </Button>
+                    {campaignId && (
+                      <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded-md">
+                        <FileSpreadsheet className="h-3 w-3 inline mr-1" />
+                        Template will include campaign variables as columns
                       </div>
                     )}
                   </div>
                   
                   <div className="space-y-3">
-                    <Label className="text-sm font-semibold text-gray-700">Batch Name (Optional)</Label>
+                    <Label className="text-sm font-semibold text-gray-700">Batch Name <span className="text-red-600">*</span></Label>
                     <Input
                       value={batchName}
                       onChange={(e) => setBatchName(e.target.value)}
                       placeholder="Enter batch name"
-                      className="h-12 border-2 border-gray-200 focus:border-blue-500 transition-colors"
+                      required
+                      className={`h-12 border-2 ${batchName.trim() === '' ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-blue-500'} transition-colors`}
                     />
+                    {batchName.trim() === '' && (
+                      <p className="text-xs text-red-600">Batch name is required</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -596,7 +777,7 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
               <div className="flex justify-center pt-6">
                 <Button 
                   type="submit" 
-                  disabled={starting || !orgId || !campaignId || !file}
+                  disabled={starting || !orgId || !campaignId || !file || batchName.trim() === '' || orgsLoading || campaignsLoading}
                   className="h-14 px-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 >
                   {starting ? (

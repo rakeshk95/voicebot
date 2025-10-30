@@ -834,11 +834,17 @@ const CallHistory = () => {
 
   const initiateCall = async (call: Call, providedName?: string) => {
     setIsCallingInProgress(true);
+    
+    // Get the selected campaign to access its dynamic variables
+    const campaign = allCampaigns.find(c => c.id === selectedCampaign);
+    
     console.log('Initiating call with:', {
       to_number: call.To,
       customer_name: providedName || call.CallerName,
-      campaign_id: selectedCampaign
+      campaign_id: selectedCampaign,
+      campaign_variables: campaign?.llm?.promptJson?.promptVariables
     });
+    
     try {
       const response = await fetch('http://localhost:8000/api/v1/calls/', {
         method: 'POST',
@@ -849,9 +855,15 @@ const CallHistory = () => {
         body: JSON.stringify({
           to_number: call.To,
           dynamic_variables: {
-              customer_name: call.To,
+            mobile_number: call.To,
+            customer_name: providedName || call.CallerName || call.To,
+            // Include campaign's dynamic variables
+            ...(campaign?.llm?.promptJson?.promptVariables || {})
           },
-          metadata: {},
+          call_metadata: {
+            org_id: campaign?.org_id || 'org_1',
+            user_id: localStorage.getItem('userId') || 'user_1'
+          },
           campaign_id: selectedCampaign
         }),
       });

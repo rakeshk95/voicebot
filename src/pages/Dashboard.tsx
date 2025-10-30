@@ -39,7 +39,7 @@ import {
   Pie, 
   Cell 
 } from 'recharts';
-import { usePermissions } from '@/contexts/PermissionContext';
+import { usePermissions } from '@/contexts/PermissionProvider';
 import { getUserData } from '@/utils/localStorage';
 import { cachedFetch } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';

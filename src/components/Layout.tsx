@@ -6,10 +6,14 @@ export function Layout() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      navigate('/login', { replace: true });
-    }
+    // Delay redirect until after hydration to avoid false negatives on hard refresh
+    const timer = setTimeout(() => {
+      const token = localStorage.getItem('authToken');
+      if (!token || token === 'null' || token === 'undefined') {
+        navigate('/login', { replace: true });
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [navigate]);
 
   return (

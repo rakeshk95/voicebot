@@ -1,5 +1,5 @@
 import React from 'react';
-import { usePermissions } from '@/contexts/PermissionContext';
+import { usePermissions } from '@/contexts/PermissionProvider';
 
 export const DebugPanel: React.FC = () => {
   const { userPermissions, userRole, isLoading } = usePermissions();

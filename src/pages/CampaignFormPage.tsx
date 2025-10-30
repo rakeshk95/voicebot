@@ -186,7 +186,7 @@ const defaultValues: CampaignFormValues = {
     provider: "nova-2"
   },
   llm: {
-    provider: "AZURE",
+    provider: "openai",
     model: "gpt-4.1"
   },
   telephonic_provider: "czentrix",
@@ -209,7 +209,7 @@ const defaultValues: CampaignFormValues = {
       fields: {}
     }
   },
-  callback_endpoint: ""
+  callback_endpoint: "https://platform.voxiflow.com/backend/api/v1/webhook"
 };
 
 const steps = [
@@ -265,12 +265,98 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
   const [selectedVersion, setSelectedVersion] = useState<string>('');
   const [loadingVersion, setLoadingVersion] = useState(false);
   const [loadingVersions, setLoadingVersions] = useState(false);
+  const COPY_STORAGE_KEY = 'VOXIFLOW_COPIED_CAMPAIGN';
 
   // --- Form ---
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema) as any, // force type to match CampaignFormValues
     defaultValues
   });
+
+  // Prefill from copied campaign when creating a new one
+  useEffect(() => {
+    if (mode !== 'create') return;
+    try {
+      const raw = localStorage.getItem(COPY_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      const copied = parsed?.campaign || {};
+      // Map copied structure to form values
+      const categories = copied.post_call_actions?.categories || {};
+      const data_extracted = copied.post_call_actions?.data_extracted || {};
+      const newId = generateUUID();
+      form.reset({
+        campaign_id: newId,
+        name: copied.name || '',
+        direction: (copied.direction === 'INBOUND' || copied.direction === 'OUTBOUND') ? copied.direction : 'OUTBOUND',
+        state: (copied.state === 'TRIAL' || copied.state === 'ACTIVE' || copied.state === 'INACTIVE') ? copied.state : 'TRIAL',
+        org_id: String(copied.org_id || ''),
+        tts: {
+          gender: copied.tts?.gender || 'female',
+          language: copied.tts?.language || 'hindi',
+          voice_id: copied.tts?.voice_id || 'hi-IN-AnanyaNeural',
+          vendor: copied.tts?.vendor || '11labs',
+          transfer_call: copied.tts?.transfer_call || false
+        },
+        stt: {
+          vendor: copied.stt?.vendor || 'deepgram',
+          provider: copied.stt?.provider || 'nova-2'
+        },
+        telephonic_provider: copied.telephonic_provider || 'czentrix',
+        telephony_config: copied.telephony_config || {
+          channels: 1,
+          max_concurrent_calls: 1,
+          call_timeout: 30
+        },
+        knowledge_base: {
+          url: copied.knowledge_base?.url || '',
+          file: null
+        },
+        post_call_actions: {
+          categories: {
+            system_prompt: categories.system_prompt || '',
+            fields: categories.fields || {}
+          },
+          data_extracted: {
+            system_prompt: data_extracted.system_prompt || '',
+            fields: data_extracted.fields || {}
+          }
+        },
+        callback_endpoint: copied.callback_endpoint || defaultValues.callback_endpoint,
+        llm: {
+          initialMessage: copied.llm?.initialMessage || '',
+          useProxyLlm: copied.llm?.useProxyLlm || false,
+          UseStructuredPrompt: copied.llm?.UseStructuredPrompt || false,
+          provider: (copied.llm?.provider || 'openai').toString().toLowerCase(),
+          model: copied.llm?.model || 'gpt-4.1',
+          temperature: copied.llm?.temperature || '0.5',
+          maxCallDuration: copied.llm?.maxCallDuration || '300',
+          useEmbeddings: copied.llm?.useEmbeddings || false,
+          prompt: copied.llm?.prompt || '',
+          promptJson: {
+            skeleton: copied.llm?.promptJson?.skeleton || 'Simple output format.',
+            promptVariables: copied.llm?.promptJson?.promptVariables || {},
+            knowledgeBase: copied.llm?.promptJson?.knowledgeBase || { url: '', file: null },
+            nodes: copied.llm?.promptJson?.nodes || {},
+            context: copied.llm?.promptJson?.context || '',
+            botStateDefinitions: copied.llm?.promptJson?.botStateDefinitions || {},
+            language: copied.llm?.promptJson?.language || copied.tts?.language || 'hindi',
+            mermaidGraph: copied.llm?.promptJson?.mermaidGraph || 'initial_message -->|edge| node1\nnode1 -->|edge| node2'
+          }
+        }
+      });
+      // Sync local UI state pieces
+      setContextValue(copied.llm?.promptJson?.context || '');
+      setInitialMessage(copied.llm?.initialMessage || '');
+      const pv = copied.llm?.promptJson?.promptVariables || {};
+      setVariables(Object.entries(pv).map(([key, value]) => ({ key, value: String(value ?? '') })));
+      setCategorization(Object.entries(categories.fields || {}).map(([key, value]) => ({ key, value: String(value ?? '') })));
+      setDataExtractionFields(Object.entries(data_extracted.fields || {}).map(([key, value]) => ({ key, value: String(value ?? '') })));
+      setDataExtractionSystemPrompt(data_extracted.system_prompt || '');
+      setCategoriesSystemPrompt(categories.system_prompt || '');
+      toast({ title: 'Prefilled from copied campaign', description: 'You can modify any fields before saving.' });
+    } catch {}
+  }, [mode]);
 
   // --- Sync dataExtractionFields and categorization to form state on change ---
   React.useEffect(() => {
@@ -622,6 +708,55 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
     }
   }, [mode, params.id]);
 
+  // --- Auto-detect variables inside curly braces in Context and sync to Variables ---
+  useEffect(() => {
+    try {
+      const text = contextValue || '';
+      const matches = text.match(/\{([^{}]+)\}/g) || [];
+      const extracted = matches
+        .map(m => m.slice(1, -1).trim())
+        .filter(Boolean);
+      if (extracted.length === 0) {
+        // still ensure form value reflects current variables
+        const kv: Record<string, string> = {};
+        variables.forEach(v => { if (v.key) kv[v.key] = v.value || ''; });
+        form.setValue('llm.promptJson.promptVariables', kv);
+        return;
+      }
+
+      const normalize = (k: string) => {
+        const normalized = k.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+        // Map common variations to standard keys
+        const keyMap: Record<string, string> = {
+          'client_name': 'customer_name',
+          'clientname': 'customer_name',
+          'appointment_date': 'date',
+          'appointmentdate': 'date',
+          'appointment_time': 'time',
+          'appointmenttime': 'time'
+        };
+        return keyMap[normalized] || normalized;
+      };
+      const uniqueKeys = Array.from(new Set(extracted.map(normalize).filter(Boolean)));
+
+      // preserve existing values when keys match, but don't auto-fill values
+      const nextVars = uniqueKeys.map(key => ({
+        key,
+        value: (variables.find(v => v.key === key)?.value) || ''
+      }));
+
+      // optionally keep extra variables previously added by user
+      variables.forEach(v => { if (!nextVars.find(n => n.key === v.key)) nextVars.push(v); });
+
+      setVariables(nextVars);
+      const kv: Record<string, string> = {};
+      nextVars.forEach(v => { if (v.key) kv[v.key] = v.value || ''; });
+      form.setValue('llm.promptJson.promptVariables', kv);
+    } catch {
+      // no-op
+    }
+  }, [contextValue]);
+
   // --- Fetch campaign data for edit mode ---
   useEffect(() => {
     if (mode === 'edit' && params.id) {
@@ -914,59 +1049,77 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
     return <div className="text-center py-20 text-gray-500">Loading...</div>;
   }
   return (
-    <main className="flex-1 bg-gray-50">
-      <div className="flex flex-col flex-1 items-stretch w-full mt-2">
-        {/* Stepper */}
-        <div className="bg-gradient-to-r from-white to-blue-50/30 w-full p-0 m-0 text-xs">
-          <div className="flex justify-between relative">
-            {/* Progress Line */}
-            <div className="absolute top-4 left-0 w-full h-0.5 bg-gray-200">
-              <div 
-                className="h-full bg-blue-500 transition-all duration-300 ease-in-out"
-                style={{ width: `${((activeStep) / 5) * 100}%` }}
-              />
-            </div>
-            {['Name', 'Speech and Call', 'Voice', 'Flow', 'Telephony', 'Post Call Actions'].map((step, index) => (
-              <div
-                key={step}
-                className={`flex flex-col items-center relative ${
-                  activeStep === index 
-                    ? 'text-blue-600' 
-                    : index < activeStep 
-                      ? 'text-blue-500' 
-                      : 'text-gray-400'
-                }`}
-              >
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-3 transition-all duration-200 ${
-                  activeStep === index 
-                    ? 'bg-blue-600 text-white ring-4 ring-blue-100 shadow-lg scale-110' 
-                    : index < activeStep 
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-white border-2 border-gray-200'
-                }`}>
-                  {index < activeStep ? (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <span className="text-sm font-semibold">{index + 1}</span>
-                  )}
-                </div>
-                <span className={`text-sm font-medium ${
-                  activeStep === index 
-                    ? 'text-blue-600' 
-                    : index < activeStep 
-                      ? 'text-blue-500' 
-                      : 'text-gray-400'
-                }`}>{step}</span>
-              </div>
-            ))}
+    <div className="bg-gray-50 relative">
+      {/* Stepper - Fixed at top, accounting for 256px sidebar */}
+      <div 
+        className="bg-white py-2.5 px-3 fixed top-0 z-50" 
+        style={{ 
+          left: '256px', 
+          right: '0', 
+          width: 'calc(100% - 256px)',
+          background: 'linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%)', 
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)' 
+        }}
+      >
+        <div className="flex relative w-full" style={{ paddingLeft: '12px', paddingRight: '12px', gap: '0' }}>
+          {/* Progress Line */}
+          <div className="absolute top-4 left-12 right-12 h-0.5 bg-gray-200">
+            <div 
+              className="h-full bg-blue-500 transition-all duration-300 ease-in-out"
+              style={{ 
+                width: `${Math.min((activeStep / (steps.length - 1)) * 100, 100)}%` 
+              }}
+            />
           </div>
+          {steps.map((step, index) => (
+            <div
+              key={`step-${index}`}
+              className={`flex flex-col items-center relative ${
+                activeStep === index 
+                  ? 'text-blue-600' 
+                  : index < activeStep 
+                    ? 'text-blue-500' 
+                    : 'text-gray-400'
+              }`}
+              style={{ 
+                width: `${100 / steps.length}%`,
+                flexShrink: 0,
+                paddingLeft: '4px',
+                paddingRight: '4px'
+              }}
+            >
+              <div className={`w-11 h-11 rounded-full flex items-center justify-center mb-1.5 transition-all duration-200 z-10 ${
+                activeStep === index 
+                  ? 'bg-blue-600 text-white ring-4 ring-blue-100 shadow-lg scale-110' 
+                  : index < activeStep 
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white border-2 border-gray-200'
+              }`}>
+                {index < activeStep ? (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <span className="text-xs font-semibold">{index + 1}</span>
+                )}
+              </div>
+              <span className={`text-xs font-medium text-center leading-tight ${
+                activeStep === index 
+                  ? 'text-blue-600' 
+                  : index < activeStep 
+                    ? 'text-blue-500' 
+                    : 'text-gray-400'
+              }`}>{step}</span>
+            </div>
+          ))}
         </div>
+      </div>
 
+      {/* Add padding-top to account for fixed stepper with extra gap */}
+      <div style={{ paddingTop: mode === 'edit' ? '135px' : '95px', paddingBottom: '100px' }}>
         {/* Version Selector - Only show in edit mode */}
         {mode === 'edit' && (
-          <div className="bg-white border-b border-gray-200 px-6 py-4">
+          <div className="bg-white border-b border-gray-200 px-6 py-4 mb-8 mx-6 rounded-lg shadow-sm">
             <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
@@ -1035,23 +1188,22 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         )}
 
         {/* Card Container */}
-        <div className="bg-white rounded-lg border shadow-sm">
-          <div className="p-6">
+        <div className="bg-white rounded-lg border shadow-md mx-6 my-6">
+          <div className="p-8">
             <Form {...form}>
-              <form onSubmit={e => e.preventDefault()} className="space-y-4 w-full">
+              <form onSubmit={e => e.preventDefault()} className="space-y-6 w-full">
                 {/* Step 1: Name */}
                 {activeStep === 0 && (
-                  <div className="space-y-2 w-full">
-                    <h2 className="text-base font-bold text-blue-700 mb-2">Name</h2>
-                    <div className="mb-1 w-full">
+                  <div className="space-y-6 w-full">
+                    <div>
                       <FormField
                         control={form.control}
                         name="campaign_id"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs">Campaign ID</FormLabel>
-                            <Input {...field} placeholder="Campaign ID" className="h-7 text-xs" />
-                            <FormDescription className="text-[10px] text-gray-500 mt-0.5">
+                            <FormLabel className="text-sm font-medium text-gray-700">Campaign ID</FormLabel>
+                            <Input {...field} placeholder="Campaign ID" className="h-9" />
+                            <FormDescription className="text-xs text-gray-500 mt-1">
                               Unique identifier for this campaign. You can edit this value.
                             </FormDescription>
                           </FormItem>
@@ -1200,73 +1352,76 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
                     />
                   </div>
                 )}
-                <div className="flex justify-between items-center pt-1 px-0 sticky bottom-0 bg-white border-t z-10 w-full">
-                  <Button variant="outline" onClick={() => navigate(-1)} className="h-7 px-3 text-xs font-semibold">
-                    Cancel
-                  </Button>
-                  <div>
-                    {activeStep > 0 && (
-                      <Button variant="ghost" onClick={prevStep} className="mr-2 h-7 px-3 text-xs">
-                        Previous
-                      </Button>
-                    )}
-                    {activeStep < steps.length - 1 ? (
-                      <Button variant="default" type="button" onClick={nextStep} className="h-7 px-3 text-xs bg-blue-600 hover:bg-blue-700">
-                        Next
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="default"
-                        type="button"
-                        disabled={isSubmitting}
-                        className="h-7 px-3 text-xs bg-blue-600 hover:bg-blue-700"
-                        onClick={async () => {
-                          const isValid = await form.trigger();
-                          if (isValid) {
-                            // Only pass the fields defined in the Zod schema to validation and handleSubmit
-                            const {
-                              campaign_id, name, direction, state, org_id, tts, stt, telephonic_provider, telephony_config, knowledge_base, post_call_actions, callback_endpoint, llm
-                            } = form.getValues();
-                            handleSubmit({
-                              campaign_id, name, direction, state, org_id, tts, stt, telephonic_provider, telephony_config, knowledge_base, post_call_actions, callback_endpoint, llm
-                            });
-                          } else {
-                            const errors = form.formState.errors;
-                            alert(JSON.stringify(errors, null, 2));
-                            let missingFields = Object.keys(errors).map(key => {
-                              switch (key) {
-                                case 'campaign_id': return 'Campaign ID';
-                                case 'name': return 'Campaign Name';
-                                case 'direction': return 'Direction';
-                                case 'state': return 'State';
-                                case 'org_id': return 'Organization';
-                                case 'tts': return 'Voice Settings';
-                                case 'stt': return 'STT Settings';
-                                case 'telephonic_provider': return 'Telephony Provider';
-                                case 'telephony_config': return 'Telephony Configuration';
-                                case 'knowledge_base': return 'Knowledge Base';
-                                case 'llm': return 'LLM Configuration';
-                                default: return key;
-                              }
-                            });
-                            toast({
-                              title: "Validation Error",
-                              description: `Please fill in all required fields correctly: ${missingFields.join(', ')}`,
-                              variant: "destructive",
-                            });
-                          }
-                        }}
-                      >
-                        {isSubmitting ? 'Saving...' : (mode === 'edit' ? 'Save Changes' : 'Create Campaign')}
-                      </Button>
-                    )}
-                  </div>
-                </div>
               </form>
             </Form>
           </div>
         </div>
       </div>
-    </main>
+
+      {/* Fixed Button Bar - Static at bottom */}
+      <div 
+        className="fixed bg-white border-t border-gray-200 bottom-0 z-50 shadow-md"
+        style={{ 
+          left: '256px', 
+          right: '0'
+        }}
+      >
+        <div className="flex justify-between items-center px-8 py-4">
+          <Button variant="outline" onClick={() => navigate(-1)} className="h-10 px-6 text-sm border-gray-300 hover:bg-gray-50">
+            Cancel
+          </Button>
+          <div className="flex items-center gap-3">
+            {activeStep > 0 && (
+              <Button variant="outline" onClick={prevStep} className="h-10 px-6 text-sm border-gray-300 hover:bg-gray-50">
+                Previous
+              </Button>
+            )}
+            {activeStep < steps.length - 1 ? (
+              <Button type="button" onClick={nextStep} className="h-10 px-6 text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
+                Next
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                disabled={isSubmitting}
+                className="h-10 px-6 text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-sm disabled:opacity-50"
+                onClick={async () => {
+                  const isValid = await form.trigger();
+                  if (isValid) {
+                    const { campaign_id, name, direction, state, org_id, tts, stt, telephonic_provider, telephony_config, knowledge_base, post_call_actions, callback_endpoint, llm } = form.getValues();
+                    handleSubmit({ campaign_id, name, direction, state, org_id, tts, stt, telephonic_provider, telephony_config, knowledge_base, post_call_actions, callback_endpoint, llm });
+                  } else {
+                    const errors = form.formState.errors;
+                    let missingFields = Object.keys(errors).map(key => {
+                      switch (key) {
+                        case 'campaign_id': return 'Campaign ID';
+                        case 'name': return 'Campaign Name';
+                        case 'direction': return 'Direction';
+                        case 'state': return 'State';
+                        case 'org_id': return 'Organization';
+                        case 'tts': return 'Voice Settings';
+                        case 'stt': return 'STT Settings';
+                        case 'telephonic_provider': return 'Telephony Provider';
+                        case 'telephony_config': return 'Telephony Configuration';
+                        case 'knowledge_base': return 'Knowledge Base';
+                        case 'llm': return 'LLM Configuration';
+                        default: return key;
+                      }
+                    });
+                    toast({
+                      title: "Validation Error",
+                      description: `Please fill in all required fields correctly: ${missingFields.join(', ')}`,
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              >
+                {isSubmitting ? 'Saving...' : (mode === 'edit' ? 'Save Changes' : 'Create Campaign')}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 } 

@@ -13,6 +13,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 // Request deduplication
 const pendingRequests = new Map<string, Promise<any>>();
 
+
 export async function authorizedFetch<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
     const token = localStorage.getItem('authToken');
     const isFormData = options?.body instanceof FormData;
@@ -39,26 +40,9 @@ export async function authorizedFetch<T>(url: string, options?: RequestInit): Pr
     console.log('🔍 authorizedFetch - Response status:', response.status);
 
     if (response.status === 401) {
-        // Check if we have a token - if not, don't redirect (might be intentional)
-        const token = localStorage.getItem('authToken');
-        if (token) {
-            console.warn('Received 401 response with valid token - session may have expired');
-            
-            // Only redirect if we're not already on the login page and not in a batch calling context
-            if (!window.location.pathname.includes('/login')) {
-                // Add a small delay to prevent rapid redirects
-                setTimeout(() => {
-                    toast({
-                        title: "Session Expired",
-                        description: "Your session has expired. Please log in again.",
-                        variant: "destructive",
-                    });
-                    localStorage.removeItem('authToken');
-                    window.location.href = '/login';
-                }, 100);
-            }
-        }
-        throw new Error("Unauthorized"); // Prevent further processing
+        // Keep sessions persistent: do not show toast or logout automatically.
+        // Let callers handle it explicitly if needed.
+        throw new Error("Unauthorized");
     }
 
     return response;
@@ -84,7 +68,7 @@ export async function cachedFetch<T>(url: string, options?: RequestInit): Promis
     
     // Create new request
     const requestPromise = authorizedFetch(url, options)
-        .then(response => response.json())
+        .then(response => response.json() as T)
         .then(data => {
             // Cache the successful response
             apiCache.set(cacheKey, { data, timestamp: now });
@@ -118,4 +102,65 @@ export function clearApiCache(url?: string) {
 
 export const getAuthToken = (): string | null => {
     return localStorage.getItem('authToken');
+};
+
+// Enhanced fetch function for refresh operations that handles errors gracefully
+export async function refreshFetch<T>(url: string, options?: RequestInit): Promise<T> {
+    try {
+        const response = await authorizedFetch<T>(url, options);
+        return await response.json() as T;
+    } catch (error) {
+        // For refresh operations, we want to show the error on the current page
+        // instead of redirecting to login
+        if (error instanceof Error && error.message.includes('Unauthorized')) {
+            console.warn('Refresh operation failed due to authentication error');
+            throw new Error('Authentication failed. Please check your session and try again.');
+        }
+        throw error;
+    }
+}
+
+// Utility to check if token is valid without making API calls
+export const isTokenValid = (): boolean => {
+    const token = localStorage.getItem('authToken');
+    if (!token) return false;
+    
+    try {
+        // Basic JWT token validation (check if it's not expired)
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const currentTime = Math.floor(Date.now() / 1000);
+        return payload.exp > currentTime;
+    } catch {
+        // If token is not a JWT or can't be parsed, assume it's invalid
+        return false;
+    }
+};
+
+// Enhanced token validation with better error handling
+export const validateToken = (): { isValid: boolean; error?: string } => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        return { isValid: false, error: 'No authentication token found' };
+    }
+    
+    try {
+        // Check if token is a valid JWT format
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+            return { isValid: false, error: 'Invalid token format' };
+        }
+        
+        // Parse the payload
+        const payload = JSON.parse(atob(parts[1]));
+        const currentTime = Math.floor(Date.now() / 1000);
+        
+        // Check if token is expired
+        if (payload.exp && payload.exp < currentTime) {
+            return { isValid: false, error: 'Token has expired' };
+        }
+        
+        return { isValid: true };
+    } catch (error) {
+        return { isValid: false, error: 'Token validation failed' };
+    }
 }; 

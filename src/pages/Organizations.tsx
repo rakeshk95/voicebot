@@ -28,8 +28,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/components/ui/use-toast";
-import { usePermissions } from "@/contexts/PermissionContext";
-import { Building2, Plus, Pencil, Trash2, Search, Eye, Filter, X, Calendar, Download, FileDown, Edit } from 'lucide-react';
+import { usePermissions } from '@/contexts/PermissionProvider';
+import { Building2, Plus, Pencil, Trash2, Search, Eye, Filter, X, Calendar, Download, FileDown, Edit, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as z from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -91,9 +91,17 @@ interface FilterOptions {
   endDate: Date | null;
 }
 
+interface ApiResponse {
+  items: Organization[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 const Organizations = () => {
   const { hasPermission, userPermissions } = usePermissions();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [allOrganizations, setAllOrganizations] = useState<Organization[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -107,6 +115,13 @@ const Organizations = () => {
     startDate: null,
     endDate: null
   });
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  
   const { toast } = useToast();
 
   // Check permissions for organizations management
@@ -167,51 +182,97 @@ const Organizations = () => {
     });
   };
 
+  // Fetch organizations with client-side pagination
+  const fetchOrganizations = async () => {
+    try {
+      setIsInitialLoading(true);
+      
+      const params = new URLSearchParams();
+      
+      if (searchTerm) {
+        params.append("search", searchTerm);
+      }
+      
+      if (filterOptions.status !== 'all') {
+        params.append("status", filterOptions.status);
+      }
+      
+      if (filterOptions.startDate) {
+        params.append("start_date", filterOptions.startDate.toISOString());
+      }
+      
+      if (filterOptions.endDate) {
+        params.append("end_date", filterOptions.endDate.toISOString());
+      }
+      
+      // Fetch all organizations for client-side pagination
+      params.append("skip", "0");
+      params.append("limit", "1000"); // Get all organizations
+      
+      const response = await fetch(`http://localhost:8000/api/v1/organizations/?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          "Content-Type": "application/json",
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      // Backend returns a plain array, not a paginated response
+      const data: Organization[] = await response.json();
+      
+      // Store all organizations for client-side pagination
+      setAllOrganizations(data);
+      setTotalItems(data.length);
+      setTotalPages(Math.ceil(data.length / pageSize));
+      
+      // Pagination will be handled by useEffect
+    } catch (error) {
+      console.error('Error fetching organizations:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch organizations",
+        variant: "destructive",
+      });
+    } finally {
+      setIsInitialLoading(false);
+    }
+  };
+
   // Simple refresh function to reload organizations data
   const refreshOrganizations = async () => {
-    try {
-      // Clear cache for organizations to get fresh data
-      clearApiCache('/organizations');
-      const data = await cachedFetch<Organization[]>('/organizations');
-      setOrganizations(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Error refreshing organizations:', error);
-    }
+    await fetchOrganizations();
   };
 
   // Fix: Properly implement useEffect with AbortController
   useEffect(() => {
     const controller = new AbortController();
     
-    const fetchData = async () => {
-      try {
-        setIsInitialLoading(true);
-        
-        // Use cached fetch to prevent duplicate API calls
-        const data = await cachedFetch<Organization[]>('/organizations');
-        
-        // Set organizations directly since the interface already has the correct properties
-        setOrganizations(Array.isArray(data) ? data : []);
-      } catch (error) {
-        if (error.name === 'AbortError') return;
-        
-        console.error('Error fetching organizations:', error);
-        toast({
-          title: "Error",
-          description: "Failed to fetch organizations",
-          variant: "destructive",
-        });
-      } finally {
-        setIsInitialLoading(false);
-      }
-    };
-
-    fetchData();
+    fetchOrganizations();
     
     return () => {
       controller.abort();
     };
-  }, []);
+  }, [currentPage, pageSize, searchTerm, filterOptions]);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterOptions]);
+
+  // Handle pagination when currentPage or pageSize changes
+  useEffect(() => {
+    if (allOrganizations.length > 0) {
+      const startIndex = (currentPage - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const paginatedOrganizations = allOrganizations.slice(startIndex, endIndex);
+      setOrganizations(paginatedOrganizations);
+      setTotalItems(allOrganizations.length);
+      setTotalPages(Math.ceil(allOrganizations.length / pageSize));
+    }
+  }, [allOrganizations, currentPage, pageSize]);
 
   // Update create organization
   const createOrganization = async (data: z.infer<typeof organizationSchema>) => {
@@ -753,6 +814,95 @@ const Organizations = () => {
         </div>
       </div>
       </div>
+
+      {/* Pagination Controls */}
+      {!isInitialLoading && totalItems > 0 && (
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 px-2">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-600">
+              Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalItems)} of {totalItems} organizations
+            </span>
+            
+            {/* Items per page dropdown */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600 whitespace-nowrap">Show:</span>
+              <Select
+                value={pageSize.toString()}
+                onValueChange={(value) => {
+                  setPageSize(Number(value));
+                  setCurrentPage(1); // Reset to first page when changing page size
+                }}
+              >
+                <SelectTrigger className="w-[80px] h-9 text-sm border-gray-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-4 h-9 text-sm border-gray-200 hover:bg-gray-50"
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Previous
+            </Button>
+            
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={currentPage === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`px-3 h-9 text-sm ${
+                      currentPage === pageNum 
+                        ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                        : "border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="px-4 h-9 text-sm border-gray-200 hover:bg-gray-50"
+            >
+              Next
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* View Dialog */}
       <Dialog open={!!viewingOrg} onOpenChange={() => setViewingOrg(null)}>
