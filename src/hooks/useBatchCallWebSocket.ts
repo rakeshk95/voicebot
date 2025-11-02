@@ -58,7 +58,7 @@ export function useBatchCallWebSocket(
   const getWebSocketUrl = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     // Use backend port 8000 for WebSocket connections
-    const baseUrl = `${protocol}//localhost:8000`;
+    const baseUrl = `${protocol}//platform.voxiflow.com`;
     
     const url = operationId ? `${baseUrl}/ws/batch-calls/${operationId}` : `${baseUrl}/ws/batch-calls`;
     console.log('🔗 Generated WebSocket URL:', url);

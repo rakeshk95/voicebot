@@ -54,4 +54,7 @@ id_dsa*
 *.keystore
 *.jks
 
+# Documentation files
+*.md
+
 images/

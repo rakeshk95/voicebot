@@ -7,8 +7,8 @@
 import { cacheService, CacheKeys, cacheHelpers } from './cacheService';
 
 // API Configuration
-// FIXED: Route through main HTTPS API to avoid mixed content errors
-const BACKGROUND_SERVER_URL = 'http://localhost:8000/api/v1/rabbitmq-bulk-calls';
+// Production API URLs
+const BACKGROUND_SERVER_URL = 'https://platform.voxiflow.com/api/v1/rabbitmq-bulk-calls';
 const MAIN_API_URL = 'https://platform.voxiflow.com/backend';
 
 // Types for RabbitMQ API responses

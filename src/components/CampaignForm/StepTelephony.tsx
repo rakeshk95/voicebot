@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import { UseFormReturn } from "react-hook-form";
 import { fetchWithAuth } from "@/auth/authorizedFetch";
 
@@ -362,7 +363,7 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
         {/* LLM Configuration */}
         <div className="border-t pt-6 bg-blue-50 p-4 rounded-lg">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">Large Language Model (LLM) Configuration</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <FormField
               control={form.control}
               name="llm.provider"
@@ -429,6 +430,76 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
               )}
             />
           </div>
+          
+          {/* Temperature Slider */}
+          <FormField
+            control={form.control}
+            name="llm.temperature"
+            render={({ field }) => {
+              const temperatureValue = parseFloat(field.value || '0.7');
+              const sliderValue: number[] = [isNaN(temperatureValue) ? 0.7 : temperatureValue];
+              
+              const getTemperatureDescription = (temp: number) => {
+                if (temp < 0.3) return 'Very Precise (Facts, Data Analysis)';
+                if (temp < 0.5) return 'Precise (Technical, Accurate)';
+                if (temp < 0.7) return 'Balanced (Default, Natural)';
+                if (temp < 0.9) return 'Creative (Conversational, Engaging)';
+                if (temp < 1.3) return 'Very Creative (Stories, Brainstorming)';
+                return 'Highly Random (Experimental)';
+              };
+              
+              const getTemperatureColor = (temp: number) => {
+                if (temp < 0.3) return 'text-blue-600';
+                if (temp < 0.7) return 'text-green-600';
+                if (temp < 1.0) return 'text-yellow-600';
+                return 'text-orange-600';
+              };
+              
+              return (
+                <FormItem>
+                  <div className="space-y-3">
+                    <FormLabel className="text-sm font-medium text-gray-700 flex items-center justify-between">
+                      <span>Temperature (Creativity Control)</span>
+                      <span className={`font-semibold ${getTemperatureColor(temperatureValue)}`}>
+                        {temperatureValue.toFixed(1)}
+                      </span>
+                    </FormLabel>
+                    <FormControl>
+                      <div className="space-y-2 px-1">
+                        <Slider
+                          value={sliderValue}
+                          onValueChange={(value) => {
+                            field.onChange(value[0].toString());
+                          }}
+                          min={0}
+                          max={2}
+                          step={0.1}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-gray-500">
+                          <span>0.0 (Precise)</span>
+                          <span>0.7 (Balanced)</span>
+                          <span>2.0 (Creative)</span>
+                        </div>
+                        <div className="mt-2 p-2 bg-white rounded border border-gray-200">
+                          <p className="text-xs text-gray-600">
+                            <span className="font-medium">Current Setting: </span>
+                            <span className={getTemperatureColor(temperatureValue)}>
+                              {getTemperatureDescription(temperatureValue)}
+                            </span>
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Lower values = more deterministic responses. Higher values = more creative and varied responses.
+                          </p>
+                        </div>
+                      </div>
+                    </FormControl>
+                    <FormMessage className="text-xs" />
+                  </div>
+                </FormItem>
+              );
+            }}
+          />
         </div>
       </div>
     </div>

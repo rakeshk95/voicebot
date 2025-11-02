@@ -550,7 +550,7 @@ const Campaigns = () => {
         }
 
         // Build API URL with organization filter for non-superusers
-        let campaignUrl = 'http://localhost:8000/api/v1/campaigns/';
+        let campaignUrl = 'https://platform.voxiflow.com/api/v1/campaigns/';
         if (!isSuperUser && userData?.org_id) {
           campaignUrl += `?org_id=${userData.org_id}`;
           console.log('Campaigns: Non-superuser - filtering by organization:', userData.org_id);
@@ -678,7 +678,7 @@ const Campaigns = () => {
         }
         
         // Build organizations API URL with role-based filtering
-        let orgUrl = 'http://localhost:8000/api/v1/organizations/';
+        let orgUrl = 'https://platform.voxiflow.com/api/v1/organizations/';
         if (!isSuperUser && userData?.org_id) {
           // For non-superusers, still fetch organizations to get the proper name
           console.log('Campaigns: Non-superuser - fetching organizations for proper names');
@@ -982,8 +982,8 @@ const Campaigns = () => {
       // Remove FormData and Excel template logic for campaign create/edit
       // Send JSON body instead
       const url = editingCampaign 
-        ? `http://localhost:8000/api/v1/campaigns/${editingCampaign.id}`
-        : 'http://localhost:8000/api/v1/campaigns/';
+        ? `https://platform.voxiflow.com/api/v1/campaigns/${editingCampaign.id}`
+        : 'https://platform.voxiflow.com/api/v1/campaigns/';
 
       const response = await fetch(url, {
         method: editingCampaign ? 'PUT' : 'POST',
@@ -1074,7 +1074,7 @@ const Campaigns = () => {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
 
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/api/v1/campaigns/${campaign.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1125,7 +1125,7 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaignId}/upload`, {
+      const response = await fetch(`https://platform.voxiflow.com/api/v1/campaigns/${campaignId}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1205,7 +1205,7 @@ const Campaigns = () => {
         file: bulkCallFile.name
       });
 
-      const response = await fetch('http://localhost:8000/api/v1/rabbitmq-bulk-calls/rabbitmq-bulk-calls', {
+      const response = await fetch('https://platform.voxiflow.com/api/v1/rabbitmq-bulk-calls/rabbitmq-bulk-calls', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1282,7 +1282,7 @@ const Campaigns = () => {
     };
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/calls/', {
+      const response = await fetch('https://platform.voxiflow.com/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1456,7 +1456,7 @@ const Campaigns = () => {
       
       console.log('🔍 Debug - Final dynamic variables:', dynamicVariables);
       
-      const response = await fetch('http://localhost:8000/api/v1/calls', {
+      const response = await fetch('https://platform.voxiflow.com/api/v1/calls', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1504,7 +1504,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`http://localhost:8000/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/api/v1/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -2047,18 +2047,15 @@ const Campaigns = () => {
                   <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[12%]">Organization</TableHead>
                   <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[8%]">Direction</TableHead>
                   <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[8%]">Status</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[10%]">Language</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[12%]">Voice ID</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[10%]">Provider</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[12%]">Created At</TableHead>
-                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[12%]">Updated At</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[14%]">Language</TableHead>
+                  <TableHead className="font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[14%]">Updated At</TableHead>
                   <TableHead className="text-right font-bold text-gray-800 py-4 px-4 text-sm uppercase tracking-wide w-[12%]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12">
+                    <TableCell colSpan={7} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
                         <p className="text-gray-600 font-medium">Loading campaigns...</p>
@@ -2068,7 +2065,7 @@ const Campaigns = () => {
                   </TableRow>
                 ) : filteredCampaigns.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12">
+                    <TableCell colSpan={7} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center text-gray-500">
                         <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
                           <BarChart className="h-8 w-8 text-gray-400" />
@@ -2094,12 +2091,9 @@ const Campaigns = () => {
                       }`}
                     >
                       <TableCell className="py-4 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
-                            <BarChart className="h-5 w-5 text-blue-600" />
-                          </div>
+                        <div className="flex items-center">
                           <div>
-                            <p className="font-semibold text-gray-900 group-hover:text-blue-900 transition-colors max-w-32 truncate" title={campaign.name}>
+                            <p className="font-semibold text-gray-900 group-hover:text-blue-900 transition-colors whitespace-normal break-words" title={campaign.name}>
                               {campaign.name}
                             </p>
                             <p className="text-xs text-gray-500">Campaign</p>
@@ -2148,22 +2142,7 @@ const Campaigns = () => {
                           {campaign.language}
                         </span>
                       </TableCell>
-                      <TableCell className="py-4 px-4">
-                        <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded-md text-gray-700 max-w-24 truncate block" title={campaign.voice_id}>
-                          {campaign.voice_id}
-                        </span>
-                      </TableCell>
-                      <TableCell className="py-4 px-4">
-                        <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200 transition-colors">
-                          {campaign.telephonic_provider}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="py-4 px-4">
-                        <div className="text-sm text-gray-600">
-                          <p className="font-medium">{new Date(campaign.created_at).toLocaleDateString()}</p>
-                          <p className="text-xs text-gray-400">Created</p>
-                        </div>
-                      </TableCell>
+                      
                       <TableCell className="py-4 px-4">
                         <div className="text-sm text-gray-600">
                           <p className="font-medium">{new Date(campaign.updated_at).toLocaleDateString()}</p>

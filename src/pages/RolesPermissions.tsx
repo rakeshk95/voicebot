@@ -90,7 +90,7 @@ export default function RolesPermissions() {
   const fetchRoles = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('http://localhost:8000/api/v1/roles/', {
+      const response = await fetch('https://platform.voxiflow.com/api/v1/roles/', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -197,7 +197,7 @@ export default function RolesPermissions() {
         permissions: newRole.permissions,
         status: newRole.status
       };
-      const baseUrl = 'http://localhost:8000/api/v1/roles';
+      const baseUrl = 'https://platform.voxiflow.com/api/v1/roles';
       const url = editMode === "edit" ? `${baseUrl}/${newRole.id}` : baseUrl;
 
       const response = await fetch(url, {
@@ -260,7 +260,7 @@ export default function RolesPermissions() {
   const handleDeleteRole = async (role: Role) => {
     try {
       setIsDeleting(true);
-      const response = await fetch(`http://localhost:8000/api/v1/roles/${role.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/api/v1/roles/${role.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,

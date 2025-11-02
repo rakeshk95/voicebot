@@ -133,6 +133,8 @@ interface UserFormData {
   campaign_ids?: string[];
 }
 
+import { authorizedFetch } from '@/lib/api';
+
 export default function Users() {
   const { hasPermission, userPermissions } = usePermissions();
   const navigate = useNavigate();
@@ -182,6 +184,7 @@ export default function Users() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingCreateData, setIsLoadingCreateData] = useState(false);
   const [isCreateSubmitting, setIsCreateSubmitting] = useState(false);
+  const [createStep, setCreateStep] = useState<1 | 2 | 3>(1);
   const [error, setError] = useState<string | null>(null);
 
   // Resolve current user once for reuse across helpers (outside effects)
@@ -281,7 +284,7 @@ export default function Users() {
       params.append("skip", "0");
       params.append("limit", "1000"); // Get all users
   
-      const response = await fetch(`http://localhost:8000/api/v1/users/?${params.toString()}`, {
+      const response = await fetch(`https://platform.voxiflow.com/api/v1/users/?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
           "Content-Type": "application/json",
@@ -312,7 +315,7 @@ export default function Users() {
         baseUsers.map(async (u) => {
           if (u.role_id || u.role) return u;
           try {
-            const r = await fetch(`http://localhost:8000/api/v1/roles/user/${u.id}`, {
+            const r = await fetch(`https://platform.voxiflow.com/api/v1/roles/user/${u.id}`, {
               headers: {
                 Authorization: `Bearer ${localStorage.getItem("authToken")}`,
                 "Content-Type": "application/json",
@@ -397,7 +400,7 @@ export default function Users() {
     const fetchOrganizations = async () => {
       try {
         console.log('Users: Fetching organizations...');
-        const response = await fetch('http://localhost:8000/api/v1/organizations/', {
+        const response = await fetch('https://platform.voxiflow.com/api/v1/organizations/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -446,7 +449,7 @@ export default function Users() {
     const fetchCampaignsData = async () => {
       try {
         // Build API URL with role-based filtering
-        let campaignsUrl = 'http://localhost:8000/api/v1/campaigns/';
+        let campaignsUrl = 'https://platform.voxiflow.com/api/v1/campaigns/';
         if (!isSuperUser && userData?.org_id) {
           campaignsUrl += `?org_id=${userData.org_id}`;
           console.log('Users: Non-superuser - filtering campaigns by organization:', userData.org_id);
@@ -479,7 +482,7 @@ export default function Users() {
 
     const fetchRolesData = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/v1/roles/', {
+        const response = await fetch('https://platform.voxiflow.com/api/v1/roles/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -495,7 +498,7 @@ export default function Users() {
         // Fallback: if no roles returned, try org-scoped
         if ((!rolesArray || rolesArray.length === 0) && currentUserData?.org_id) {
           try {
-            const scoped = await fetch(`http://localhost:8000/api/v1/roles/?org_id=${currentUserData.org_id}`, {
+            const scoped = await fetch(`https://platform.voxiflow.com/api/v1/roles/?org_id=${currentUserData.org_id}`, {
               headers: {
                 'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
                 'Content-Type': 'application/json'
@@ -530,7 +533,7 @@ export default function Users() {
   const fetchCampaigns = async () => {
     try {
       // Build API URL with role-based filtering
-      let campaignsUrl = 'http://localhost:8000/api/v1/campaigns/';
+      let campaignsUrl = 'https://platform.voxiflow.com/api/v1/campaigns/';
       if (!isSuperUserGlobal && currentUserData?.org_id) {
         campaignsUrl += `?org_id=${currentUserData.org_id}`;
         console.log('Users: Non-superuser - filtering campaigns by organization:', currentUserData.org_id);
@@ -547,7 +550,7 @@ export default function Users() {
         throw new Error('Failed to fetch campaigns');
       }
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
       setCampaigns(data);
     } catch (error) {
       console.error('Error fetching campaigns:', error);
@@ -564,8 +567,8 @@ export default function Users() {
     try {
       setIsLoadingCreateData(true);
       // Build API URLs with role-based filtering
-      let campaignsUrl = 'http://localhost:8000/api/v1/campaigns/';
-      let orgsUrl = 'http://localhost:8000/api/v1/organizations';
+      let campaignsUrl = 'https://platform.voxiflow.com/api/v1/campaigns/';
+      let orgsUrl = 'https://platform.voxiflow.com/api/v1/organizations';
       
       if (!isSuperUserGlobal && currentUserData?.org_id) {
         campaignsUrl += `?org_id=${currentUserData.org_id}`;
@@ -573,7 +576,7 @@ export default function Users() {
       }
       
       const [rolesResponse, orgsResponse, campaignsResponse] = await Promise.all([
-        fetch('http://localhost:8000/api/v1/roles/', {
+        fetch('https://platform.voxiflow.com/api/v1/roles/', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json'
@@ -610,7 +613,7 @@ export default function Users() {
       // If no global roles, try org-scoped fetch
       if ((!rolesData || rolesData.length === 0) && currentUserData?.org_id) {
         try {
-          const scoped = await fetch(`http://localhost:8000/api/v1/roles/?org_id=${currentUserData.org_id}`, {
+          const scoped = await fetch(`https://platform.voxiflow.com/api/v1/roles/?org_id=${currentUserData.org_id}`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -635,6 +638,7 @@ export default function Users() {
       setRoles(rolesData);
       setOrganizations(orgsData);
       setCampaigns(campaignsData);
+      setCreateStep(1);
       setIsCreateDialogOpen(true);
     } catch (error) {
       console.error('Error fetching create user data:', error);
@@ -656,6 +660,7 @@ export default function Users() {
       // Preselect user's org for non-superusers
       const defaultOrg = !isSuperUserGlobal && currentUserData?.org_id ? currentUserData.org_id : null;
       setCreateFormData(prev => ({ ...prev, organization_id: defaultOrg }));
+      setCreateStep(1);
       setIsCreateDialogOpen(true);
     }
   };
@@ -663,7 +668,7 @@ export default function Users() {
   const handleDeleteUser = async (user: User) => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/users/${user.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/api/v1/users/${user.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -726,7 +731,7 @@ export default function Users() {
 
       console.log('Sending update data:', updateData); // Debug log
 
-      const response = await fetch(`http://localhost:8000/api/v1/users/${editingUser.id}`, {
+      const response = await fetch(`https://platform.voxiflow.com/api/v1/users/${editingUser.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -776,8 +781,42 @@ export default function Users() {
     });
   };
 
+  // Helpers for create-user wizard
+  const canProceedFromStep1 = () => {
+    const { first_name, last_name, email, mobile_number, password } = createFormData;
+    return (
+      !!first_name?.trim() &&
+      !!last_name?.trim() &&
+      !!email?.trim() &&
+      !!mobile_number?.trim() &&
+      !!password?.trim()
+    );
+  };
+
+  const canProceedFromStep2 = () => {
+    const { organization_id, role_id } = createFormData;
+    return !!organization_id && !!role_id;
+  };
+
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (createStep === 1) {
+      if (!canProceedFromStep1()) return;
+      setCreateStep(2);
+      return;
+    }
+    if (createStep === 2) {
+      if (!canProceedFromStep2()) return;
+      setCreateStep(3);
+      return;
+    }
+    // Step 3 -> Create
+    await handleCreateUser(e);
+  };
+
   // Modified create user function
   const handleCreateUser = async (e: React.FormEvent) => {
+    console.log('[Users] Submit create user clicked');
     e.preventDefault();
     setIsCreateSubmitting(true);
 
@@ -794,19 +833,26 @@ export default function Users() {
         campaign_ids: createFormData.campaign_ids || [],
       };
 
-      const response = await fetch('http://localhost:8000/api/v1/users/', {
+      // Basic client-side validation to avoid silent submits
+      if (!createFormData.organization_id) {
+        throw new Error('Please select an organization');
+      }
+      if (!createFormData.role_id) {
+        throw new Error('Please select a role');
+      }
+
+      const response = await authorizedFetch('/users/', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-        },
         body: JSON.stringify(userData)
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || 'Failed to create user');
+        const details = (data && typeof data === 'object' && (data as any))
+          ? ((data as any).detail ?? (data as any).message ?? `HTTP ${response.status}`)
+          : `HTTP ${response.status}`;
+        throw new Error(details);
       }
 
       toast({
@@ -816,6 +862,7 @@ export default function Users() {
 
       await fetchUsers();
       setIsCreateDialogOpen(false);
+      setCreateStep(1);
       setCreateFormData({
         email: "",
         password: "",
@@ -862,7 +909,7 @@ export default function Users() {
     setIsBulkActionLoading(true);
     try {
       const deletePromises = selectedUsers.map(userId => 
-        fetch(`http://localhost:8000/api/v1/users/${userId}`, {
+        fetch(`https://platform.voxiflow.com/api/v1/users/${userId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -899,7 +946,7 @@ export default function Users() {
     setIsBulkActionLoading(true);
     try {
       const updatePromises = selectedUsers.map(userId => 
-        fetch(`http://localhost:8000/api/v1/users/${userId}`, {
+        fetch(`https://platform.voxiflow.com/api/v1/users/${userId}`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -2085,14 +2132,14 @@ export default function Users() {
       </AlertDialog>
 
       {/* Premium Create User Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-[700px] border-0 shadow-2xl overflow-hidden">
+      <Dialog open={isCreateDialogOpen} onOpenChange={(open) => { setIsCreateDialogOpen(open); if (open) setCreateStep(1); }}>
+        <DialogContent className="sm:max-w-[540px] md:max-w-[520px] max-h-[80vh] overflow-y-auto border-0 shadow-2xl">
           <div className="relative">
             {/* Background Gradient */}
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50/30 to-purple-50/20"></div>
-              <DialogHeader className="text-center pb-6 border-b border-gray-200/50">
-                <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mb-4 shadow-lg">
-                  <Plus className="h-8 w-8 text-white" />
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50/30 to-purple-50/20 pointer-events-none"></div>
+              <DialogHeader className="text-center pb-4 border-b border-gray-200/50">
+                <div className="mx-auto w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mb-3 shadow-lg">
+                  <Plus className="h-6 w-6 text-white" />
                 </div>
                 <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-indigo-800 bg-clip-text text-transparent">
                   Create New User
@@ -2102,40 +2149,40 @@ export default function Users() {
                 </DialogDescription>
               </DialogHeader>
 
-              <form onSubmit={handleCreateUser} className="space-y-6 py-6">
+              <form onSubmit={handleCreateSubmit} className="space-y-4 py-4">
                 {/* Progress Indicator */}
-                <div className="flex items-center justify-center space-x-2 mb-6">
+                <div className="flex items-center justify-center space-x-2 mb-4">
                   <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${createStep >= 1 ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
                       1
                     </div>
-                    <span className="text-sm font-medium text-gray-600">Basic Info</span>
+                    <span className={`text-sm font-medium ${createStep >= 1 ? 'text-gray-900' : 'text-gray-500'}`}>Basic Info</span>
                   </div>
-                  <div className="w-8 h-0.5 bg-gray-200"></div>
+                  <div className={`w-8 h-0.5 ${createStep >= 2 ? 'bg-blue-400' : 'bg-gray-200'}`}></div>
                   <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 text-sm font-semibold">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${createStep >= 2 ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
                       2
                     </div>
-                    <span className="text-sm font-medium text-gray-500">Organization</span>
+                    <span className={`text-sm font-medium ${createStep >= 2 ? 'text-gray-900' : 'text-gray-500'}`}>Organization</span>
                   </div>
-                  <div className="w-8 h-0.5 bg-gray-200"></div>
+                  <div className={`w-8 h-0.5 ${createStep >= 3 ? 'bg-blue-400' : 'bg-gray-200'}`}></div>
                   <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 text-sm font-semibold">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${createStep >= 3 ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
                       3
                     </div>
-                    <span className="text-sm font-medium text-gray-500">Review</span>
+                    <span className={`text-sm font-medium ${createStep >= 3 ? 'text-gray-900' : 'text-gray-500'}`}>Review</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Basic Information Section */}
-                  <div className="space-y-4">
+                <div className={`${createStep === 2 ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : 'space-y-4'}`}>
+                  {/* Step 1: Basic Information Section */}
+                  <div className={`${createStep === 1 ? '' : 'hidden'} space-y-4`}>
                     <div className="flex items-center space-x-2 mb-4">
                       <UserIcon className="h-5 w-5 text-blue-600" />
                       <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
                     </div>
                     
-                    <div className="space-y-4">
+                    <div className="space-y-3">
               <div className="space-y-2">
                         <Label htmlFor="first_name" className="text-sm font-medium text-gray-700">
                           First Name <span className="text-red-500">*</span>
@@ -2146,7 +2193,7 @@ export default function Users() {
                     id="first_name"
                     value={createFormData.first_name}
                     onChange={(e) => setCreateFormData({ ...createFormData, first_name: e.target.value })}
-                            className="pl-9 h-11 border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
+                            className="pl-9 h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
                             placeholder="Enter first name"
                     required
                   />
@@ -2163,7 +2210,7 @@ export default function Users() {
                     id="last_name"
                     value={createFormData.last_name}
                     onChange={(e) => setCreateFormData({ ...createFormData, last_name: e.target.value })}
-                            className="pl-9 h-11 border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
+                            className="pl-9 h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
                             placeholder="Enter last name"
                     required
                   />
@@ -2194,7 +2241,7 @@ export default function Users() {
                     type="tel"
                     value={createFormData.mobile_number}
                     onChange={(e) => setCreateFormData({ ...createFormData, mobile_number: e.target.value })}
-                    className="pl-9"
+                    className="pl-9 h-10"
                     required
                   />
                 </div>
@@ -2209,7 +2256,7 @@ export default function Users() {
                     type={showPassword ? "text" : "password"}
                     value={createFormData.password}
                     onChange={(e) => setCreateFormData({ ...createFormData, password: e.target.value })}
-                    className="pl-9 pr-9"
+                    className="pl-9 pr-9 h-10"
                     required
                   />
                   <button
@@ -2228,8 +2275,8 @@ export default function Users() {
                     </div>
                   </div>
 
-                  {/* Organization & Role Section */}
-                  <div className="space-y-4">
+                  {/* Step 2: Organization & Role Section */}
+                  <div className={`${createStep === 2 ? '' : 'hidden'} space-y-4 md:col-span-2`}>
                     <div className="flex items-center space-x-2 mb-4">
                       <Building2 className="h-5 w-5 text-purple-600" />
                       <h3 className="text-lg font-semibold text-gray-900">Organization & Role</h3>
@@ -2361,34 +2408,98 @@ export default function Users() {
                   </div>
                 </div>
 
-            <DialogFooter className="mt-8 pt-6 border-t border-gray-200/50">
+                {/* Step 3: Review */}
+                {createStep === 3 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Review Details</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-sm text-gray-500">First Name</div>
+                        <div className="font-medium">{createFormData.first_name}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500">Last Name</div>
+                        <div className="font-medium">{createFormData.last_name}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500">Email</div>
+                        <div className="font-medium">{createFormData.email}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500">Mobile</div>
+                        <div className="font-medium">{createFormData.mobile_number}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500">Organization</div>
+                        <div className="font-medium">{organizations.find(o => o.id === createFormData.organization_id)?.name || '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500">Role</div>
+                        <div className="font-medium">{createFormData.role_id ? getRoleDisplayNameFromIdOrName(createFormData.role_id, createFormData.role_id) : '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500">Status</div>
+                        <div className="font-medium capitalize">{createFormData.status}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500">Campaigns</div>
+                        <div className="font-medium">
+                          {(createFormData.campaign_ids || []).map(id => campaigns.find(c => c.id === id)?.name).filter(Boolean).join(', ') || '-'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+            <DialogFooter className="mt-4 pt-4 border-t border-gray-200/50">
                 <div className="flex flex-col sm:flex-row gap-3 w-full">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setIsCreateDialogOpen(false)}
                 disabled={isCreateSubmitting}
-                    className="w-full sm:w-auto bg-gray-100 hover:bg-gray-200 text-gray-700 border-0 font-medium h-11"
+                    className="w-full sm:w-auto bg-gray-100 hover:bg-gray-200 text-gray-700 border-0 font-medium h-10"
               >
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                disabled={isCreateSubmitting}
-                    className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 h-11"
-              >
-                {isCreateSubmitting ? (
-                      <div className="flex items-center justify-center">
-                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                        Creating User...
-                      </div>
-                ) : (
-                      <div className="flex items-center justify-center">
-                        <Plus className="h-4 w-4 mr-2" />
-                        Create User
-                      </div>
-                )}
-              </Button>
+              {createStep > 1 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCreateStep((s) => (s > 1 ? ((s - 1) as 1 | 2 | 3) : s))}
+                  disabled={isCreateSubmitting}
+                  className="w-full sm:w-auto h-10"
+                >
+                  Back
+                </Button>
+              )}
+              {createStep < 3 ? (
+                <Button
+                  type="submit"
+                  disabled={isCreateSubmitting || (createStep === 1 ? !canProceedFromStep1() : !canProceedFromStep2())}
+                  className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 h-10"
+                >
+                  Next
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  disabled={isCreateSubmitting}
+                  className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 h-10"
+                >
+                  {isCreateSubmitting ? (
+                    <div className="flex items-center justify-center">
+                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      Creating User...
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create User
+                    </div>
+                  )}
+                </Button>
+              )}
                 </div>
               </DialogFooter>
               </form>

@@ -67,6 +67,8 @@ interface Call {
   call_rating?: string;
   transcription?: TranscriptionResponse;
   rating?: number;
+  org_id?: string;
+  org_name?: string;
 }
 
 interface ExtractedData {
@@ -79,6 +81,15 @@ interface Campaign {
   id: string;
   name: string;
   created_at: string;
+  org_id?: string;
+  llm?: any;
+  [key: string]: any; // Allow additional properties
+}
+
+interface Organization {
+  id: string;
+  name: string;
+  code?: string;
 }
 
 const CallHistory = () => {
@@ -99,6 +110,8 @@ const CallHistory = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedCampaign, setSelectedCampaign] = useState<string>("");
   const [selectedCampaignName, setSelectedCampaignName] = useState<string>("");
+  const [selectedOrg, setSelectedOrg] = useState<string>("all");
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [isCallInsightDialogOpen, setIsCallInsightDialogOpen] = useState(false);
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
@@ -165,6 +178,7 @@ const CallHistory = () => {
 
   const durationRanges = [
     { label: "All Durations", value: "all" },
+    { label: "< 30 seconds", value: "0-30" },
     { label: "< 1 minute", value: "0-60" },
     { label: "1-3 minutes", value: "60-180" },
     { label: "3-5 minutes", value: "180-300" },
@@ -172,14 +186,57 @@ const CallHistory = () => {
     { label: "> 10 minutes", value: "600+" }
   ];
 
-  const statusOptions = [
-    { label: "All Status", value: "all" },
-    { label: "Completed", value: "completed" },
-    { label: "Failed", value: "failed" },
-    { label: "In Progress", value: "in-progress" },
-    { label: "No Answer", value: "no-answer" },
-    { label: "Busy", value: "busy" }
-  ];
+  // Get unique statuses from the calls data dynamically
+  const getAvailableStatuses = () => {
+    const statusSet = new Set<string>();
+    calls.forEach(call => {
+      if (call.Status && call.Status.trim()) {
+        // Normalize status to handle variations (e.g., no-answer vs no_answer)
+        const normalizedStatus = call.Status.toLowerCase().trim().replace("_", "-");
+        statusSet.add(normalizedStatus);
+      }
+    });
+    
+    const statusMap: Record<string, string> = {
+      'completed': 'Completed',
+      'failed': 'Failed',
+      'in-progress': 'In Progress',
+      'in_progress': 'In Progress',
+      'no-answer': 'No Answer',
+      'no_answer': 'No Answer',
+      'busy': 'Busy',
+      'ringing': 'Ringing',
+      'queued': 'Queued',
+      'canceled': 'Canceled',
+      'cancelled': 'Canceled',
+      'unknown': 'Unknown'
+    };
+    
+    const statusOptions = [{ label: "All Status", value: "all" }];
+    
+    // Sort statuses for consistent display (prioritize common statuses)
+    const priorityOrder = ['completed', 'failed', 'busy', 'no-answer', 'in-progress', 'ringing', 'queued', 'canceled'];
+    const sortedStatuses = Array.from(statusSet).sort((a, b) => {
+      const aIndex = priorityOrder.indexOf(a);
+      const bIndex = priorityOrder.indexOf(b);
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      if (aIndex !== -1) return -1;
+      if (bIndex !== -1) return 1;
+      return a.localeCompare(b);
+    });
+    
+    sortedStatuses.forEach(status => {
+      // Use the normalized status for matching
+      const normalizedStatus = status.replace("_", "-");
+      const displayLabel = statusMap[normalizedStatus] || statusMap[status] || status.charAt(0).toUpperCase() + status.slice(1);
+      // Use normalized status with dash for value to ensure consistency
+      statusOptions.push({ label: displayLabel, value: normalizedStatus });
+    });
+    
+    return statusOptions;
+  };
+  
+  const statusOptions = getAvailableStatuses();
 
   const formatDuration = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
@@ -192,7 +249,7 @@ const CallHistory = () => {
     const insights = await Promise.all(
       calls.map(async call => {
         try {
-          const response = await fetch(`http://localhost:8000/api/v1/calls/${call.Sid}/artifacts`, {
+          const response = await fetch(`https://platform.voxiflow.com/api/v1/calls/${call.Sid}/artifacts`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -295,8 +352,8 @@ const CallHistory = () => {
     document.body.removeChild(link);
   };
 
-  const fetchCallData = async (pageToFetch: number, targetCampaignId = selectedCampaign, append: boolean = false) => {
-    console.log('CallHistory: fetchCallData called with:', { pageToFetch, targetCampaignId, append, selectedCampaign });
+  const fetchCallData = async (pageToFetch: number, targetCampaignId = selectedCampaign, append: boolean = false, overrideDurationFilter?: string, overrideStatusFilter?: string) => {
+    console.log('CallHistory: fetchCallData called with:', { pageToFetch, targetCampaignId, append, selectedCampaign, overrideDurationFilter, overrideStatusFilter });
     
     // Prevent multiple simultaneous API calls and enforce cooldown
     const now = Date.now();
@@ -340,7 +397,7 @@ const CallHistory = () => {
         formattedEndDate = format(end, "yyyy-MM-dd'T'HH:mm:ss'Z'");
       }
 
-      const apiUrl = new URL(`http://localhost:8000/api/v1/calls/external/${targetCampaignId}/list`);
+      const apiUrl = new URL(`https://platform.voxiflow.com/api/v1/calls/external/${targetCampaignId}/list`);
       
       apiUrl.searchParams.append('start_date', formattedStartDate);
       apiUrl.searchParams.append('end_date', formattedEndDate);
@@ -353,18 +410,26 @@ const CallHistory = () => {
         apiUrl.searchParams.append('search', searchTerm);
       }
 
-      if (durationFilter !== "all") {
-        const [min, max] = durationFilter.split("-").map(Number);
-        if (max) {
+      // Use override values if provided, otherwise use state
+      const currentDurationFilter = overrideDurationFilter !== undefined ? overrideDurationFilter : durationFilter;
+      const currentStatusFilter = overrideStatusFilter !== undefined ? overrideStatusFilter : statusFilter;
+
+      if (currentDurationFilter !== "all") {
+        const [min, max] = currentDurationFilter.split("-").map(Number);
+        if (!isNaN(max)) {
           apiUrl.searchParams.append('duration_min', min.toString());
           apiUrl.searchParams.append('duration_max', max.toString());
         } else {
-          apiUrl.searchParams.append('duration_min', min.toString());
+          // Handle "600+" case where there's no max
+          const minValue = parseInt(currentDurationFilter.replace('+', ''));
+          if (!isNaN(minValue)) {
+            apiUrl.searchParams.append('duration_min', minValue.toString());
+          }
         }
       }
 
-      if (statusFilter !== "all") {
-        apiUrl.searchParams.append('status', statusFilter);
+      if (currentStatusFilter !== "all") {
+        apiUrl.searchParams.append('status', currentStatusFilter);
       }
 
       console.log('CallHistory: Fetching calls with URL:', apiUrl.toString());
@@ -408,6 +473,8 @@ const CallHistory = () => {
         CallerName: call.CallerName || '',
         Uri: call.Uri || '',
         RecordingUrl: call.RecordingUrl || '',
+        org_id: call.org_id || '',
+        org_name: call.org_name || '',
         rating: call.rating || 0,
         sortTimestamp: (() => {
           if (call.DateCreated && !isNaN(Date.parse(call.DateCreated))) return new Date(call.DateCreated).getTime();
@@ -460,18 +527,49 @@ const CallHistory = () => {
   const userData = JSON.parse(localStorage.getItem('userData') || '{}');
   const isSuperUser = userData?.role_name === 'superuser';
   
+  // Fetch organizations
+  const fetchOrganizations = async () => {
+    try {
+      console.log('CallHistory: Fetching organizations...');
+      const response = await fetch('https://platform.voxiflow.com/api/v1/organizations/', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to fetch organizations:', response.status);
+        setOrganizations([]);
+        return;
+      }
+      
+      const data = await response.json();
+      console.log('CallHistory: Organizations data received:', data);
+      
+      if (Array.isArray(data)) {
+        setOrganizations(data);
+        console.log('CallHistory: Set organizations, count:', data.length);
+      } else {
+        console.error('Invalid organizations data format:', data);
+        setOrganizations([]);
+      }
+    } catch (error) {
+      console.error('Error fetching organizations:', error);
+      setOrganizations([]);
+    }
+  };
+  
   const fetchCampaigns = async () => {
     try {
       console.log('CallHistory: Fetching campaigns...');
       
       // Build API URL with role-based filtering
       let campaignsUrl = '/campaigns/';
-              if (!isSuperUser && userData?.org_id) {
-          campaignsUrl += `?org_id=${userData.org_id}`;
-          console.log('CallHistory: Non-superuser - filtering campaigns by organization:', userData.org_id);
-          // For non-superusers, campaigns are already filtered by their organization
-          // No need to set additional filters
-        }
+      if (!isSuperUser && userData?.org_id) {
+        campaignsUrl += `?org_id=${userData.org_id}`;
+        console.log('CallHistory: Non-superuser - filtering campaigns by organization:', userData.org_id);
+      }
       
       const data = await cachedFetch<Campaign[]>(campaignsUrl);
       console.log('CallHistory: Campaigns data received:', data);
@@ -547,7 +645,9 @@ const CallHistory = () => {
         // Fetch call data for the specific campaign
         await fetchCallData(1, campaignId);
       } else {
-        console.log('CallHistory: No URL params, fetching campaigns');
+        console.log('CallHistory: No URL params, fetching campaigns and organizations');
+        // Fetch organizations for everyone
+        await fetchOrganizations();
         // Fetch campaigns first, then set up default campaign and fetch its data
         await fetchCampaigns();
         }
@@ -641,7 +741,10 @@ const CallHistory = () => {
     setStartDate(null);
     setEndDate(null);
     setStatusFilter("all");
-    setSelectedCampaign("all");
+    setDurationFilter("all");
+    setSelectedOrg("all");
+    setSelectedCampaign("");
+    setSelectedCampaignName("");
     setSearchTerm("");
     setNextCursor(null);
     setHasMore(false);
@@ -660,7 +763,7 @@ const CallHistory = () => {
     setIsLoadingTranscription(true);
 
     try {
-      const apiUrl = `http://localhost:8000/api/v1/calls/${callId}/artifacts`;
+      const apiUrl = `https://platform.voxiflow.com/api/v1/calls/${callId}/artifacts`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -746,8 +849,23 @@ const CallHistory = () => {
     }, 100);
   };
 
+  // Filter campaigns by selected organization
+  const filteredCampaigns = selectedOrg === "all" 
+    ? allCampaigns 
+    : allCampaigns.filter(c => c.org_id === selectedOrg);
+  
+  const handleOrganizationChange = (value: string) => {
+    setSelectedOrg(value);
+    // Reset campaign selection when organization changes
+    setSelectedCampaign("");
+    setSelectedCampaignName("");
+    setNextCursor(null);
+    setCurrentPage(1);
+    // Campaign dropdown will update automatically via filteredCampaigns
+  };
+  
   const handleCampaignChange = (value: string) => {
-    const selectedCamp = allCampaigns.find(c => c.id === value);
+    const selectedCamp = filteredCampaigns.find(c => c.id === value);
     setSelectedCampaign(value);
     setSelectedCampaignName(selectedCamp?.name || '');
     setNextCursor(null);
@@ -770,7 +888,7 @@ const CallHistory = () => {
     setIsSubmittingRating(true);
     try {
       const response = await fetch(
-        `http://localhost:8000/api/v1/calls/${selectedCallForRating.Sid}/rating`,
+        `https://platform.voxiflow.com/api/v1/calls/${selectedCallForRating.Sid}/rating`,
         {
           method: 'POST',
           headers: {
@@ -846,7 +964,7 @@ const CallHistory = () => {
     });
     
     try {
-      const response = await fetch('http://localhost:8000/api/v1/calls/', {
+      const response = await fetch('https://platform.voxiflow.com/api/v1/calls/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -911,7 +1029,7 @@ const CallHistory = () => {
       }
 
       // Updated API endpoint as per user instruction
-      const apiUrl = `http://localhost:8000/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
+      const apiUrl = `https://platform.voxiflow.com/api/v1/calls/recordings/${selectedCampaign}/${callId}`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -959,7 +1077,7 @@ const CallHistory = () => {
     let page = 1;
     const pageSize = 10;
     do {
-      let apiUrl = new URL(`http://localhost:8000/api/v1/calls/external/${campaignId}/list`);
+      let apiUrl = new URL(`https://platform.voxiflow.com/api/v1/calls/external/${campaignId}/list`);
       apiUrl.searchParams.append('start_date', startDate);
       apiUrl.searchParams.append('end_date', endDate);
       apiUrl.searchParams.append('page_size', pageSize.toString());
@@ -983,7 +1101,7 @@ const CallHistory = () => {
 
   // Add this function to fetch artifacts for a call
   const fetchArtifacts = async (callId: string) => {
-    const response = await fetch(`http://localhost:8000/api/v1/calls/${callId}/artifacts`, {
+    const response = await fetch(`https://platform.voxiflow.com/api/v1/calls/${callId}/artifacts`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         'Content-Type': 'application/json',
@@ -1086,6 +1204,30 @@ const CallHistory = () => {
                 Call History
               </h1>
               
+              {/* Organization Filter */}
+              {organizations.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600 whitespace-nowrap">Organization</span>
+                  <Select 
+                    value={selectedOrg} 
+                    onValueChange={handleOrganizationChange}
+                  >
+                    <SelectTrigger className="w-[180px] h-8 border-gray-200 text-sm">
+                      <SelectValue placeholder="All Organizations">
+                        {selectedOrg === "all" ? "All Organizations" : organizations.find(org => org.id === selectedOrg)?.name || "Select Organization"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-sm">All Organizations</SelectItem>
+                      {organizations.map((org) => (
+                        <SelectItem key={org.id} value={org.id} className="text-sm">
+                          {org.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600 whitespace-nowrap">Campaign</span>
@@ -1099,7 +1241,7 @@ const CallHistory = () => {
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {allCampaigns.map((campaign) => (
+                    {filteredCampaigns.map((campaign) => (
                       <SelectItem key={campaign.id} value={campaign.id} className="text-sm">
                         {campaign.name}
                       </SelectItem>
@@ -1133,8 +1275,8 @@ const CallHistory = () => {
                     setCurrentPage(1);
                   }}
                   customInput={
-                    <Button variant="outline" className="w-[140px] h-8 justify-start text-left font-normal border-gray-200 text-sm">
-                      <CalendarIcon className="mr-1.5 h-3.5 w-3.5 text-gray-500" />
+                    <Button variant="outline" className="w-[150px] h-8 justify-start text-left font-normal border-gray-200 text-sm">
+                      <CalendarIcon className="mr-0.5 h-3.5 w-3.5 text-gray-500" />
                       {startDate ? format(startDate, "MMM dd, yyyy") : "Select date"}
                     </Button>
                   }
@@ -1171,8 +1313,8 @@ const CallHistory = () => {
                     setCurrentPage(1);
                   }}
                   customInput={
-                    <Button variant="outline" className="w-[140px] h-8 justify-start text-left font-normal border-gray-200 text-sm">
-                      <CalendarIcon className="mr-1.5 h-3.5 w-3.5 text-gray-500" />
+                    <Button variant="outline" className="w-[155px] h-8 justify-start text-left font-normal border-gray-200 text-sm">
+                      <CalendarIcon className="mr-0.5 h-3.5 w-3.5 text-gray-500" />
                       {endDate ? format(endDate, "MMM dd, yyyy") : "Select date"}
                     </Button>
                   }
@@ -1215,9 +1357,9 @@ const CallHistory = () => {
                     setDurationFilter(value);
                     setNextCursor(null);
                     setCurrentPage(1);
-                    // Use setTimeout to respect cooldown
+                    // Use setTimeout to respect cooldown and pass the new value directly
                     setTimeout(() => {
-                    fetchCallData(1, selectedCampaign, false);
+                    fetchCallData(1, selectedCampaign, false, value);
                     }, 100);
                   }}
                 >
@@ -1243,9 +1385,9 @@ const CallHistory = () => {
                     setStatusFilter(value);
                     setNextCursor(null);
                     setCurrentPage(1);
-                    // Use setTimeout to respect cooldown
+                    // Use setTimeout to respect cooldown and pass the new value directly
                     setTimeout(() => {
-                    fetchCallData(1, selectedCampaign, false);
+                    fetchCallData(1, selectedCampaign, false, undefined, value);
                     }, 100);
                   }}
                 >
@@ -1316,6 +1458,7 @@ const CallHistory = () => {
                     <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">S.NO</TableHead>
                     <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Time</TableHead>
                     <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Campaign</TableHead>
+                    <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Organization</TableHead>
                     <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">From</TableHead>
                     <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">To</TableHead>
                     <TableHead className="font-semibold text-gray-700 py-2 px-4 text-sm">Duration</TableHead>
@@ -1326,7 +1469,7 @@ const CallHistory = () => {
               <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-6">
+                      <TableCell colSpan={9} className="text-center py-6">
                         <div className="flex items-center justify-center">
                           <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2" />
                           Loading calls...
@@ -1335,7 +1478,7 @@ const CallHistory = () => {
                     </TableRow>
                   ) : !calls || calls.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-6 text-gray-500">
+                      <TableCell colSpan={9} className="text-center py-6 text-gray-500">
                         No calls found
                       </TableCell>
                     </TableRow>
@@ -1354,6 +1497,9 @@ const CallHistory = () => {
                             </div>
                           </TableCell>
                           <TableCell className="py-2 px-4">{selectedCampaignName || '-'}</TableCell>
+                          <TableCell className="py-2 px-4">
+                            <span className="text-sm text-gray-600">{call.org_name || '-'}</span>
+                          </TableCell>
                           <TableCell className="py-2 px-4">
                             <div className="flex flex-col">
                               <span className="font-medium text-gray-900">{call.From || 'N/A'}</span>

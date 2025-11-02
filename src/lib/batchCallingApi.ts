@@ -17,9 +17,9 @@ import {
 import { RabbitMQBatchApiService, BatchCallRequest } from './rabbitmqBatchApi';
 import { cacheService, CacheKeys, cacheHelpers } from './cacheService';
 
-// API configuration
-const API_BASE_URL = 'http://localhost:8000/api/v1';
-const BACKGROUND_SERVER_URL = 'http://13.200.143.144:9000';
+// API configuration - Production URLs
+const API_BASE_URL = 'https://platform.voxiflow.com/api/v1';
+const BACKGROUND_SERVER_URL = 'https://platform.voxiflow.com/api/v1';
 const BATCH_CALLS_BASE_URL = '/bulk-calls';
 
 /**
@@ -461,7 +461,7 @@ export async function getBatchCallSummary(bulkOperationId: string): Promise<Batc
 export async function testApiConnection(): Promise<boolean> {
   try {
     console.log('Testing API connection...');
-    const response = await fetch('http://localhost:8000/api/v1/bulk-calls/summary', {
+    const response = await fetch('https://platform.voxiflow.com/api/v1/bulk-calls/summary', {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
