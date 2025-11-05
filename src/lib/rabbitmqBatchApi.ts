@@ -5,11 +5,11 @@
  */
 
 import { cacheService, CacheKeys, cacheHelpers } from './cacheService';
+import { config } from '@/config/env';
 
 // API Configuration
-// Production API URLs
-const BACKGROUND_SERVER_URL = 'https://platform.voxiflow.com/api/v1/rabbitmq-bulk-calls';
-const MAIN_API_URL = 'https://platform.voxiflow.com/backend';
+const BACKGROUND_SERVER_URL = `${config.apiBaseUrl}/rabbitmq-bulk-calls`;
+const MAIN_API_URL = config.backendUrl;
 
 // Types for RabbitMQ API responses
 export interface RabbitMQBulkCallResponse {

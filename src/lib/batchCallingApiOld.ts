@@ -12,10 +12,11 @@ import {
 } from '@/types/batchCalling';
 import { RabbitMQBatchApiService, BatchCallRequest } from './rabbitmqBatchApi';
 import { cacheService, CacheKeys, cacheHelpers } from './cacheService';
+import { config } from '@/config/env';
 
 // API configuration
-const API_BASE_URL = 'https://platform.voxiflow.com/api/v1';
-const BACKGROUND_SERVER_URL = 'http://13.200.143.144:9000';
+const API_BASE_URL = config.apiBaseUrl;
+const BACKGROUND_SERVER_URL = config.backendUrl;
 const BATCH_CALLS_BASE_URL = '/bulk-calls';
 
 /**
@@ -274,7 +275,7 @@ export async function getBatchCallDetails(bulkOperationId: string): Promise<Batc
     // According to Swagger docs, the primary endpoint is /bulk-calls/calls/{bulk_operation_id}
     const primaryEndpoint = `${BATCH_CALLS_BASE_URL}/calls/${bulkOperationId}`;
     console.log('Trying primary endpoint:', primaryEndpoint);
-    console.log('Full URL will be:', `https://platform.voxiflow.com/backend${primaryEndpoint}`);
+    console.log('Full URL will be:', `${config.backendUrl}${primaryEndpoint}`);
     
     const response = await authorizedFetch<BatchCallResponse>(primaryEndpoint);
 
@@ -287,7 +288,7 @@ export async function getBatchCallDetails(bulkOperationId: string): Promise<Batc
       console.log('Trying alternative endpoint as fallback...');
       const alternativeEndpoint = `${BATCH_CALLS_BASE_URL}/operations/${bulkOperationId}/calls`;
       console.log('Trying alternative endpoint:', alternativeEndpoint);
-      console.log('Full alternative URL will be:', `https://platform.voxiflow.com/backend${alternativeEndpoint}`);
+      console.log('Full alternative URL will be:', `${config.backendUrl}${alternativeEndpoint}`);
       
       const alternativeResponse = await authorizedFetch<BatchCallResponse>(alternativeEndpoint);
       
@@ -405,7 +406,7 @@ export async function getBatchCallSummary(bulkOperationId: string): Promise<Batc
 export async function testApiConnection(): Promise<boolean> {
   try {
     console.log('Testing API connection...');
-    const response = await fetch('https://platform.voxiflow.com/api/v1/bulk-calls/summary', {
+    const response = await fetch(`${config.apiBaseUrl}/bulk-calls/summary`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,

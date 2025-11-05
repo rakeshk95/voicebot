@@ -19,6 +19,7 @@ import { CampaignVersion, getCurrentVersion, getCampaignVersions, getCampaignVer
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { config } from '@/config/env';
 
 // --- Schema and default values (copied from Campaigns.tsx) ---
 const campaignFormSchema = z.object({
@@ -210,7 +211,7 @@ const defaultValues: CampaignFormValues = {
       fields: {}
     }
   },
-  callback_endpoint: "https://platform.voxiflow.com/backend/api/v1/webhook"
+  callback_endpoint: config.webhookUrl
 };
 
 const steps = [
@@ -763,7 +764,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
     if (mode === 'edit' && params.id) {
       (async () => {
         try {
-          const response = await fetch(`https://platform.voxiflow.com/api/v1/campaigns/${params.id}`, {
+          const response = await fetch(`${config.apiBaseUrl}/campaigns/${params.id}`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -1021,7 +1022,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         ...(mode === 'edit' && params.id ? { id: params.id } : {})
       };
       const url = mode === 'edit' && params.id
-        ? `https://platform.voxiflow.com/api/v1/campaigns/${params.id}`
+        ? `${config.apiBaseUrl}/campaigns/${params.id}`
         : 'https://platform.voxiflow.com/api/v1/campaigns/';
       const response = await fetch(url, {
         method: mode === 'edit' ? 'PUT' : 'POST',

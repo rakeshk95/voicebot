@@ -17,7 +17,11 @@
 .env.development.local
 .env.test.local
 .env.production.local
-.env.*
+
+# Allow these env files for CI/CD
+!.env.example
+!.env.development
+!.env.production
 
 # Logs
 npm-debug.log*

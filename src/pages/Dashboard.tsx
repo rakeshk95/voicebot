@@ -43,6 +43,7 @@ import { usePermissions } from '@/contexts/PermissionProvider';
 import { getUserData } from '@/utils/localStorage';
 import { cachedFetch } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
+import { config } from '@/config/env';
 
 // Utility function to safely render values
 const safeRender = (value: any, defaultValue: any = 'N/A') => {
@@ -383,7 +384,7 @@ const Dashboard = () => {
         console.log('Dashboard: Fetching campaigns with org filter:', campaignUrl);
       }
       
-      const campaignResponse = await fetch(`https://platform.voxiflow.com/api/v1${campaignUrl}`, {
+      const campaignResponse = await fetch(`${config.apiBaseUrl}${campaignUrl}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -461,7 +462,7 @@ const Dashboard = () => {
             // Non-super users only see their own organization
             console.log('🚀 PERFORMANCE FIX: Non-superuser path, checking userData.organization_id:', userData?.organization_id);
             if (userData?.organization_id) {
-              const response = await fetch(`https://platform.voxiflow.com/api/v1/organizations/${userData.organization_id}`, {
+              const response = await fetch(`${config.apiBaseUrl}/organizations/${userData.organization_id}`, {
                 headers: {
                   'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
                   'Content-Type': 'application/json'
@@ -491,7 +492,7 @@ const Dashboard = () => {
           }
           
           try {
-            const response = await fetch(`https://platform.voxiflow.com/api/v1${campaignUrl}`, {
+            const response = await fetch(`${config.apiBaseUrl}${campaignUrl}`, {
               headers: {
                 'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
                 'Content-Type': 'application/json'
@@ -751,7 +752,7 @@ const Dashboard = () => {
       params.append('days', filterState.days.toString());
 
       // Use the new comprehensive dashboard endpoint
-      const apiUrl = `https://platform.voxiflow.com/api/v1/dashboard/comprehensive?${params}`;
+      const apiUrl = `${config.apiBaseUrl}/dashboard/comprehensive?${params}`;
       console.log('Dashboard: API call:', apiUrl);
       
       const response = await fetch(apiUrl, {

@@ -72,6 +72,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import * as XLSX from 'xlsx-js-style';
 import { cachedFetch } from '@/lib/api';
+import { config } from '@/config/env';
 
 // Interfaces
 interface Organization {
@@ -982,7 +983,7 @@ const Campaigns = () => {
       // Remove FormData and Excel template logic for campaign create/edit
       // Send JSON body instead
       const url = editingCampaign 
-        ? `https://platform.voxiflow.com/api/v1/campaigns/${editingCampaign.id}`
+        ? `${config.apiBaseUrl}/campaigns/${editingCampaign.id}`
         : 'https://platform.voxiflow.com/api/v1/campaigns/';
 
       const response = await fetch(url, {
@@ -1074,7 +1075,7 @@ const Campaigns = () => {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
 
     try {
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`${config.apiBaseUrl}/campaigns/${campaign.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1125,7 +1126,7 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/campaigns/${campaignId}/upload`, {
+      const response = await fetch(`${config.apiBaseUrl}/campaigns/${campaignId}/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -1504,7 +1505,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/campaigns/${campaign.id}`, {
+      const response = await fetch(`${config.apiBaseUrl}/campaigns/${campaign.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
