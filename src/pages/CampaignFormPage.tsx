@@ -19,6 +19,7 @@ import { CampaignVersion, getCurrentVersion, getCampaignVersions, getCampaignVer
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { authorizedFetch } from '@/lib/api';
 
 // --- Schema and default values (copied from Campaigns.tsx) ---
 const campaignFormSchema = z.object({
@@ -101,11 +102,13 @@ type CampaignFormValues = {
     language: string;
     voice_id: string;
     vendor?: string;
+    model?: string;
     transfer_call?: boolean;
   };
   stt: {
     vendor: string;
     provider?: string;
+    language?: string;
   };
   telephonic_provider: string;
   telephony_config?: {
@@ -183,7 +186,8 @@ const defaultValues: CampaignFormValues = {
   },
   stt: {
     vendor: "deepgram",
-    provider: "nova-2"
+    provider: "nova-2",
+    language: "en-IN"
   },
   llm: {
     provider: "openai",
@@ -763,12 +767,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
     if (mode === 'edit' && params.id) {
       (async () => {
         try {
-          const response = await fetch(`https://platform.voxiflow.com/api/v1/campaigns/${params.id}`, {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-              'Content-Type': 'application/json'
-            },
-          });
+          const response = await authorizedFetch(`/campaigns/${params.id}`);
           if (!response.ok) throw new Error('Failed to fetch campaign details');
           const data = await response.json();
           setCampaignData(data);
@@ -954,12 +953,13 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         caller_id_number: "",
         state: data.state || "",
         version: "0",
+        org_id: data.org_id || "",
         llm: {
-          initialMessage: initialMessage || data.llm?.initialMessage || "",
+          initialMessage: initialMessage || data.llm?.initialMessage || (contextValue || ""),
           useProxyLlm: data.llm?.useProxyLlm || false,
           UseStructuredPrompt: data.llm?.UseStructuredPrompt || false,
-          provider: "AZURE",
-          model: "gpt-4.1",
+          provider: (data.llm?.provider || '').toString(),
+          model: (data.llm?.model || '').toString(),
           temperature: data.llm?.temperature || "0.7",
           maxCallDuration: data.llm?.maxCallDuration || "300",
           useEmbeddings: data.llm?.useEmbeddings || false,
@@ -983,11 +983,13 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
           voice_id: data.tts.voice_id || "",
           language: data.tts.language || "",
           vendor: data.tts.vendor || "11labs",
+          model: data.tts.model || undefined,
           transfer_call: data.tts.transfer_call || false
         },
         stt: {
           vendor: data.stt?.vendor || 'deepgram',
-          provider: data.stt?.provider || 'deepgram'
+          provider: data.stt?.provider || 'nova-2',
+          language: data.stt?.language || ''
         },
         timezone: "Asia/Kolkata",
         post_call_actions: postCallActions,
@@ -1013,7 +1015,6 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
           }
         },
         knowledge_base: data.knowledge_base || {},
-        org_id: data.org_id || "",
         created_by: createdBy,
         is_active: true,
         created_at: new Date().toISOString(),
@@ -1021,14 +1022,11 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         ...(mode === 'edit' && params.id ? { id: params.id } : {})
       };
       const url = mode === 'edit' && params.id
-        ? `https://platform.voxiflow.com/api/v1/campaigns/${params.id}`
-        : 'https://platform.voxiflow.com/api/v1/campaigns/';
-      const response = await fetch(url, {
+        ? `/campaigns/${params.id}`
+        : '/campaigns/';
+      const response = await authorizedFetch(url, {
         method: mode === 'edit' ? 'PUT' : 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData)
       });
       if (!response.ok) {

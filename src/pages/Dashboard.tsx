@@ -332,8 +332,32 @@ const Dashboard = () => {
   // Ref to prevent multiple organization fetches
   const organizationsFetchedRef = useRef(false);
   
-  // Memoize userData to prevent infinite re-renders
-  const userData = useMemo(() => getUserData(), []);
+  // Make userData reactive - check localStorage on every render to catch login updates
+  const [userDataState, setUserDataState] = useState(() => getUserData());
+  const userData = userDataState;
+  
+  // Update userData when localStorage changes (handles login redirect scenario)
+  useEffect(() => {
+    const checkUserData = () => {
+      const currentUserData = getUserData();
+      if (JSON.stringify(currentUserData) !== JSON.stringify(userDataState)) {
+        console.log('Dashboard: UserData changed in localStorage, updating state...');
+        setUserDataState(currentUserData);
+      }
+    };
+    
+    // Check immediately
+    checkUserData();
+    
+    // Also check periodically for the first few seconds (handles login redirect)
+    const interval = setInterval(checkUserData, 200);
+    const timeout = setTimeout(() => clearInterval(interval), 1500);
+    
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [userDataState]);
   const isSuperAdmin = userPermissions?.admin;
   
   // Debug user data (only log once to prevent console spam)
@@ -383,7 +407,7 @@ const Dashboard = () => {
         console.log('Dashboard: Fetching campaigns with org filter:', campaignUrl);
       }
       
-      const campaignResponse = await fetch(`https://platform.voxiflow.com/api/v1${campaignUrl}`, {
+      const campaignResponse = await fetch(`/api/v1${campaignUrl}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -404,13 +428,26 @@ const Dashboard = () => {
   };
 
   // PERFORMANCE FIX: Optimized filter data fetching with caching
-  const fetchFilterData = async () => {
-    console.log('🚀 PERFORMANCE FIX: fetchFilterData called!', { filterDataLoading, isFilterDataLoaded, isSuperUser, userData: userData?.org_id });
+  const fetchFilterData = async (force = false) => {
+    console.log('🚀 PERFORMANCE FIX: fetchFilterData called!', { filterDataLoading, isFilterDataLoaded, isSuperUser, userData: userData?.org_id, force });
     
-    // Prevent multiple calls
-    if (filterDataLoading || isFilterDataLoaded) {
-      console.log('🚀 PERFORMANCE FIX: Filter data already loading or loaded, skipping...');
+    // Prevent multiple calls UNLESS forced (for retry scenarios) OR organizations are empty
+    // Always allow fetch if organizations are empty, even if already loaded
+    const shouldSkip = !force && filterDataLoading;
+    const hasDataButLoaded = !force && isFilterDataLoaded && organizations.length > 0;
+    
+    if (shouldSkip || hasDataButLoaded) {
+      console.log('🚀 PERFORMANCE FIX: Filter data already loading or loaded with data, skipping...', { 
+        shouldSkip, 
+        hasDataButLoaded, 
+        orgsLength: organizations.length 
+      });
       return Promise.resolve();
+    }
+    
+    // If organizations are empty but already marked as loaded, allow retry
+    if (isFilterDataLoaded && organizations.length === 0) {
+      console.log('🚀 PERFORMANCE FIX: Organizations are empty after load, allowing retry...');
     }
     
     try {
@@ -430,7 +467,7 @@ const Dashboard = () => {
           
           if (isSuperUser || isSuperAdmin) {
             // Super users can see all organizations
-            const response = await fetch('https://platform.voxiflow.com/api/v1/organizations', {
+            const response = await fetch('/api/v1/organizations', {
               headers: {
                 'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
                 'Content-Type': 'application/json'
@@ -458,27 +495,49 @@ const Dashboard = () => {
               return [];
             }
           } else {
-            // Non-super users only see their own organization
+            // Non-super users: try their own organization first, then fallback to all organizations
             console.log('🚀 PERFORMANCE FIX: Non-superuser path, checking userData.organization_id:', userData?.organization_id);
             if (userData?.organization_id) {
-              const response = await fetch(`https://platform.voxiflow.com/api/v1/organizations/${userData.organization_id}`, {
+              try {
+                const response = await fetch(`/api/v1/organizations/${userData.organization_id}`, {
+                  headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+                    'Content-Type': 'application/json'
+                  },
+                });
+                if (response.ok) {
+                  const data = await response.json();
+                  console.log('🚀 PERFORMANCE FIX: User organization loaded:', data);
+                  return [data]; // Return as array for consistency
+                } else {
+                  console.error('🚀 PERFORMANCE FIX: User organization API error:', response.status);
+                  // Fallback: fetch all organizations even for non-superuser if their org isn't found
+                  console.log('🚀 PERFORMANCE FIX: Falling back to fetching all organizations...');
+                }
+              } catch (error) {
+                console.error('🚀 PERFORMANCE FIX: Error fetching user organization:', error);
+              }
+            }
+            // Fallback: If user org fetch fails or no org_id, try fetching all organizations
+            // This ensures the dropdown is never empty
+            try {
+              const fallbackResponse = await fetch('/api/v1/organizations', {
                 headers: {
                   'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
                   'Content-Type': 'application/json'
                 },
               });
-              if (response.ok) {
-                const data = await response.json();
-                console.log('🚀 PERFORMANCE FIX: User organization loaded:', data);
-                return [data]; // Return as array for consistency
-              } else {
-                console.error('🚀 PERFORMANCE FIX: User organization API error:', response.status);
-                return [];
+              if (fallbackResponse.ok) {
+                const fallbackData = await fallbackResponse.json();
+                let data: Organization[] = Array.isArray(fallbackData) ? fallbackData : (fallbackData.value || []);
+                console.log('🚀 PERFORMANCE FIX: Fallback - All organizations loaded for non-superuser:', data.length);
+                return data;
               }
-            } else {
-              console.log('🚀 PERFORMANCE FIX: No organization ID found for user, returning empty array');
-              return [];
+            } catch (error) {
+              console.error('🚀 PERFORMANCE FIX: Fallback fetch also failed:', error);
             }
+            console.log('🚀 PERFORMANCE FIX: No organization ID found for user, returning empty array');
+            return [];
           }
         })(),
         
@@ -491,7 +550,7 @@ const Dashboard = () => {
           }
           
           try {
-            const response = await fetch(`https://platform.voxiflow.com/api/v1${campaignUrl}`, {
+            const response = await fetch(`/api/v1${campaignUrl}`, {
               headers: {
                 'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
                 'Content-Type': 'application/json'
@@ -564,6 +623,28 @@ const Dashboard = () => {
     return Promise.resolve();
   };
 
+  // Retry organizations fetch when userData becomes available (handles login redirect scenario)
+  useEffect(() => {
+    if (!hasInitialized && userData && Object.keys(userData).length > 0 && !filterDataLoading) {
+      console.log('Dashboard: UserData became available, fetching organizations...');
+      const timer = setTimeout(() => {
+        fetchFilterData(true);
+      }, 120);
+      return () => clearTimeout(timer);
+    }
+  }, [userData, hasInitialized, filterDataLoading]);
+
+  // If organizations are still empty shortly after load, attempt a one-time retry
+  useEffect(() => {
+    if (hasInitialized && organizations.length === 0 && !filterDataLoading && isFilterDataLoaded) {
+      const t = setTimeout(() => {
+        console.log('Dashboard: One-time fallback retry for organizations (force=true)');
+        fetchFilterData(true); // Force retry even if already loaded
+      }, 250);
+      return () => clearTimeout(t);
+    }
+  }, [hasInitialized, organizations.length, filterDataLoading, isFilterDataLoaded]);
+
   // PERFORMANCE FIX: Removed duplicate organizations loader - now handled in fetchFilterData
 
   // Cleanup refs on unmount
@@ -598,18 +679,37 @@ const Dashboard = () => {
       isSuperUser
     });
     
-    // Initialize if user data exists and not initialized yet
-    if (userData && Object.keys(userData).length > 0 && !hasInitialized && isMounted) {
-      console.log('🚀 PERFORMANCE FIX: Initializing dashboard with single API call...');
+    // Initialize if user data exists and not initialized yet, OR if we have auth token
+    const hasAuthToken = localStorage.getItem('authToken');
+    const shouldInitialize = (userData && Object.keys(userData).length > 0) || hasAuthToken;
+    
+    if (shouldInitialize && !hasInitialized && isMounted) {
+      console.log('🚀 PERFORMANCE FIX: Initializing dashboard with single API call...', { 
+        hasUserData: !!(userData && Object.keys(userData).length > 0),
+        hasAuthToken: !!hasAuthToken 
+      });
       hasInitializedRef.current = true;
       
       // PERFORMANCE FIX: Single API call instead of multiple sequential calls
       const initializeDashboard = async () => {
         try {
-          // PERFORMANCE FIX: Only fetch filter data first, then dashboard
-          // This prevents duplicate API calls
-          await fetchFilterData();
-          await fetchDashboard();
+      // PERFORMANCE FIX: Only fetch filter data first, then dashboard
+      // This prevents duplicate API calls
+      // Force fetch on initial load to ensure it runs
+      await fetchFilterData(true);
+      await fetchDashboard();
+      // SAFETY NET: If organizations didn't load on first attempt (race with auth/user data),
+      // retry once after a short delay and re-render dropdown.
+      setTimeout(async () => {
+        // Use functional state update to get current value, not closure value
+        setOrganizations(currentOrgs => {
+          if (currentOrgs.length === 0 && !filterDataLoading) {
+            console.log('Dashboard: Retrying fetchFilterData due to empty organizations on first load');
+            fetchFilterData(true); // Force retry
+          }
+          return currentOrgs; // Return unchanged
+        });
+      }, 250);
           setHasInitialized(true);
           console.log('🚀 PERFORMANCE FIX: Dashboard initialization complete');
         } catch (error) {
@@ -626,24 +726,8 @@ const Dashboard = () => {
         isMounted
       });
       
-      // Fallback: If userData is empty but we have auth token, try to initialize anyway
-      if (!hasInitialized && isMounted && localStorage.getItem('authToken')) {
-        console.log('🚀 PERFORMANCE FIX: Fallback initialization - user has auth token but no userData');
-        hasInitializedRef.current = true;
-        
-        const initializeDashboard = async () => {
-          try {
-            await fetchFilterData();
-            await fetchDashboard();
-            setHasInitialized(true);
-            console.log('🚀 PERFORMANCE FIX: Fallback dashboard initialization complete');
-          } catch (error) {
-            console.error('Fallback dashboard initialization error:', error);
-          }
-        };
-        
-        initializeDashboard();
-      }
+      // This fallback is now handled in the main condition above
+      // Removed duplicate code
     }
     
     return () => {
@@ -662,7 +746,7 @@ const Dashboard = () => {
         if (isMounted) {
           fetchDashboard();
         }
-      }, 300); // 300ms debounce
+      }, 150); // 150ms debounce
       
       return () => {
         clearTimeout(timeoutId);
@@ -676,7 +760,7 @@ const Dashboard = () => {
   }, [userOrgId, hasInitialized, loading, refreshing, isSuperUser]);
 
   // Debounced function to fetch dashboard data
-  const debouncedFetchDashboard = (newOrgId?: string, delay: number = 300) => {
+  const debouncedFetchDashboard = (newOrgId?: string, delay: number = 150) => {
     // Clear existing timer
     if (filterDebounceTimer) {
       clearTimeout(filterDebounceTimer);
@@ -751,7 +835,7 @@ const Dashboard = () => {
       params.append('days', filterState.days.toString());
 
       // Use the new comprehensive dashboard endpoint
-      const apiUrl = `https://platform.voxiflow.com/api/v1/dashboard/comprehensive?${params}`;
+      const apiUrl = `/api/v1/dashboard/comprehensive?${params}`;
       console.log('Dashboard: API call:', apiUrl);
       
       const response = await fetch(apiUrl, {
@@ -1170,7 +1254,9 @@ const Dashboard = () => {
                   
                   try {
                     // Use debounced API call to prevent rapid successive calls
-                    debouncedFetchDashboard(undefined, 300); // Pass undefined for org_id, use current filters
+                    debouncedFetchDashboard(undefined, 150); // Faster debounce
+                    // Use debounced API call to prevent rapid successive calls
+                    debouncedFetchDashboard(undefined, 150); // Faster debounce
                   } catch (error) {
                     console.error('Dashboard: Error updating dashboard after campaign change:', error);
                     toast({

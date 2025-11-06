@@ -1,7 +1,7 @@
 import { toast } from '@/components/ui/use-toast';
 
-// Production API URL
-export const API_BASE_URL = 'https://platform.voxiflow.com/api/v1';
+// Production API URL (env override supported)
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'https://platform.voxiflow.com/api/v1';
 
 interface ApiResponse<T> extends Response {
     json(): Promise<T>;

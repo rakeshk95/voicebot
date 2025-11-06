@@ -50,6 +50,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { DialogFooter } from '@/components/ui/dialog';
 import { usePermissions } from '@/contexts/PermissionProvider';
+import { useAuth } from '@/contexts/AuthProvider';
 import * as z from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -71,7 +72,7 @@ import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import * as XLSX from 'xlsx-js-style';
-import { cachedFetch } from '@/lib/api';
+import { authorizedFetch } from '@/lib/api';
 
 // Interfaces
 interface Organization {
@@ -86,6 +87,7 @@ interface KeyValuePair {
 
 interface Campaign {
   id: string;
+  campaign_id?: string; // External UUID for external API calls
   name: string;
   direction: 'INBOUND' | 'OUTBOUND';
   state: 'TRIAL' | 'ACTIVE' | 'INACTIVE';
@@ -156,9 +158,15 @@ interface CampaignFormData {
     language: string;
     voice_id: string;
     vendor?: string;
+    model?: string;
   };
   stt: {
     vendor: string;
+  };
+  llm?: {
+    provider?: string;
+    model?: string;
+    temperature?: string;
   };
   telephonic_provider: string;
   knowledge_base: {
@@ -223,7 +231,8 @@ const campaignFormSchema = z.object({
   tts: z.object({
     gender: z.string(),
     language: z.string(),
-    voice_id: z.string()
+    voice_id: z.string(),
+    model: z.string().optional(),
   }),
   stt: z.object({
     vendor: z.string(),
@@ -385,21 +394,24 @@ const Campaigns = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   
-  // Get user data and check role
-  const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-  const isSuperUser = userData?.role_name === 'superuser';
-  console.log('Campaigns: User role check:', { 
-    roleName: userData?.role_name, 
-    isSuperUser,
-    orgId: userData?.org_id 
-  });
+  // Get user/role from hydrated auth context for stability
+  const { hydrated, user: authUser, role: authRole } = useAuth();
+  const userData = authUser || (JSON.parse(localStorage.getItem('userData') || '{}'));
+  const isSuperUser = (authRole?.name || userData?.role_name) === 'superuser' || !!authRole?.permissions?.admin;
+  if (!hydrated) {
+    // Avoid spamming logs and inconsistent org during hydration
+    console.debug('Campaigns: waiting for auth hydration...');
+  } else {
+    console.log('Campaigns: User role check:', { roleName: authRole?.name || userData?.role_name, isSuperUser, orgId: userData?.org_id });
+  }
   const [selectedOrgFilter, setSelectedOrgFilter] = useState<string>('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
 
   // Reset to page 1 when filters or items per page change
   useEffect(() => {
+    if (!hydrated) return; // wait for stable user/org
     setCurrentPage(1);
-  }, [searchTerm, startDate, endDate, selectedOrgFilter, selectedStatusFilter, itemsPerPage]);
+  }, [hydrated, searchTerm, startDate, endDate, selectedOrgFilter, selectedStatusFilter, itemsPerPage]);
   const [currentStep, setCurrentStep] = useState(1);
   const [activeFlowTab, setActiveFlowTab] = useState<'context' | 'graph' | 'responses' | 'variables' | 'knowledgeBase'>('context');
   const [responses, setResponses] = useState<ResponseItem[]>([]);
@@ -510,8 +522,9 @@ const Campaigns = () => {
     setEndDate(null);
   };
 
-  // PERFORMANCE FIX: Fetch campaigns only after organizations are loaded
+  // PERFORMANCE FIX: Fetch campaigns only after organizations are loaded and auth is hydrated
   useEffect(() => {
+    if (!hydrated) return; // wait for stable auth/org to avoid inconsistent org_id
     console.log('🚀 PERFORMANCE FIX: Campaigns useEffect running - checking if organizations are loaded');
     
     // PERFORMANCE FIX: Only fetch campaigns if organizations are loaded
@@ -549,8 +562,8 @@ const Campaigns = () => {
           return;
         }
 
-        // Build API URL with organization filter for non-superusers
-        let campaignUrl = 'https://platform.voxiflow.com/api/v1/campaigns/';
+        // Build relative API URL with organization filter for non-superusers
+        let campaignUrl = '/campaigns/';
         if (!isSuperUser && userData?.org_id) {
           campaignUrl += `?org_id=${userData.org_id}`;
           console.log('Campaigns: Non-superuser - filtering by organization:', userData.org_id);
@@ -559,12 +572,7 @@ const Campaigns = () => {
         console.log('Campaigns API URL:', campaignUrl);
         console.log('Auth token:', authToken.substring(0, 20) + '...');
 
-        const response = await fetch(campaignUrl, {
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json'
-          },
-        });
+        const response = await authorizedFetch(campaignUrl);
 
         console.log('Campaigns API response:', response.status, response.statusText);
 
@@ -615,6 +623,8 @@ const Campaigns = () => {
           
           return {
             id: campaign.id,
+            campaign_id: campaign.campaign_id, // CRITICAL: Include external campaign_id UUID for API calls
+            externalCampaignId: campaign.campaign_id, // Keep for backward compatibility
             name: campaign.name,
             direction: campaign.direction,
             state: campaign.state,
@@ -650,12 +660,13 @@ const Campaigns = () => {
     };
 
     fetchCampaigns();
-  }, [organizations, isSuperUser, userData?.org_id]); // Re-fetch campaigns when organizations change
+  }, [hydrated, organizations, isSuperUser, userData?.org_id]); // Re-fetch campaigns when organizations change
 
 
 
   // PERFORMANCE FIX: Optimized organizations fetching
   useEffect(() => {
+    if (!hydrated) return; // guard until auth ready
     console.log('🚀 PERFORMANCE FIX: Organizations useEffect running - fetching organizations');
     
     // Prevent multiple simultaneous API calls
@@ -849,7 +860,7 @@ const Campaigns = () => {
             initialMessage: "",
             useProxyLlm: false,
             UseStructuredPrompt: false,
-          provider: "OPENAI",
+          provider: (data.llm?.provider || '').toString(),
           promptJson: {
               skeleton: "Simple output format.",
               promptVariables,
@@ -860,9 +871,9 @@ const Campaigns = () => {
             language: data.tts?.language || "hindi",
               mermaidGraph: "initial_message -->|edge| node1\nnode1 -->|edge| node2"
           },
-          temperature: "0.5",
+          temperature: data.llm?.temperature || "0.5",
             maxCallDuration: "300",
-            model: "gpt-4o",
+            model: (data.llm?.model || '').toString(),
           useEmbeddings: false,
             prompt: ""
         },
@@ -870,7 +881,8 @@ const Campaigns = () => {
           gender: data.tts.gender,
             voice_id: data.tts.voice_id,
           language: data.tts.language,
-            vendor: data.tts.vendor || "11labs"
+            vendor: data.tts.vendor || "11labs",
+            model: data.tts.model || undefined,
           },
           stt: {
             vendor: data.stt?.vendor || 'deepgram'
@@ -936,7 +948,7 @@ const Campaigns = () => {
             initialMessage: "",
             useProxyLlm: false,
             UseStructuredPrompt: false,
-            provider: "OPENAI",
+            provider: (data.llm?.provider || '').toString(),
             promptJson: {
               skeleton: "Simple output format.",
               promptVariables,
@@ -945,9 +957,9 @@ const Campaigns = () => {
               language: data.tts?.language || "hindi",
               mermaidGraph: "initial_message -->|edge| node1\nnode1 -->|edge| node2"
             },
-            temperature: "0.5",
+            temperature: data.llm?.temperature || "0.5",
             maxCallDuration: "300",
-            model: "gpt-4o",
+            model: (data.llm?.model || '').toString(),
             useEmbeddings: false,
             prompt: ""
           },
@@ -956,7 +968,8 @@ const Campaigns = () => {
             gender: data.tts.gender,
             voice_id: data.tts.voice_id,
             language: data.tts.language,
-            vendor: data.tts.vendor || "11labs"
+            vendor: data.tts.vendor || "11labs",
+            model: data.tts.model || undefined,
           },
           stt: {
             vendor: data.stt?.vendor || 'deepgram'
@@ -982,15 +995,12 @@ const Campaigns = () => {
       // Remove FormData and Excel template logic for campaign create/edit
       // Send JSON body instead
       const url = editingCampaign 
-        ? `https://platform.voxiflow.com/api/v1/campaigns/${editingCampaign.id}`
-        : 'https://platform.voxiflow.com/api/v1/campaigns/';
+        ? `/campaigns/${editingCampaign.id}`
+        : '/campaigns/';
 
-      const response = await fetch(url, {
+      const response = await authorizedFetch(url, {
         method: editingCampaign ? 'PUT' : 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData)
       });
 
@@ -1074,12 +1084,8 @@ const Campaigns = () => {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
 
     try {
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/campaigns/${campaign.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
+      const response = await authorizedFetch(`/campaigns/${campaign.id}`, {
+        method: 'DELETE'
       });
 
       if (!response.ok) {
@@ -1125,11 +1131,8 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/campaigns/${campaignId}/upload`, {
+      const response = await authorizedFetch(`/campaigns/${campaignId}/upload`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
         body: formData,
       });
 
@@ -1186,7 +1189,7 @@ const Campaigns = () => {
 
       const formData = new FormData();
       formData.append('file', bulkCallFile);
-      formData.append('campaign_id', selectedCampaignForBulkCall.id);
+      formData.append('campaign_id', selectedCampaignForBulkCall.campaign_id || selectedCampaignForBulkCall.id); // Use external campaign_id UUID, fallback to id if not available
       formData.append('org_id', selectedCampaignForBulkCall.org_id);
       formData.append('user_id', userId);
       formData.append('sleep_seconds', '5'); // Reduced from 100 to 5 seconds
@@ -1195,7 +1198,7 @@ const Campaigns = () => {
       formData.append('batch_size', '50'); // Batch size for processing
 
       console.log('CallHistory: Initiating bulk calls with FormData:', {
-        campaign_id: selectedCampaignForBulkCall.id,
+        campaign_id: selectedCampaignForBulkCall.campaign_id || selectedCampaignForBulkCall.id,
         org_id: selectedCampaignForBulkCall.org_id,
         user_id: userId,
         sleep_seconds: 5,
@@ -1278,7 +1281,7 @@ const Campaigns = () => {
         org_id: selectedCampaignForCall?.org_id || "",
         user_id: userId
       },
-      campaign_id: selectedCampaignForCall?.id || ""
+      campaign_id: selectedCampaignForCall?.campaign_id || selectedCampaignForCall?.id || "" // Use external campaign_id UUID, fallback to id if not available
     };
 
     try {
@@ -1391,8 +1394,28 @@ const Campaigns = () => {
     XLSX.writeFile(wb, 'bulk_call_template.xlsx');
   };
 
-  const handleCall = (campaign: Campaign) => {
-    setSelectedCampaignForCall(campaign);
+  const handleCall = async (campaign: Campaign) => {
+    // If campaign_id is missing, fetch the full campaign data to get it
+    let campaignToUse = campaign;
+    if (!campaign.campaign_id && campaign.id) {
+      try {
+        console.log('🔍 Fetching full campaign data for campaign_id:', campaign.id);
+        const response = await authorizedFetch(`/campaigns/${campaign.id}`);
+        if (response.ok) {
+          const fullCampaignData = await response.json();
+          console.log('🔍 Full campaign data received:', fullCampaignData);
+          campaignToUse = {
+            ...campaign,
+            campaign_id: fullCampaignData.campaign_id || null
+          };
+        }
+      } catch (error) {
+        console.error('Error fetching full campaign data:', error);
+        // Continue with the original campaign object
+      }
+    }
+    
+    setSelectedCampaignForCall(campaignToUse);
     setPhoneNumber('');
     setPhoneError('');
     setTestCallVariables({}); // Reset variables when opening dialog
@@ -1446,6 +1469,12 @@ const Campaigns = () => {
     console.log('🔍 Debug - Selected campaign:', selectedCampaignForCall);
     console.log('🔍 Debug - Campaign LLM:', selectedCampaignForCall.llm);
     console.log('🔍 Debug - Prompt Variables:', selectedCampaignForCall.llm?.promptJson?.promptVariables);
+    console.log('🔍 Debug - Campaign ID (external UUID):', selectedCampaignForCall.campaign_id);
+    console.log('🔍 Debug - Campaign ID (internal DB):', selectedCampaignForCall.id);
+    
+    // Determine which campaign_id to use
+    const campaignIdToUse = selectedCampaignForCall.campaign_id || selectedCampaignForCall.id;
+    console.log('🔍 Debug - Using campaign_id for API call:', campaignIdToUse);
     
     try {
       // Use testCallVariables from dialog inputs instead of campaign defaults
@@ -1463,7 +1492,7 @@ const Campaigns = () => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          campaign_id: selectedCampaignForCall.id,
+          campaign_id: campaignIdToUse, // Use external campaign_id UUID, fallback to id if not available
           to_number: phoneNumber,
           dynamic_variables: dynamicVariables,
           call_metadata: {
@@ -1504,12 +1533,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/campaigns/${campaign.id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
-      });
+      const response = await authorizedFetch(`/campaigns/${campaign.id}`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch campaign details');

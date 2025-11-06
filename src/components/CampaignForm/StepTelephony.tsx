@@ -15,7 +15,10 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
   const [selectedSTTVendor, setSelectedSTTVendor] = useState<string>('');
   const [llmModelsByProvider, setLlmModelsByProvider] = useState<Record<string, { value: string; label: string }[]>>({});
   const [sttModelsByVendor, setSttModelsByVendor] = useState<Record<string, { value: string; label: string }[]>>({});
+  const [sttLanguagesByKey, setSttLanguagesByKey] = useState<Record<string, { value: string; label: string }[]>>({});
   const [telephonyProviders, setTelephonyProviders] = useState<{ value: string; label: string }[]>([]);
+  const [llmProviders, setLlmProviders] = useState<{ value: string; label: string }[]>([]);
+  const [sttVendors, setSttVendors] = useState<{ value: string; label: string }[]>([]);
   const fetchedOnceRef = useRef(false);
   
   // Debug: Log form values
@@ -41,33 +44,49 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
 
         const llmMap: Record<string, { value: string; label: string }[]> = {};
         const sttMap: Record<string, { value: string; label: string }[]> = {};
+        const sttLangMap: Record<string, { value: string; label: string }[]> = {};
 
         // Preferred: data.models.{llm,stt,telephony}
         if (data?.models) {
           // llm providers
           if (Array.isArray(data.models.llm)) {
+            const providerOptions: { value: string; label: string }[] = [];
             data.models.llm.forEach((provider: any) => {
-              const providerKey = (provider.id || provider.display_name || '').toString().toLowerCase();
+              const providerKeyRaw = (provider.id || provider.display_name || '').toString();
+              const providerLabel = (provider.display_name || provider.id || providerKeyRaw).toString();
+              providerOptions.push({ value: providerKeyRaw, label: providerLabel });
               const models = Array.isArray(provider.models) ? provider.models : [];
-              llmMap[providerKey] = models.map((m: any) => {
+              llmMap[providerKeyRaw] = models.map((m: any) => {
                 const val = (m.id || m.display_name || m.name)?.toString();
                 const label = (m.display_name || m.name || m.id || val)?.toString();
                 return { value: val, label };
               });
             });
+            setLlmProviders(providerOptions);
           }
 
           // stt vendors
           if (Array.isArray(data.models.stt)) {
+            const vendorOptions: { value: string; label: string }[] = [];
             data.models.stt.forEach((vendor: any) => {
-              const vendorKey = (vendor.id || vendor.display_name || '').toString().toLowerCase();
+              const vendorKeyRaw = (vendor.id || vendor.display_name || '').toString();
+              const vendorLabel = (vendor.display_name || vendor.id || vendorKeyRaw).toString();
+              vendorOptions.push({ value: vendorKeyRaw, label: vendorLabel });
               const models = Array.isArray(vendor.models) ? vendor.models : [];
-              sttMap[vendorKey] = models.map((m: any) => {
+              sttMap[vendorKeyRaw] = models.map((m: any) => {
                 const val = (m.id || m.display_name || m.name)?.toString();
                 const label = (m.display_name || m.name || m.id || val)?.toString();
+                // capture languages if available on model
+                const langs = Array.isArray(m.language) ? m.language : [];
+                const langOpts = langs.map((lng: any) => ({
+                  value: (lng.id || lng.code || lng.value || lng)?.toString(),
+                  label: (lng.display_name || lng.name || lng.id || lng)?.toString(),
+                }));
+                sttLangMap[`${vendorKeyRaw}::${val}`] = langOpts;
                 return { value: val, label };
               });
             });
+            setSttVendors(vendorOptions);
           }
 
           // telephony providers
@@ -75,7 +94,7 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
             setTelephonyProviders(
               data.models.telephony.map((p: any) => {
                 const label = (p?.display_name || p)?.toString();
-                const value = (p?.id || p)?.toString().toLowerCase();
+                const value = (p?.id || p)?.toString();
                 return { value, label };
               })
             );
@@ -125,6 +144,7 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
 
         setLlmModelsByProvider(llmMap);
         setSttModelsByVendor(sttMap);
+        setSttLanguagesByKey(sttLangMap);
       } catch (e) {
         console.warn('Failed to load external models, using defaults', e);
       }
@@ -138,14 +158,20 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
   // Get available STT models based on STT vendor (dynamic only)
   const getSTTModels = (sttVendor: string) => {
     console.log('getSTTModels called with vendor:', sttVendor);
-    const dynamic = sttModelsByVendor[sttVendor?.toLowerCase?.() || ''];
+    const dynamic = sttModelsByVendor[sttVendor] || sttModelsByVendor[sttVendor?.toLowerCase?.() || ''] || sttModelsByVendor[sttVendor?.toUpperCase?.() || ''];
+    return dynamic && dynamic.length ? dynamic : [];
+  };
+
+  const getSTTLanguages = (sttVendor: string, sttModel: string) => {
+    const key = `${sttVendor}::${sttModel}`;
+    const dynamic = sttLanguagesByKey[key] || sttLanguagesByKey[key.toLowerCase?.() || ''] || [];
     return dynamic && dynamic.length ? dynamic : [];
   };
 
   // Get available LLM models based on provider (dynamic only)
   const getLLMModels = (provider: string) => {
     console.log('getLLMModels called with provider:', provider);
-    const dynamic = llmModelsByProvider[provider?.toLowerCase?.() || ''];
+    const dynamic = llmModelsByProvider[provider] || llmModelsByProvider[provider?.toLowerCase?.() || ''] || llmModelsByProvider[provider?.toUpperCase?.() || ''];
     return dynamic && dynamic.length ? dynamic : [];
   };
 
@@ -185,7 +211,7 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
               <FormItem>
                 <FormLabel className="text-sm font-medium text-gray-700">Telephony Provider</FormLabel>
                 <Select
-                  onValueChange={val => field.onChange(val.toLowerCase())}
+                  onValueChange={val => field.onChange(val)}
                   defaultValue={field.value}
                 >
                   <FormControl>
@@ -314,11 +340,13 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="deepgram">Deepgram</SelectItem>
-                      <SelectItem value="whisper">OpenAI Whisper</SelectItem>
-                      <SelectItem value="google">Google Speech-to-Text</SelectItem>
-                      <SelectItem value="azure">Azure Speech Services</SelectItem>
-                      <SelectItem value="aws">Amazon Transcribe</SelectItem>
+                      {sttVendors.length > 0 ? (
+                        sttVendors.map((v) => (
+                          <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem disabled value="__no_stt_vendors__">No STT providers loaded</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   <FormMessage className="text-xs" />
@@ -357,6 +385,39 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
                 </FormItem>
               )}
             />
+
+            {/* STT Language (from external schema, when available) */}
+            <FormField
+              control={form.control}
+              name="stt.language"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-medium text-gray-700">STT Language</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ''}>
+                    <FormControl>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Select STT language" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {(() => {
+                        const vendor = form.watch('stt.vendor') || selectedSTTVendor;
+                        const model = form.watch('stt.provider');
+                        const list = getSTTLanguages(vendor, model);
+                        return list.length > 0 ? (
+                          list.map((lng) => (
+                            <SelectItem key={lng.value} value={lng.value}>{lng.label}</SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem disabled value="__no_stt_languages__">No languages for model</SelectItem>
+                        );
+                      })()}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage className="text-xs" />
+                </FormItem>
+              )}
+            />
           </div>
         </div>
 
@@ -386,11 +447,13 @@ const StepTelephony = ({ form }: StepTelephonyProps) => {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="openai">OpenAI</SelectItem>
-                      <SelectItem value="gemini">Google Gemini</SelectItem>
-                      <SelectItem value="anthropic">Anthropic Claude</SelectItem>
-                      <SelectItem value="azure">Azure OpenAI</SelectItem>
-                      <SelectItem value="aws">AWS Bedrock</SelectItem>
+                      {llmProviders.length > 0 ? (
+                        llmProviders.map((p) => (
+                          <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem disabled value="__no_llm_providers__">No LLM providers loaded</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   <FormMessage className="text-xs" />

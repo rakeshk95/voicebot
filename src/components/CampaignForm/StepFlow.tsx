@@ -47,6 +47,33 @@ const StepFlow = ({
   handleAddKeyValuePair,
   handleRemoveKeyValuePair
 }: StepFlowProps) => {
+  const [initialType, setInitialType] = React.useState<'dynamic' | 'custom'>(
+    (form.getValues('llm.initialMessage') ? 'custom' : 'dynamic')
+  );
+  const [customInitial, setCustomInitial] = React.useState<string>(form.getValues('llm.initialMessage') || '');
+
+  // Generate a dynamic initial message from variables/context
+  const buildDynamicInitial = React.useCallback(() => {
+    const pv: Record<string, string> = form.getValues('llm.promptJson.promptVariables') || {};
+    const keys = Object.keys(pv);
+    const hasName = keys.includes('customer_name') || keys.includes('caller_name') || keys.includes('name');
+    const hasDate = keys.includes('date');
+    const hasTime = keys.includes('time');
+    const greet = 'Hello' + (hasName ? ` {${keys.includes('customer_name') ? 'customer_name' : keys.includes('caller_name') ? 'caller_name' : 'name'}}` : '') + ',';
+    const purpose = 'this is an automated reminder to assist you.';
+    const schedule = hasDate || hasTime
+      ? ` Your appointment is${hasDate ? ' on {date}' : ''}${hasTime ? (hasDate ? ' at {time}' : ' at {time}') : ''}.`
+      : '';
+    const contextHint = (contextValue || '').trim() ? ' ' + 'I will share some details now.' : '';
+    return `${greet} ${purpose}${schedule}${contextHint}`.trim();
+  }, [form, contextValue]);
+
+  // Keep form.llm.initialMessage in sync based on type
+  React.useEffect(() => {
+    const value = initialType === 'dynamic' ? buildDynamicInitial() : customInitial;
+    form.setValue('llm.initialMessage', value || '');
+  }, [initialType, customInitial, buildDynamicInitial, form]);
+
   return (
     <div className="bg-white rounded-lg border shadow-sm">
       <div className="p-4 h-[60vh] flex flex-col">
@@ -59,14 +86,53 @@ const StepFlow = ({
             <TabsTrigger value="knowledgeBase" className="text-sm">Knowledge Base</TabsTrigger>
           </TabsList>
 
-          <div className="mt-4 flex-1 flex flex-col">
+          <div className="mt-1 flex-1 flex flex-col">
             <TabsContent value="context">
+              {/* Initial Message selector (compact) */}
+              <div className="mb-2 p-2 rounded-lg border border-gray-200 bg-white/70">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-semibold text-gray-800">Initial Message</div>
+                  <div className="flex gap-1 bg-gray-50 rounded-full border px-1 py-[2px]">
+                    <button
+                      type="button"
+                      onClick={() => setInitialType('dynamic')}
+                      className={`px-1 py-1 text-xs rounded-full ${initialType==='dynamic' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                    >Dynamic</button>
+                    <button
+                      type="button"
+                      onClick={() => setInitialType('custom')}
+                      className={`px-3 py-1 text-xs rounded-full ${initialType==='custom' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+                    >Custom</button>
+                  </div>
+                </div>
+                {initialType === 'dynamic' ? (
+                  <div className="mt-1 text-sm">
+                    <Input
+                      readOnly
+                      value={buildDynamicInitial()}
+                      className="h-8 bg-white text-gray-800 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                    <div className="mt-1 text-[11px] text-gray-500">Automatically crafted from current variables and context.</div>
+                  </div>
+                ) : (
+                  <div className="mt-1">
+                    <Input
+                      value={customInitial}
+                      onChange={(e) => setCustomInitial(e.target.value)}
+                      placeholder="Type the first line your agent should speak..."
+                      className="h-8 border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="relative">
+                <div className="rounded-lg border border-gray-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 overflow-hidden">
                 <ReactQuill
                   value={contextValue}
                   onChange={setContextValue}
                   theme="snow"
-                  style={{ height: '40vh', minHeight: 200 }}
+                  style={{ height: '36vh', minHeight: 220 }}
                   placeholder="Enter conversation context..."
                   modules={{
                     toolbar: [
@@ -82,6 +148,7 @@ const StepFlow = ({
                     ]
                   }}
                 />
+                </div>
               </div>
             </TabsContent>
 

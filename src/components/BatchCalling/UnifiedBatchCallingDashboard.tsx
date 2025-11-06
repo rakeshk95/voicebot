@@ -359,8 +359,8 @@ export const UnifiedBatchCallingDashboard: React.FC = () => {
         }
       }
     };
-    // Reduce interval to 3 seconds (3000 ms)
-    const interval = setInterval(checkAndRefresh, 3000); // 3 seconds
+    // Reduce interval to 1.5 seconds for very low latency updates (1500 ms)
+    const interval = setInterval(checkAndRefresh, 1500); // 1.5 seconds for faster updates
     if (summary && operations) {
       const hasActiveOperations = Object.values(operations.operations).some(op => 
         op.status === 'processing' || op.status === 'starting' || op.status === 'paused'
@@ -398,6 +398,42 @@ export const UnifiedBatchCallingDashboard: React.FC = () => {
 
   const handleOperationAction = async (operationId: string, action: 'pause' | 'resume' | 'cancel') => {
     try {
+      // Optimistic UI update - immediately update local state for instant feedback
+      if (operations) {
+        const updatedOperations = { ...operations.operations };
+        const currentOperation = updatedOperations[operationId];
+        
+        if (currentOperation) {
+          // Predict next status based on action
+          let newStatus: string;
+          switch (action) {
+            case 'pause':
+              newStatus = 'paused';
+              break;
+            case 'resume':
+              newStatus = 'processing';
+              break;
+            case 'cancel':
+              newStatus = 'cancelled';
+              break;
+            default:
+              newStatus = currentOperation.status;
+          }
+          
+          // Update immediately for instant UI feedback
+          updatedOperations[operationId] = {
+            ...currentOperation,
+            status: newStatus
+          };
+          
+          setOperations({
+            ...operations,
+            operations: updatedOperations
+          });
+        }
+      }
+
+      // Perform actual API call
       let result;
       switch (action) {
         case 'pause':
@@ -416,11 +452,22 @@ export const UnifiedBatchCallingDashboard: React.FC = () => {
         description: result.message,
       });
 
+      // Immediately refresh data to get accurate status from backend
       await fetchData();
+      
+      // Additional quick refresh after 500ms to ensure status is synced
+      setTimeout(async () => {
+        await fetchData();
+      }, 500);
     } catch (error) {
+      // Revert optimistic update on error
+      if (operations) {
+        await fetchData(); // Refresh to get correct status
+      }
+      
       toast({
         title: "Error",
-        description: `Failed to ${action} operation`,
+        description: `Failed to ${action} operation: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive",
       });
     }

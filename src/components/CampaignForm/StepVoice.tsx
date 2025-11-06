@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { authorizedFetch } from "@/lib/api";
+import { fetchWithAuth } from "@/auth/authorizedFetch";
 
 const PRIMARY_COLOR = '#2B50A1'; // Voxiflow blue
 const ACCENT_COLOR = '#F15A29';  // Voxiflow orange
@@ -31,6 +32,10 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const { toast } = useToast();
+  
+  // Dynamic TTS providers/models from external schema
+  const [ttsProviders, setTtsProviders] = useState<{ value: string; label: string }[]>([]);
+  const [ttsModelsByProvider, setTtsModelsByProvider] = useState<Record<string, { value: string; label: string }[]>>({});
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -75,6 +80,44 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
         });
       });
   }, [toast]);
+
+  // Load external TTS providers/models dynamically from schema
+  useEffect(() => {
+    let cancelled = false;
+    async function loadExternalTts() {
+      try {
+        const res = await fetchWithAuth('/api/v1/external/models');
+        if (!res.ok) throw new Error(`Failed to load models: ${res.status}`);
+        const data = await res.json();
+
+        const providers: { value: string; label: string }[] = [];
+        const modelsMap: Record<string, { value: string; label: string }[]> = {};
+
+        if (Array.isArray(data?.models?.tts)) {
+          data.models.tts.forEach((vendor: any) => {
+            const keyRaw = (vendor.id || vendor.display_name || '').toString();
+            const label = (vendor.display_name || vendor.id || keyRaw).toString();
+            providers.push({ value: keyRaw, label });
+            const models = Array.isArray(vendor.models) ? vendor.models : [];
+            modelsMap[keyRaw] = models.map((m: any) => ({
+              value: (m.id || m.display_name || m.name)?.toString(),
+              label: (m.display_name || m.name || m.id)?.toString(),
+            }));
+          });
+        }
+
+        if (!cancelled) {
+          setTtsProviders(providers);
+          setTtsModelsByProvider(modelsMap);
+        }
+      } catch (e) {
+        // Non-fatal; UI will still allow voice selection
+        console.warn('Failed to load external TTS models, continuing with voice list only');
+      }
+    }
+    loadExternalTts();
+    return () => { cancelled = true; };
+  }, []);
   
   useEffect(() => {
     const formVoiceId = form.getValues('tts.voice_id');
@@ -190,6 +233,79 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
 
   return (
     <div className="space-y-6">
+      {/* TTS Provider/Model (Dynamic) */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">TTS Provider & Model</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="tts.vendor"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-sm font-medium text-gray-700">TTS Provider</FormLabel>
+                <Select
+                  onValueChange={(value) => {
+                    field.onChange(value);
+                    // If provider changes, clear any existing tts.model
+                    form.setValue('tts.model', '');
+                  }}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Select TTS provider" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {ttsProviders.length > 0 ? (
+                      ttsProviders.map((p) => (
+                        <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem disabled value="__no_tts_providers__">No TTS providers loaded</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormMessage className="text-xs" />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="tts.model"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-sm font-medium text-gray-700">TTS Model</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Select TTS model" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {(() => {
+                      const providerKey = (form.watch('tts.vendor') || '').toString();
+                      const models = ttsModelsByProvider[providerKey] || ttsModelsByProvider[providerKey.toLowerCase?.() || ''] || [];
+                      return models.length > 0 ? (
+                        models.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem disabled value="__no_tts_models__">No models available</SelectItem>
+                      );
+                    })()}
+                  </SelectContent>
+                </Select>
+                <FormMessage className="text-xs" />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
       {/* Transfer Call Option */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Call Transfer Configuration</h3>
@@ -237,7 +353,7 @@ const StepVoice = ({ form, selectedVoiceId }: StepVoiceProps) => {
               <SelectItem value="cartesia">Cartesia</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={language} onValueChange={setLanguage}>
+          <Select value={language} onValueChange={(val)=>{ setLanguage(val); form.setValue('tts.language', val === 'all' ? '' : val); }}>
             <SelectTrigger className="w-28 min-w-[90px] h-8 text-sm bg-gray-50 border-gray-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-600 rounded">
               <SelectValue placeholder="Language" />
             </SelectTrigger>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,7 @@ import {
   CampaignVersion 
 } from '@/lib/campaignVersioningApi';
 import { Campaign } from '@/types/campaign';
+import { fetchWithAuth } from '@/auth/authorizedFetch';
 
 interface CampaignUpdateDialogProps {
   campaign: Campaign;
@@ -52,6 +53,36 @@ export const CampaignUpdateDialog: React.FC<CampaignUpdateDialogProps> = ({
     post_call_actions: campaign.post_call_actions,
   });
   const { toast } = useToast();
+
+  // Dynamic TTS languages per provider/model from external schema
+  const [ttsLanguageOptions, setTtsLanguageOptions] = useState<Record<string, { value: string; label: string }[]>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchWithAuth('/api/v1/external/models');
+        if (!res.ok) return;
+        const data = await res.json();
+        const map: Record<string, { value: string; label: string }[]> = {};
+        const ttsList = Array.isArray(data?.models?.tts) ? data.models.tts : [];
+        ttsList.forEach((vendor: any) => {
+          const vendorKey = (vendor.id || vendor.display_name || '').toString();
+          const models = Array.isArray(vendor.models) ? vendor.models : [];
+          models.forEach((m: any) => {
+            const modelKey = (m.id || m.display_name || m.name || '').toString();
+            const langs = Array.isArray(m.language) ? m.language : [];
+            map[`${vendorKey}::${modelKey}`] = langs.map((lng: any) => ({
+              value: (lng.id || lng.code || lng.value || lng)?.toString(),
+              label: (lng.display_name || lng.name || lng.id || lng)?.toString(),
+            }));
+          });
+        });
+        if (!cancelled) setTtsLanguageOptions(map);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleUpdate = async () => {
     if (!changeReason.trim()) {
@@ -253,14 +284,31 @@ export const CampaignUpdateDialog: React.FC<CampaignUpdateDialogProps> = ({
                     </div>
                     <div>
                       <Label htmlFor="tts-language">Language</Label>
-                      <Input
-                        id="tts-language"
+                      <Select
                         value={updateData.tts?.language || ''}
-                        onChange={(e) => setUpdateData(prev => ({
+                        onValueChange={(value) => setUpdateData(prev => ({
                           ...prev,
-                          tts: { ...prev.tts, language: e.target.value }
+                          tts: { ...prev.tts, language: value }
                         }))}
-                      />
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(() => {
+                            const vendor = (updateData.tts as any)?.vendor || (campaign.tts as any)?.vendor || '';
+                            const model = (updateData.tts as any)?.model || (campaign.tts as any)?.model || '';
+                            const list = ttsLanguageOptions[`${vendor}::${model}`] || [];
+                            return list.length > 0 ? (
+                              list.map((lng) => (
+                                <SelectItem key={lng.value} value={lng.value}>{lng.label}</SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem disabled value="__no_tts_languages__">No languages for model</SelectItem>
+                            );
+                          })()}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                   <div>

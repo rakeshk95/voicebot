@@ -79,6 +79,7 @@ interface ExtractedData {
 
 interface Campaign {
   id: string;
+  campaign_id?: string; // External UUID for external API calls
   name: string;
   created_at: string;
   org_id?: string;
@@ -982,7 +983,7 @@ const CallHistory = () => {
             org_id: campaign?.org_id || 'org_1',
             user_id: localStorage.getItem('userId') || 'user_1'
           },
-          campaign_id: selectedCampaign
+          campaign_id: campaign?.campaign_id || selectedCampaign // Use external campaign_id UUID, fallback to selectedCampaign if not available
         }),
       });
 

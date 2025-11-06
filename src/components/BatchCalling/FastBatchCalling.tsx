@@ -440,13 +440,45 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
         return;
       }
       
+      // Robust user identification: localStorage → JWT → API fallback
       const userData = userDataRaw 
         ? JSON.parse(userDataRaw)
         : null;
       
       console.log('🔍 Debug - User Data Parsed:', userData);
       
-      const userId = userData?.id || userData?.user_id || 'unknown';
+      // 1) Try localStorage fields
+      let userId = userData?.id || userData?.user_id || userData?.userId || userData?.uid || null;
+      
+      // 2) Try to decode JWT if still unknown
+      if (!userId && authToken && authToken.split('.').length === 3) {
+        try {
+          const payload = JSON.parse(atob(authToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+          userId = payload?.sub || payload?.user_id || payload?.id || null;
+          console.log('🔍 Debug - User ID from JWT:', userId);
+        } catch (e) {
+          console.warn('JWT decode failed:', e);
+        }
+      }
+      
+      // 3) Final fallback: fetch current user from API (synchronous path kept simple)
+      if (!userId) {
+        try {
+          const resp = await fetch('/api/v1/users/me', {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+          });
+          if (resp.ok) {
+            const me = await resp.json();
+            userId = me?.id || me?.user_id || null;
+            console.log('🔍 Debug - User ID from /users/me:', userId);
+          }
+        } catch (e) {
+          console.warn('Fetch /users/me failed:', e);
+        }
+      }
+      
+      // Normalize userId to string
+      userId = userId ? String(userId) : 'unknown';
       
       console.log('🔍 Debug - Final User ID:', userId);
       
