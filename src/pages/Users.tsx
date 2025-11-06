@@ -134,6 +134,7 @@ interface UserFormData {
 }
 
 import { authorizedFetch } from '@/lib/api';
+import { config } from '@/config/env';
 
 export default function Users() {
   const { hasPermission, userPermissions } = usePermissions();
@@ -284,7 +285,7 @@ export default function Users() {
       params.append("skip", "0");
       params.append("limit", "1000"); // Get all users
   
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/users/?${params.toString()}`, {
+      const response = await fetch(`${config.apiBaseUrl}/users/?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
           "Content-Type": "application/json",
@@ -315,7 +316,7 @@ export default function Users() {
         baseUsers.map(async (u) => {
           if (u.role_id || u.role) return u;
           try {
-            const r = await fetch(`https://platform.voxiflow.com/api/v1/roles/user/${u.id}`, {
+            const r = await fetch(`${config.apiBaseUrl}/roles/user/${u.id}`, {
               headers: {
                 Authorization: `Bearer ${localStorage.getItem("authToken")}`,
                 "Content-Type": "application/json",
@@ -498,7 +499,7 @@ export default function Users() {
         // Fallback: if no roles returned, try org-scoped
         if ((!rolesArray || rolesArray.length === 0) && currentUserData?.org_id) {
           try {
-            const scoped = await fetch(`https://platform.voxiflow.com/api/v1/roles/?org_id=${currentUserData.org_id}`, {
+            const scoped = await fetch(`${config.apiBaseUrl}/roles/?org_id=${currentUserData.org_id}`, {
               headers: {
                 'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
                 'Content-Type': 'application/json'
@@ -613,7 +614,7 @@ export default function Users() {
       // If no global roles, try org-scoped fetch
       if ((!rolesData || rolesData.length === 0) && currentUserData?.org_id) {
         try {
-          const scoped = await fetch(`https://platform.voxiflow.com/api/v1/roles/?org_id=${currentUserData.org_id}`, {
+          const scoped = await fetch(`${config.apiBaseUrl}/roles/?org_id=${currentUserData.org_id}`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
               'Content-Type': 'application/json'
@@ -668,7 +669,7 @@ export default function Users() {
   const handleDeleteUser = async (user: User) => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/users/${user.id}`, {
+      const response = await fetch(`${config.apiBaseUrl}/users/${user.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -731,7 +732,7 @@ export default function Users() {
 
       console.log('Sending update data:', updateData); // Debug log
 
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/users/${editingUser.id}`, {
+      const response = await fetch(`${config.apiBaseUrl}/users/${editingUser.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -846,12 +847,35 @@ export default function Users() {
         body: JSON.stringify(userData)
       });
 
-      const data = await response.json();
+      // Safely parse response - handle both JSON and text responses
+      let data: any;
+      try {
+        // First, get the text content (can only read once)
+        const text = await response.text();
+        
+        // Try to parse as JSON
+        try {
+          data = JSON.parse(text);
+        } catch (parseError) {
+          // If JSON parsing fails, treat as text error
+          if (!response.ok) {
+            throw new Error(text || `HTTP ${response.status}: ${response.statusText}`);
+          }
+          // If response is OK but not JSON, wrap in object
+          data = { message: text };
+        }
+      } catch (error: any) {
+        // If reading response fails, throw with status info
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText || 'Request failed'}`);
+        }
+        throw error;
+      }
 
       if (!response.ok) {
-        const details = (data && typeof data === 'object' && (data as any))
-          ? ((data as any).detail ?? (data as any).message ?? `HTTP ${response.status}`)
-          : `HTTP ${response.status}`;
+        const details = (data && typeof data === 'object' && data !== null)
+          ? (data.detail ?? data.message ?? `HTTP ${response.status}`)
+          : (typeof data === 'string' ? data : `HTTP ${response.status}`);
         throw new Error(details);
       }
 
@@ -909,7 +933,7 @@ export default function Users() {
     setIsBulkActionLoading(true);
     try {
       const deletePromises = selectedUsers.map(userId => 
-        fetch(`https://platform.voxiflow.com/api/v1/users/${userId}`, {
+        fetch(`${config.apiBaseUrl}/users/${userId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -946,7 +970,7 @@ export default function Users() {
     setIsBulkActionLoading(true);
     try {
       const updatePromises = selectedUsers.map(userId => 
-        fetch(`https://platform.voxiflow.com/api/v1/users/${userId}`, {
+        fetch(`${config.apiBaseUrl}/users/${userId}`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,

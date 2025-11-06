@@ -26,6 +26,7 @@ import { useState, useEffect } from "react";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { usePermissions, PERMISSION_RESOURCES } from '@/contexts/PermissionProvider';
+import { config } from '@/config/env';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -260,7 +261,7 @@ export default function RolesPermissions() {
   const handleDeleteRole = async (role: Role) => {
     try {
       setIsDeleting(true);
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/roles/${role.id}`, {
+      const response = await fetch(`${config.apiBaseUrl}/roles/${role.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,

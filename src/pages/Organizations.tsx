@@ -60,6 +60,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cachedFetch, clearApiCache } from "@/lib/api";
+import { config } from '@/config/env';
 
 // Form schema
 const organizationSchema = z.object({
@@ -209,7 +210,7 @@ const Organizations = () => {
       params.append("skip", "0");
       params.append("limit", "1000"); // Get all organizations
       
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/organizations/?${params.toString()}`, {
+      const response = await fetch(`${config.apiBaseUrl}/organizations/?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
           "Content-Type": "application/json",
@@ -327,7 +328,7 @@ const Organizations = () => {
     setIsActionLoading(true);
 
     try {
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/organizations/${editingOrg.id}`, {
+      const response = await fetch(`${config.apiBaseUrl}/organizations/${editingOrg.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -366,7 +367,7 @@ const Organizations = () => {
     setIsActionLoading(true);
 
     try {
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/organizations/${id}`, {
+      const response = await fetch(`${config.apiBaseUrl}/organizations/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -436,7 +437,7 @@ const Organizations = () => {
   const handleView = async (orgId: string) => {
     setIsActionLoading(true);
     try {
-      const response = await fetch(`https://platform.voxiflow.com/api/v1/organizations/${orgId}`, {
+      const response = await fetch(`${config.apiBaseUrl}/organizations/${orgId}`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,

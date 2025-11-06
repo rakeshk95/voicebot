@@ -9,6 +9,7 @@ import logoImage from "@/assets/voxiflow-logo.png";
 import { triggerAuthChange } from '@/contexts/PermissionContext';
 import { AUTH_KEYS } from "@/auth/constants";
 import { useAuth } from "@/contexts/AuthProvider";
+import { config } from "@/config/env";
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -30,7 +31,7 @@ export default function Login() {
       formBody.append('username', formData.email);
       formBody.append('password', formData.password);
 
-      const response = await fetch('https://platform.voxiflow.com/api/v1/auth/login', {
+      const response = await fetch(`${config.apiBaseUrl}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -55,7 +56,7 @@ export default function Login() {
       setAuthTokens(accessToken, refreshToken);
 
       // Fetch user and role
-      const userResponse = await fetch(`https://platform.voxiflow.com/api/v1/users/${userId}`, {
+      const userResponse = await fetch(`${config.apiBaseUrl}/users/${userId}`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
@@ -72,7 +73,7 @@ export default function Login() {
       // Fetch role(s)
       let primaryRole = null;
       try {
-        const permissionsResponse = await fetch(`https://platform.voxiflow.com/api/v1/roles/user/${userId}`, {
+        const permissionsResponse = await fetch(`${config.apiBaseUrl}/roles/user/${userId}`, {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json'

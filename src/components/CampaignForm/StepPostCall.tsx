@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { UseFormReturn } from "react-hook-form";
 import { Plus, X, Globe, TestTube } from 'lucide-react';
 import { KeyValuePair } from "@/types/campaign";
+import { config } from '@/config/env';
 
 interface StepPostCallProps {
   form: UseFormReturn<any>;
@@ -134,9 +135,9 @@ const StepPostCall = ({
                 <FormItem className="flex-1">
                   <FormLabel className="text-sm font-medium text-gray-700">Callback URL</FormLabel>
                   <div className="relative">
-                    <Input 
-                      {...field} 
-                      placeholder="https://platform.voxiflow.com/backend/api/v1/webhook"
+                    <Input
+                      {...field}
+                      placeholder={config.webhookUrl}
                       className="pl-8 h-9 text-sm"
                     />
                     <Globe className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />

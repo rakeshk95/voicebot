@@ -17,10 +17,11 @@ import {
 } from '@/types/batchCalling';
 import { RabbitMQBatchApiService, BatchCallRequest } from './rabbitmqBatchApi';
 import { cacheService, CacheKeys, cacheHelpers } from './cacheService';
+import { config } from '@/config/env';
 
-// API configuration - Production URLs
-const API_BASE_URL = 'https://platform.voxiflow.com/api/v1';
-const BACKGROUND_SERVER_URL = 'https://platform.voxiflow.com/api/v1';
+// API configuration
+const API_BASE_URL = config.apiBaseUrl;
+const BACKGROUND_SERVER_URL = config.apiBaseUrl;
 const BATCH_CALLS_BASE_URL = '/bulk-calls';
 
 /**

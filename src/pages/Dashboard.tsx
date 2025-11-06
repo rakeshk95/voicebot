@@ -43,6 +43,7 @@ import { usePermissions } from '@/contexts/PermissionProvider';
 import { getUserData } from '@/utils/localStorage';
 import { cachedFetch } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
+import { config } from '@/config/env';
 
 // Utility function to safely render values
 const safeRender = (value: any, defaultValue: any = 'N/A') => {
@@ -407,7 +408,7 @@ const Dashboard = () => {
         console.log('Dashboard: Fetching campaigns with org filter:', campaignUrl);
       }
       
-      const campaignResponse = await fetch(`/api/v1${campaignUrl}`, {
+      const campaignResponse = await fetch(`${config.apiBaseUrl}${campaignUrl}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json'
@@ -498,30 +499,7 @@ const Dashboard = () => {
             // Non-super users: try their own organization first, then fallback to all organizations
             console.log('🚀 PERFORMANCE FIX: Non-superuser path, checking userData.organization_id:', userData?.organization_id);
             if (userData?.organization_id) {
-              try {
-                const response = await fetch(`/api/v1/organizations/${userData.organization_id}`, {
-                  headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-                    'Content-Type': 'application/json'
-                  },
-                });
-                if (response.ok) {
-                  const data = await response.json();
-                  console.log('🚀 PERFORMANCE FIX: User organization loaded:', data);
-                  return [data]; // Return as array for consistency
-                } else {
-                  console.error('🚀 PERFORMANCE FIX: User organization API error:', response.status);
-                  // Fallback: fetch all organizations even for non-superuser if their org isn't found
-                  console.log('🚀 PERFORMANCE FIX: Falling back to fetching all organizations...');
-                }
-              } catch (error) {
-                console.error('🚀 PERFORMANCE FIX: Error fetching user organization:', error);
-              }
-            }
-            // Fallback: If user org fetch fails or no org_id, try fetching all organizations
-            // This ensures the dropdown is never empty
-            try {
-              const fallbackResponse = await fetch('/api/v1/organizations', {
+              const response = await fetch(`${config.apiBaseUrl}/organizations/${userData.organization_id}`, {
                 headers: {
                   'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
                   'Content-Type': 'application/json'
@@ -550,7 +528,7 @@ const Dashboard = () => {
           }
           
           try {
-            const response = await fetch(`/api/v1${campaignUrl}`, {
+            const response = await fetch(`${config.apiBaseUrl}${campaignUrl}`, {
               headers: {
                 'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
                 'Content-Type': 'application/json'
@@ -835,7 +813,7 @@ const Dashboard = () => {
       params.append('days', filterState.days.toString());
 
       // Use the new comprehensive dashboard endpoint
-      const apiUrl = `/api/v1/dashboard/comprehensive?${params}`;
+      const apiUrl = `${config.apiBaseUrl}/dashboard/comprehensive?${params}`;
       console.log('Dashboard: API call:', apiUrl);
       
       const response = await fetch(apiUrl, {

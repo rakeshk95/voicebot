@@ -12,6 +12,7 @@ import {
   getUnifiedOperationsList
 } from '@/lib/unifiedBatchCallingApi';
 import { Play, Upload, RefreshCw, Activity, Download, FileSpreadsheet } from 'lucide-react';
+import { config } from '@/config/env';
 
 interface FastBatchCallingProps {}
 
@@ -54,7 +55,7 @@ export const FastBatchCalling: React.FC<FastBatchCallingProps> = () => {
   const [isLiveRefreshing, setIsLiveRefreshing] = useState(false);
 
   // Optional webhook for notifications (provided by user)
-  const WEBHOOK_URL = import.meta.env.VITE_WEBHOOK_URL || 'https://platform.voxiflow.com/backend/api/v1/webhook';
+  const WEBHOOK_URL = import.meta.env.VITE_WEBHOOK_URL || config.webhookUrl;
   const WEBHOOK_TOKEN = import.meta.env.VITE_WEBHOOK_TOKEN ? `Bearer ${import.meta.env.VITE_WEBHOOK_TOKEN}` : '';
 
   // Org/campaigns: loading/error state

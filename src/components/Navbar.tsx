@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import { LogOut, User, ChevronDown } from "lucide-react";
+import { config } from "@/config/env";
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -16,7 +17,7 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     try {
-      const response = await fetch('https://platform.voxiflow.com/api/v1/auth/logout', {
+      const response = await fetch(`${config.apiBaseUrl}/auth/logout`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,

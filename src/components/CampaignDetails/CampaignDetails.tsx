@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import CampaignVersionHistory from './CampaignVersionHistory';
 import CampaignUpdateDialog from './CampaignUpdateDialog';
+import { config } from '@/config/env';
 
 interface CampaignDetailsProps {
   campaign: Campaign | null;
@@ -56,7 +57,7 @@ const CampaignDetails = ({ campaign, onUpdate }: CampaignDetailsProps) => {
     const loadOrganizations = async () => {
       setLoadingOrganizations(true);
       try {
-        const response = await fetch('https://platform.voxiflow.com/api/v1/organizations', {
+        const response = await fetch(`${config.apiBaseUrl}/organizations`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`
           }
@@ -81,7 +82,7 @@ const CampaignDetails = ({ campaign, onUpdate }: CampaignDetailsProps) => {
   const loadVoices = async () => {
     setLoadingVoices(true);
     try {
-      const response = await fetch('https://platform.voxiflow.com/api/v1/voices', {
+      const response = await fetch(`${config.apiBaseUrl}/voices`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         }
