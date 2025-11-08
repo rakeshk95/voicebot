@@ -688,12 +688,7 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
   useEffect(() => {
     async function fetchOrganizations() {
       try {
-        const response = await fetch('https://platform.voxiflow.com/api/v1/organizations', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json'
-          },
-        });
+        const response = await authorizedFetch('/organizations', {});
         if (!response.ok) throw new Error('Failed to fetch organizations');
         const data = await response.json();
         setOrganizations(data);
@@ -1028,11 +1023,10 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         ...(mode === 'edit' && params.id ? { id: params.id } : {})
       };
       const url = mode === 'edit' && params.id
-        ? `${config.apiBaseUrl}/campaigns/${params.id}`
-        : 'https://platform.voxiflow.com/api/v1/campaigns/';
-      const response = await fetch(url, {
+        ? `/campaigns/${params.id}`
+        : `/campaigns/`;
+      const response = await authorizedFetch(url, {
         method: mode === 'edit' ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData)
       });
       if (!response.ok) {

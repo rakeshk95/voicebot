@@ -373,6 +373,135 @@ function generateUUID() {
   });
 }
 
+// Helper function to extract variables from context text (same logic as CampaignFormPage)
+const extractVariablesFromContext = (contextText: string): string[] => {
+  if (!contextText) return [];
+  
+  try {
+    // Only extract content strictly inside curly braces {}
+    const matches = contextText.match(/\{([^{}]+)\}/g) || [];
+    
+    // Helper function to check if a string looks like a valid variable name
+    const isValidVariableName = (str: string): boolean => {
+      if (!str || str.length === 0 || str.length > 100) return false;
+      
+      const lower = str.toLowerCase();
+      // Reject any string containing HTML-related patterns
+      if (lower.includes('nbsp') || 
+          lower.includes('p_p') || 
+          lower.includes('&nbsp') ||
+          lower.includes('<p>') ||
+          lower.includes('</p>') ||
+          lower.includes('<div>') ||
+          lower.includes('</div>') ||
+          lower.match(/^p_p_/) ||
+          lower.match(/p_\d+_/) ||
+          lower.includes('_nbsp_') ||
+          lower.match(/^[&<>"']+$/) ||
+          lower.match(/^[_\s]+$/)
+      ) {
+        return false;
+      }
+      return true;
+    };
+    
+    // Clean and extract only valid variable names from inside {}
+    const extracted = matches
+      .map(m => {
+        // Extract content inside braces only
+        let content = m.slice(1, -1).trim();
+        
+        // Skip if empty
+        if (!content) return null;
+        
+        // FIRST: Remove all HTML tags completely before any processing
+        content = content.replace(/<[^>]*>/g, '').trim();
+        
+        // SECOND: Decode HTML entities
+        let decoded = content;
+        try {
+          if (typeof document !== 'undefined') {
+            const textarea = document.createElement('textarea');
+            textarea.innerHTML = content;
+            decoded = textarea.textContent || textarea.innerText || content;
+          } else {
+            decoded = content
+              .replace(/&nbsp;/gi, ' ')
+              .replace(/&amp;/gi, '&')
+              .replace(/&lt;/gi, '<')
+              .replace(/&gt;/gi, '>')
+              .replace(/&quot;/gi, '"')
+              .replace(/&#39;/gi, "'")
+              .replace(/&#x[0-9a-f]+;/gi, ' ')
+              .replace(/&#\d+;/gi, ' ');
+          }
+        } catch (e) {
+          decoded = content;
+        }
+        
+        // THIRD: Clean up - remove extra spaces
+        const cleaned = decoded.replace(/\s+/g, ' ').trim();
+        
+        // FOURTH: Check if it's a valid variable name
+        if (!isValidVariableName(cleaned)) {
+          return null;
+        }
+        
+        return cleaned;
+      })
+      .filter((item): item is string => Boolean(item));
+    
+    // Normalize and filter
+    const normalize = (k: string) => {
+      const cleaned = k.trim();
+      
+      if (!cleaned || cleaned.length === 0 || cleaned.length > 100) {
+        return null;
+      }
+      
+      if (!isValidVariableName(cleaned)) {
+        return null;
+      }
+      
+      // For validation, check normalized version
+      const normalizedForCheck = cleaned.toLowerCase()
+        .replace(/[^a-z0-9_]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .replace(/_+/g, '_');
+      
+      if (!normalizedForCheck || normalizedForCheck.length === 0) {
+        return null;
+      }
+      
+      if (!isValidVariableName(normalizedForCheck)) {
+        return null;
+      }
+      
+      // Return original cleaned name (preserve case)
+      return cleaned;
+    };
+    
+    // Filter out null values and invalid keys
+    const uniqueKeys = Array.from(new Set(
+      extracted
+        .map(normalize)
+        .filter((key): key is string => {
+          if (!key || key.length === 0 || key.length > 100) return false;
+          const lower = key.toLowerCase();
+          return !lower.includes('nbsp') && 
+                 !lower.includes('p_p') && 
+                 !lower.match(/^p_\d+_/) &&
+                 !lower.includes('_nbsp_');
+        })
+    ));
+    
+    return uniqueKeys;
+  } catch (error) {
+    console.error('Error extracting variables from context:', error);
+    return [];
+  }
+};
+
 const Campaigns = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -691,7 +820,7 @@ const Campaigns = () => {
         }
         
         // Build organizations API URL with role-based filtering
-        let orgUrl = 'https://platform.voxiflow.com/api/v1/organizations/';
+        let orgUrl = '/organizations/';
         if (!isSuperUser && userData?.org_id) {
           // For non-superusers, still fetch organizations to get the proper name
           console.log('Campaigns: Non-superuser - fetching organizations for proper names');
@@ -700,12 +829,7 @@ const Campaigns = () => {
         console.log('Organizations API URL:', orgUrl);
         console.log('Auth token:', authToken.substring(0, 20) + '...');
         
-        const response = await fetch(orgUrl, {
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json'
-          },
-        });
+        const response = await authorizedFetch(orgUrl, {});
         
         console.log('Organizations API response:', response.status, response.statusText);
         
@@ -997,12 +1121,11 @@ const Campaigns = () => {
       // Remove FormData and Excel template logic for campaign create/edit
       // Send JSON body instead
       const url = editingCampaign 
-        ? `${config.apiBaseUrl}/campaigns/${editingCampaign.id}`
-        : 'https://platform.voxiflow.com/api/v1/campaigns/';
+        ? `/campaigns/${editingCampaign.id}`
+        : `/campaigns/`;
 
       const response = await authorizedFetch(url, {
         method: editingCampaign ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData)
       });
 
@@ -1083,23 +1206,31 @@ const Campaigns = () => {
   };
 
   const handleDelete = async (campaign: any) => {
-    if (!confirm('Are you sure you want to delete this campaign?')) return;
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      `Are you sure you want to delete the campaign "${campaign.name || campaign.id}"?\n\nThis action cannot be undone and will delete the campaign from both the database and external systems.`
+    );
+    
+    if (!confirmed) return;
 
     try {
-      const response = await fetch(`${config.apiBaseUrl}/campaigns/${campaign.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
+      // Ensure we have the campaign ID
+      const campaignId = campaign.id || campaign;
+      if (!campaignId) {
+        throw new Error('Campaign ID is missing');
+      }
+
+      const response = await authorizedFetch(`/campaigns/${campaignId}`, {
+        method: 'DELETE'
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to delete campaign: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(errorData.detail || `Failed to delete campaign: ${response.statusText}`);
       }
 
       // Update local state
-      setCampaigns(prevCampaigns => prevCampaigns.filter(c => c.id !== campaign.id));
+      setCampaigns(prevCampaigns => prevCampaigns.filter(c => c.id !== campaignId));
 
       toast({
         title: "Success",
@@ -1137,7 +1268,7 @@ const Campaigns = () => {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await fetch(`${config.apiBaseUrl}/campaigns/${campaignId}/upload`, {
+      const response = await authorizedFetch(`/campaigns/${campaignId}/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -1214,11 +1345,8 @@ const Campaigns = () => {
         file: bulkCallFile.name
       });
 
-      const response = await fetch('https://platform.voxiflow.com/api/v1/rabbitmq-bulk-calls/rabbitmq-bulk-calls', {
+      const response = await authorizedFetch('/rabbitmq-bulk-calls/rabbitmq-bulk-calls', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
         body: formData,
       });
 
@@ -1291,12 +1419,8 @@ const Campaigns = () => {
     };
 
     try {
-      const response = await fetch('https://platform.voxiflow.com/api/v1/calls/', {
+      const response = await authorizedFetch('/calls/', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(callRequest)
       });
 
@@ -1424,7 +1548,18 @@ const Campaigns = () => {
     setSelectedCampaignForCall(campaignToUse);
     setPhoneNumber('');
     setPhoneError('');
-    setTestCallVariables({}); // Reset variables when opening dialog
+    
+    // Extract variables from campaign context (not from promptVariables which may have corrupted data)
+    const contextText = campaignToUse.llm?.promptJson?.context || campaignToUse.llm?.prompt || '';
+    const extractedVariables = extractVariablesFromContext(contextText);
+    
+    // Initialize test call variables with empty values for extracted variables
+    const initialVariables: Record<string, string> = {};
+    extractedVariables.forEach(key => {
+      initialVariables[key] = '';
+    });
+    
+    setTestCallVariables(initialVariables);
     setIsCallDialogOpen(true);
   };
 
@@ -1478,8 +1613,16 @@ const Campaigns = () => {
     console.log('🔍 Debug - Campaign ID (external UUID):', selectedCampaignForCall.campaign_id);
     console.log('🔍 Debug - Campaign ID (internal DB):', selectedCampaignForCall.id);
     
-    // Determine which campaign_id to use
-    const campaignIdToUse = selectedCampaignForCall.campaign_id || selectedCampaignForCall.id;
+    // Determine which campaign_id to use - PRIORITIZE external campaign_id
+    // If external campaign_id is missing, fetch full campaign data to get it
+    let campaignIdToUse = selectedCampaignForCall.campaign_id || selectedCampaignForCall.id;
+    
+    // If external campaign_id is missing, warn and try to fetch it
+    if (!selectedCampaignForCall.campaign_id && selectedCampaignForCall.id) {
+      console.warn(`⚠️ Campaign ${selectedCampaignForCall.name} (${selectedCampaignForCall.id}) is missing external campaign_id. Using internal ID as fallback.`);
+      console.warn('⚠️ This may cause external API failures. Please ensure campaign has been synced to external API.');
+    }
+    
     console.log('🔍 Debug - Using campaign_id for API call:', campaignIdToUse);
     
     try {
@@ -1491,12 +1634,8 @@ const Campaigns = () => {
       
       console.log('🔍 Debug - Final dynamic variables:', dynamicVariables);
       
-      const response = await fetch('https://platform.voxiflow.com/api/v1/calls', {
+      const response = await authorizedFetch('/calls', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           campaign_id: campaignIdToUse, // Use external campaign_id UUID, fallback to id if not available
           to_number: phoneNumber,
@@ -1539,12 +1678,7 @@ const Campaigns = () => {
   const handleView = async (campaign: Campaign) => {
     try {
       // Fetch the complete campaign data first
-      const response = await fetch(`${config.apiBaseUrl}/campaigns/${campaign.id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
-      });
+      const response = await authorizedFetch(`/campaigns/${campaign.id}`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch campaign details');
@@ -2228,7 +2362,7 @@ const Campaigns = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => handleDelete(campaign.id)}
+                              onClick={() => handleDelete(campaign)}
                               className="h-9 w-9 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 shadow-sm hover:shadow-md transition-all duration-200 group/btn"
                               title="Delete Campaign"
                             >
@@ -2543,34 +2677,50 @@ const Campaigns = () => {
               </p>
             </div>
 
-            {/* Dynamic Variables Input Fields - Directly below phone number */}
-            {selectedCampaignForCall?.llm?.promptJson?.promptVariables && 
-             Object.keys(selectedCampaignForCall.llm.promptJson.promptVariables).length > 0 && (
-              <div className="space-y-3">
-                {Object.keys(selectedCampaignForCall.llm.promptJson.promptVariables).map((key) => (
-                  <div key={key} className="space-y-1">
-                    <Label htmlFor={`variable-${key}`} className="text-sm font-medium text-gray-600">
-                      {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                    </Label>
-                    <Input
-                      id={`variable-${key}`}
-                      type="text"
-                      placeholder={`Enter ${key.replace(/_/g, ' ')}`}
-                      value={testCallVariables[key] || ''}
-                      onChange={(e) => setTestCallVariables(prev => ({
-                        ...prev,
-                        [key]: e.target.value
-                      }))}
-                      disabled={isCalling}
-                      className="text-sm"
-                    />
+            {/* Dynamic Variables Input Fields - Extracted from context, not from corrupted promptVariables */}
+            {(() => {
+              // Extract variables from context text (clean extraction)
+              const contextText = selectedCampaignForCall?.llm?.promptJson?.context || selectedCampaignForCall?.llm?.prompt || '';
+              const extractedVariables = extractVariablesFromContext(contextText);
+              
+              if (extractedVariables.length > 0) {
+                return (
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium text-gray-700">Campaign Variables</Label>
+                    {extractedVariables.map((key) => (
+                      <div key={key} className="space-y-1">
+                        <Label htmlFor={`variable-${key}`} className="text-sm font-medium text-gray-600">
+                          {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </Label>
+                        <Input
+                          id={`variable-${key}`}
+                          type="text"
+                          placeholder={`Enter ${key.replace(/_/g, ' ')}`}
+                          value={testCallVariables[key] || ''}
+                          onChange={(e) => setTestCallVariables(prev => ({
+                            ...prev,
+                            [key]: e.target.value
+                          }))}
+                          disabled={isCalling}
+                          className="text-sm"
+                        />
+                      </div>
+                    ))}
+                    <p className="text-xs text-gray-500">
+                      These variables are dynamically extracted from your campaign context. Fill in test values to personalize the call.
+                    </p>
                   </div>
-                ))}
-                <p className="text-xs text-gray-500">
-                  Fill in the values for campaign variables. These will be used to personalize the call.
-                </p>
-              </div>
-            )}
+                );
+              }
+              
+              return (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <p className="text-sm text-yellow-800">
+                    No variables found in context. Add variables in your context using <code className="bg-yellow-100 px-1 rounded">{'{variable_name}'}</code> format.
+                  </p>
+                </div>
+              );
+            })()}
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <div className="flex items-start gap-2">

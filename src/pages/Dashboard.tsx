@@ -41,7 +41,7 @@ import {
 } from 'recharts';
 import { usePermissions } from '@/contexts/PermissionProvider';
 import { getUserData } from '@/utils/localStorage';
-import { cachedFetch } from '@/lib/api';
+import { cachedFetch, authorizedFetch } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
 import { config } from '@/config/env';
 
@@ -408,13 +408,8 @@ const Dashboard = () => {
         console.log('Dashboard: Fetching campaigns with org filter:', campaignUrl);
       }
       
-      const campaignResponse = await fetch(`${config.apiBaseUrl}${campaignUrl}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
-      });
-      if (campaignResponse.ok) {0
+      const campaignResponse = await authorizedFetch(campaignUrl);
+      if (campaignResponse.ok) {
         const campaignData = await campaignResponse.json() as Campaign[];
         console.log('Dashboard: Campaigns fetched:', campaignData);
         setCampaigns(campaignData);
@@ -468,21 +463,16 @@ const Dashboard = () => {
           
           if (isSuperUser || isSuperAdmin) {
             // Super users can see all organizations
-            const response = await fetch('/api/v1/organizations', {
-              headers: {
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-                'Content-Type': 'application/json'
-              },
-            });
+            const response = await authorizedFetch('/organizations');
             if (response.ok) {
-              const responseData = await response.json();
+              const responseData: any = await response.json();
               console.log('🚀 PERFORMANCE FIX: Organizations API response:', responseData);
               
               // Handle different response formats
               let data: Organization[];
               if (Array.isArray(responseData)) {
                 data = responseData;
-              } else if (responseData.value && Array.isArray(responseData.value)) {
+              } else if (responseData?.value && Array.isArray(responseData.value)) {
                 data = responseData.value;
               } else {
                 console.error('🚀 PERFORMANCE FIX: Unexpected organizations response format:', responseData);
@@ -498,18 +488,22 @@ const Dashboard = () => {
           } else {
             // Non-super users: try their own organization first, then fallback to all organizations
             console.log('🚀 PERFORMANCE FIX: Non-superuser path, checking userData.organization_id:', userData?.organization_id);
-            if (userData?.organization_id) {
-              const response = await fetch(`${config.apiBaseUrl}/organizations/${userData.organization_id}`, {
-                headers: {
-                  'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-                  'Content-Type': 'application/json'
-                },
-              });
-              if (fallbackResponse.ok) {
-                const fallbackData = await fallbackResponse.json();
-                let data: Organization[] = Array.isArray(fallbackData) ? fallbackData : (fallbackData.value || []);
-                console.log('🚀 PERFORMANCE FIX: Fallback - All organizations loaded for non-superuser:', data.length);
-                return data;
+            try {
+              if (userData?.organization_id) {
+                const response = await authorizedFetch(`/organizations/${userData.organization_id}`);
+                if (response.ok) {
+                  const org = await response.json();
+                  console.log('🚀 PERFORMANCE FIX: Loaded single organization for non-superuser');
+                  return Array.isArray(org) ? org : [org];
+                }
+                // Fallback to all organizations
+                const fallbackResponse = await authorizedFetch('/organizations/');
+                if (fallbackResponse.ok) {
+                  const fallbackData: any = await fallbackResponse.json();
+                  const data: Organization[] = Array.isArray(fallbackData) ? fallbackData : (fallbackData?.value || []);
+                  console.log('🚀 PERFORMANCE FIX: Fallback - All organizations loaded for non-superuser:', data.length);
+                  return data;
+                }
               }
             } catch (error) {
               console.error('🚀 PERFORMANCE FIX: Fallback fetch also failed:', error);
@@ -528,21 +522,16 @@ const Dashboard = () => {
           }
           
           try {
-            const response = await fetch(`${config.apiBaseUrl}${campaignUrl}`, {
-              headers: {
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-                'Content-Type': 'application/json'
-              },
-            });
+            const response = await authorizedFetch(campaignUrl);
             if (response.ok) {
-              const responseData = await response.json();
+              const responseData: any = await response.json();
               console.log('🚀 PERFORMANCE FIX: Campaigns API response:', responseData);
               
               // Handle different response formats
               let data: Campaign[];
               if (Array.isArray(responseData)) {
                 data = responseData;
-              } else if (responseData.value && Array.isArray(responseData.value)) {
+              } else if (responseData?.value && Array.isArray(responseData.value)) {
                 data = responseData.value;
               } else {
                 console.error('🚀 PERFORMANCE FIX: Unexpected campaigns response format:', responseData);
@@ -813,15 +802,10 @@ const Dashboard = () => {
       params.append('days', filterState.days.toString());
 
       // Use the new comprehensive dashboard endpoint
-      const apiUrl = `${config.apiBaseUrl}/dashboard/comprehensive?${params}`;
+      const apiUrl = `/dashboard/comprehensive?${params}`;
       console.log('Dashboard: API call:', apiUrl);
       
-      const response = await fetch(apiUrl, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
-      });
+      const response = await authorizedFetch(apiUrl);
       
       if (!response.ok) {
         const errorData = await response.json() as { detail?: string };

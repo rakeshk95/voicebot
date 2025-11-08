@@ -401,12 +401,7 @@ export default function Users() {
     const fetchOrganizations = async () => {
       try {
         console.log('Users: Fetching organizations...');
-        const response = await fetch('https://platform.voxiflow.com/api/v1/organizations/', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json'
-          },
-        });
+        const response = await authorizedFetch('/organizations/', {});
 
         console.log('Users: Organizations API response status:', response.status);
 
@@ -450,7 +445,7 @@ export default function Users() {
     const fetchCampaignsData = async () => {
       try {
         // Build API URL with role-based filtering
-        let campaignsUrl = 'https://platform.voxiflow.com/api/v1/campaigns/';
+        let campaignsUrl = '/campaigns/';
         if (!isSuperUser && userData?.org_id) {
           campaignsUrl += `?org_id=${userData.org_id}`;
           console.log('Users: Non-superuser - filtering campaigns by organization:', userData.org_id);
@@ -458,12 +453,7 @@ export default function Users() {
           // No need to set additional filters
         }
         
-        const response = await fetch(campaignsUrl, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json'
-          },
-        });
+        const response = await authorizedFetch(campaignsUrl, {});
 
         if (!response.ok) {
           throw new Error('Failed to fetch campaigns');
@@ -483,12 +473,7 @@ export default function Users() {
 
     const fetchRolesData = async () => {
       try {
-        const response = await fetch('https://platform.voxiflow.com/api/v1/roles/', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json'
-          },
-        });
+        const response = await authorizedFetch('/roles/', {});
 
         if (!response.ok) {
           throw new Error('Failed to fetch roles');
@@ -499,12 +484,7 @@ export default function Users() {
         // Fallback: if no roles returned, try org-scoped
         if ((!rolesArray || rolesArray.length === 0) && currentUserData?.org_id) {
           try {
-            const scoped = await fetch(`${config.apiBaseUrl}/roles/?org_id=${currentUserData.org_id}`, {
-              headers: {
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-                'Content-Type': 'application/json'
-              },
-            });
+            const scoped = await authorizedFetch(`/roles/?org_id=${currentUserData.org_id}`, {});
             if (scoped.ok) {
               const scopedData = await scoped.json();
               const scopedArray = Array.isArray(scopedData) ? scopedData : (Array.isArray(scopedData?.value) ? scopedData.value : []);
@@ -534,18 +514,13 @@ export default function Users() {
   const fetchCampaigns = async () => {
     try {
       // Build API URL with role-based filtering
-      let campaignsUrl = 'https://platform.voxiflow.com/api/v1/campaigns/';
+      let campaignsUrl = '/campaigns/';
       if (!isSuperUserGlobal && currentUserData?.org_id) {
         campaignsUrl += `?org_id=${currentUserData.org_id}`;
         console.log('Users: Non-superuser - filtering campaigns by organization:', currentUserData.org_id);
       }
       
-      const response = await fetch(campaignsUrl, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
-      });
+      const response = await authorizedFetch(campaignsUrl, {});
 
       if (!response.ok) {
         throw new Error('Failed to fetch campaigns');
@@ -568,8 +543,8 @@ export default function Users() {
     try {
       setIsLoadingCreateData(true);
       // Build API URLs with role-based filtering
-      let campaignsUrl = 'https://platform.voxiflow.com/api/v1/campaigns/';
-      let orgsUrl = 'https://platform.voxiflow.com/api/v1/organizations';
+      let campaignsUrl = '/campaigns/';
+      let orgsUrl = '/organizations';
       
       if (!isSuperUserGlobal && currentUserData?.org_id) {
         campaignsUrl += `?org_id=${currentUserData.org_id}`;
@@ -577,24 +552,9 @@ export default function Users() {
       }
       
       const [rolesResponse, orgsResponse, campaignsResponse] = await Promise.all([
-        fetch('https://platform.voxiflow.com/api/v1/roles/', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json'
-          },
-        }),
-        isSuperUserGlobal ? fetch(orgsUrl, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json'
-          },
-        }) : Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: currentUserData.org_id, name: currentUserData.org_name || 'My Organization' }]) }),
-        fetch(campaignsUrl, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json'
-          },
-        })
+        authorizedFetch('/roles/', {}),
+        isSuperUserGlobal ? authorizedFetch(orgsUrl, {}) : Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: currentUserData.org_id, name: currentUserData.org_name || 'My Organization' }]) }),
+        authorizedFetch(campaignsUrl, {})
       ]);
 
       if (!rolesResponse.ok || !orgsResponse.ok || !campaignsResponse.ok) {

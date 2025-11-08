@@ -59,7 +59,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cachedFetch, clearApiCache } from "@/lib/api";
+import { cachedFetch, clearApiCache, authorizedFetch } from "@/lib/api";
 import { config } from '@/config/env';
 
 // Form schema
@@ -286,12 +286,8 @@ const Organizations = () => {
         status: 'active'
       };
 
-      const response = await fetch('https://platform.voxiflow.com/api/v1/organizations/', {
+      const response = await authorizedFetch('/organizations/', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
         body: JSON.stringify(apiData),
       });
       

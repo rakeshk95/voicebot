@@ -20,7 +20,7 @@ import { AppSidebar } from '@/components/AppSidebar';
 import voxiflowLogo from '../assets/voxiflow-logo.svg';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import * as XLSX from 'xlsx-js-style';
-import { cachedFetch } from '@/lib/api';
+import { cachedFetch, authorizedFetch } from '@/lib/api';
 import { config } from '@/config/env';
 
 
@@ -533,12 +533,7 @@ const CallHistory = () => {
   const fetchOrganizations = async () => {
     try {
       console.log('CallHistory: Fetching organizations...');
-      const response = await fetch('https://platform.voxiflow.com/api/v1/organizations/', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await authorizedFetch('/organizations/', {});
       
       if (!response.ok) {
         console.error('Failed to fetch organizations:', response.status);
@@ -966,12 +961,8 @@ const CallHistory = () => {
     });
     
     try {
-      const response = await fetch('https://platform.voxiflow.com/api/v1/calls/', {
+      const response = await authorizedFetch('/calls/', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           to_number: call.To,
           dynamic_variables: {

@@ -27,6 +27,7 @@ import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { usePermissions, PERMISSION_RESOURCES } from '@/contexts/PermissionProvider';
 import { config } from '@/config/env';
+import { authorizedFetch } from '@/lib/api';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -91,12 +92,7 @@ export default function RolesPermissions() {
   const fetchRoles = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('https://platform.voxiflow.com/api/v1/roles/', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await authorizedFetch('/roles/', {});
       const raw = await response.json().catch(() => null);
       if (!response.ok) throw new Error((raw && raw.detail) || 'Failed to fetch roles');
 
@@ -198,15 +194,10 @@ export default function RolesPermissions() {
         permissions: newRole.permissions,
         status: newRole.status
       };
-      const baseUrl = 'https://platform.voxiflow.com/api/v1/roles';
-      const url = editMode === "edit" ? `${baseUrl}/${newRole.id}` : baseUrl;
+      const url = editMode === "edit" ? `/roles/${newRole.id}` : '/roles';
 
-      const response = await fetch(url, {
+      const response = await authorizedFetch(url, {
         method: editMode === "edit" ? 'PUT' : 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(roleData)
       });
       const returned = await response.json().catch(() => null);
