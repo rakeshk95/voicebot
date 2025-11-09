@@ -233,6 +233,165 @@ type FormPath =
   | 'llm.promptJson.knowledgeBase.url'
   | 'llm.promptJson.knowledgeBase.file';
 
+// Shared function to extract variables from context text (used in both extraction and submission)
+const extractVariablesFromContextText = (contextText: string): string[] => {
+  if (!contextText) return [];
+  
+  try {
+    // ReactQuill stores HTML, so we need to extract plain text first
+    let text = contextText;
+    
+    // If text contains HTML (from ReactQuill), extract plain text first
+    if (text.includes('<') || text.includes('&')) {
+      try {
+        if (typeof document !== 'undefined') {
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = text;
+          text = tempDiv.textContent || tempDiv.innerText || text;
+        } else {
+          // Fallback: basic HTML tag removal
+          text = text.replace(/<[^>]*>/g, '');
+          text = text.replace(/&nbsp;/gi, ' ');
+          text = text.replace(/&amp;/gi, '&');
+          text = text.replace(/&lt;/gi, '<');
+          text = text.replace(/&gt;/gi, '>');
+          text = text.replace(/&quot;/gi, '"');
+          text = text.replace(/&#39;/gi, "'");
+        }
+      } catch (e) {
+        // If extraction fails, use original text
+      }
+    }
+    
+    // Only extract content strictly inside curly braces {}
+    const matches = text.match(/\{([^{}]+)\}/g) || [];
+    
+    // Helper function to check if a string looks like a valid variable name
+    const isValidVariableName = (str: string): boolean => {
+      if (!str || str.length === 0 || str.length > 100) return false;
+      
+      const lower = str.toLowerCase();
+      // Reject any string containing HTML-related patterns
+      if (lower.includes('nbsp') || 
+          lower.includes('p_p') || 
+          lower.includes('&nbsp') ||
+          lower.includes('<p>') ||
+          lower.includes('</p>') ||
+          lower.includes('<div>') ||
+          lower.includes('</div>') ||
+          lower.match(/^p_p_/) ||
+          lower.match(/p_\d+_/) ||
+          lower.includes('_nbsp_') ||
+          lower.match(/^[&<>"']+$/) ||
+          lower.match(/^[_\s]+$/)
+      ) {
+        return false;
+      }
+      return true;
+    };
+    
+    // Clean and extract only valid variable names from inside {}
+    const extracted = matches
+      .map(m => {
+        // Extract content inside braces only
+        let content = m.slice(1, -1).trim();
+        
+        // Skip if empty
+        if (!content) return null;
+        
+        // FIRST: Remove all HTML tags completely before any processing
+        content = content.replace(/<[^>]*>/g, '').trim();
+        
+        // SECOND: Decode HTML entities
+        let decoded = content;
+        try {
+          if (typeof document !== 'undefined') {
+            const textarea = document.createElement('textarea');
+            textarea.innerHTML = content;
+            decoded = textarea.textContent || textarea.innerText || content;
+          } else {
+            decoded = content
+              .replace(/&nbsp;/gi, ' ')
+              .replace(/&amp;/gi, '&')
+              .replace(/&lt;/gi, '<')
+              .replace(/&gt;/gi, '>')
+              .replace(/&quot;/gi, '"')
+              .replace(/&#39;/gi, "'")
+              .replace(/&#x[0-9a-f]+;/gi, ' ')
+              .replace(/&#\d+;/gi, ' ');
+          }
+        } catch (e) {
+          decoded = content;
+        }
+        
+        // THIRD: Clean up - remove extra spaces
+        const cleaned = decoded.replace(/\s+/g, ' ').trim();
+        
+        // FOURTH: Check if it's a valid variable name
+        if (!isValidVariableName(cleaned)) {
+          return null;
+        }
+        
+        return cleaned;
+      })
+      .filter((item): item is string => Boolean(item));
+    
+    // Normalize and filter
+    const normalize = (k: string) => {
+      const cleaned = k.trim();
+      
+      if (!cleaned || cleaned.length === 0 || cleaned.length > 100) {
+        return null;
+      }
+      
+      if (!isValidVariableName(cleaned)) {
+        return null;
+      }
+      
+      // For validation, check normalized version
+      const normalizedForCheck = cleaned.toLowerCase()
+        .replace(/[^a-z0-9_]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .replace(/_+/g, '_');
+      
+      if (!normalizedForCheck || normalizedForCheck.length === 0) {
+        return null;
+      }
+      
+      if (!isValidVariableName(normalizedForCheck)) {
+        return null;
+      }
+      
+      // Return original cleaned name (preserve case)
+      return cleaned;
+    };
+    
+    // Filter out null values and invalid keys
+    const uniqueKeys: string[] = [];
+    const seen = new Set<string>();
+    
+    for (const key of extracted) {
+      const normalized = normalize(key);
+      if (normalized && !seen.has(normalized)) {
+        // Final check - reject any key with suspicious patterns
+        const lower = normalized.toLowerCase();
+        if (!lower.includes('nbsp') && 
+            !lower.includes('p_p') && 
+            !lower.match(/^p_\d+_/) &&
+            !lower.includes('_nbsp_')) {
+          uniqueKeys.push(normalized);
+          seen.add(normalized);
+        }
+      }
+    }
+    
+    return uniqueKeys;
+  } catch (error) {
+    console.error('Error extracting variables from context:', error);
+    return [];
+  }
+};
+
 export default function CampaignFormPage({ mode = 'create', initialData = {} }) {
   const navigate = useNavigate();
   const params = useParams();
@@ -352,10 +511,13 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         }
       });
       // Sync local UI state pieces
-      setContextValue(copied.llm?.promptJson?.context || '');
+      const contextText = copied.llm?.promptJson?.context || '';
+      setContextValue(contextText);
       setInitialMessage(copied.llm?.initialMessage || '');
-      const pv = copied.llm?.promptJson?.promptVariables || {};
-      setVariables(Object.entries(pv).map(([key, value]) => ({ key, value: String(value ?? '') })));
+      
+      // CRITICAL: Do NOT load variables from copied campaign - extract ONLY from context
+      // The useEffect watching contextValue will extract variables from context automatically
+      // This ensures we ONLY get variables that are actually in {} in the context
       setCategorization(Object.entries(categories.fields || {}).map(([key, value]) => ({ key, value: String(value ?? '') })));
       setDataExtractionFields(Object.entries(data_extracted.fields || {}).map(([key, value]) => ({ key, value: String(value ?? '') })));
       setDataExtractionSystemPrompt(data_extracted.system_prompt || '');
@@ -657,21 +819,16 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
         setMaxIdleDuration(version.max_idle_duration || 5);
         
         // Update context value for the form
-        setContextValue(version.llm?.prompt || '');
+        const contextText = version.llm?.promptJson?.context || version.llm?.prompt || '';
+        setContextValue(contextText);
         
         // Update initial message
         setInitialMessage(version.llm?.initialMessage || '');
         
-        // Update variables from promptJson
-        if (version.llm?.promptJson?.promptVariables && Object.keys(version.llm.promptJson.promptVariables).length > 0) {
-          const variables = Object.entries(version.llm.promptJson.promptVariables).map(([key, value]) => ({
-            key,
-            value: value as string
-          }));
-          setVariables(variables);
-        } else {
-          setVariables([]);
-        }
+        // CRITICAL: Do NOT load variables from version - extract ONLY from context
+        // The useEffect watching contextValue will extract variables from context automatically
+        // This ensures we ONLY get variables that are actually in {} in the context
+        // Variables will be extracted when contextValue is set above
       }
     } catch (error) {
       toast({
@@ -712,42 +869,43 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
   // --- Auto-detect variables inside curly braces in Context and sync to Variables ---
   useEffect(() => {
     try {
-      const text = contextValue || '';
-      const matches = text.match(/\{([^{}]+)\}/g) || [];
-      const extracted = matches
-        .map(m => m.slice(1, -1).trim())
-        .filter(Boolean);
-      if (extracted.length === 0) {
-        // still ensure form value reflects current variables
-        const kv: Record<string, string> = {};
-        variables.forEach(v => { if (v.key) kv[v.key] = v.value || ''; });
-        form.setValue('llm.promptJson.promptVariables', kv);
+      // Use the shared extraction function
+      const extractedKeys = extractVariablesFromContextText(contextValue);
+      
+      if (extractedKeys.length === 0) {
+        // If no variables found in context, clear variables list
+        // We ONLY extract what's inside {} - if there are no {}, there are no variables
+        setVariables([]);
+        form.setValue('llm.promptJson.promptVariables', {});
         return;
       }
 
-      const normalize = (k: string) => {
-        const normalized = k.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
-        // Map common variations to standard keys
-        const keyMap: Record<string, string> = {
-          'client_name': 'customer_name',
-          'clientname': 'customer_name',
-          'appointment_date': 'date',
-          'appointmentdate': 'date',
-          'appointment_time': 'time',
-          'appointmenttime': 'time'
-        };
-        return keyMap[normalized] || normalized;
+      // Map common variations to standard keys (case-insensitive matching)
+      const keyMap: Record<string, string> = {
+        'client_name': 'customer_name',
+        'clientname': 'customer_name',
+        'appointment_date': 'date',
+        'appointmentdate': 'date',
+        'appointment_time': 'time',
+        'appointmenttime': 'time'
       };
-      const uniqueKeys = Array.from(new Set(extracted.map(normalize).filter(Boolean)));
+      
+      // Apply key mapping
+      const mappedKeys = extractedKeys.map(key => {
+        const lower = key.toLowerCase();
+        return keyMap[lower] || key;
+      });
 
-      // preserve existing values when keys match, but don't auto-fill values
-      const nextVars = uniqueKeys.map(key => ({
+      // CRITICAL: ONLY use variables found in the current context (inside {})
+      // Do NOT preserve old variables that aren't in the current context
+      // This ensures we ONLY extract what's literally inside {} in the context text
+      const nextVars = mappedKeys.map(key => ({
         key,
         value: (variables.find(v => v.key === key)?.value) || ''
       }));
 
-      // optionally keep extra variables previously added by user
-      variables.forEach(v => { if (!nextVars.find(n => n.key === v.key)) nextVars.push(v); });
+      // DO NOT add extra variables - only use what's in the context
+      // The requirement is: ONLY extract what's inside {} in the context
 
       setVariables(nextVars);
       const kv: Record<string, string> = {};
@@ -862,10 +1020,14 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
           }
         }
       });
-      setContextValue(campaignData.llm?.promptJson?.context || '');
+      const contextText = campaignData.llm?.promptJson?.context || '';
+      setContextValue(contextText);
       setInitialMessage(campaignData.llm?.initialMessage || '');
-      const promptVarsFromAPI = campaignData.llm?.promptJson?.promptVariables || {};
-      setVariables(Object.entries(promptVarsFromAPI).map(([key, value]) => ({ key, value: value as string })));
+      
+      // CRITICAL: Do NOT load variables from API - extract ONLY from context
+      // The useEffect watching contextValue will extract variables from context automatically
+      // This ensures we ONLY get variables that are actually in {} in the context
+      // Variables will be extracted when contextValue is set above
       setCategorization(Object.entries(categories.fields || {}).map(([key, value]) => ({ key, value: value as string })));
       setDataExtractionFields(Object.entries(data_extracted.fields || {}).map(([key, value]) => ({ key, value: value as string })));
       setSelectedFile(campaignData.knowledge_base?.file || null);
@@ -967,10 +1129,53 @@ export default function CampaignFormPage({ mode = 'create', initialData = {} }) 
           prompt: contextValue || data.llm?.prompt || "",
           promptJson: {
             skeleton: "Simple output format.",
-            promptVariables: variables.reduce((acc, v) => {
-              if (v.key) acc[v.key] = v.value;
-              return acc;
-            }, {} as Record<string, string>),
+            promptVariables: (() => {
+              // CRITICAL: Extract variables fresh from context before submission
+              // This ensures we ONLY send variables that are actually in {} in the context
+              // Use the same extraction function to ensure consistency
+              const extractedKeys = extractVariablesFromContextText(contextValue);
+              
+              // Map common variations to standard keys
+              const keyMap: Record<string, string> = {
+                'client_name': 'customer_name',
+                'clientname': 'customer_name',
+                'appointment_date': 'date',
+                'appointmentdate': 'date',
+                'appointment_time': 'time',
+                'appointmenttime': 'time'
+              };
+              
+              // Build promptVariables object with values from variables state
+              // CRITICAL: Only include variables that were extracted from context
+              // Filter out any corrupted variables that might have slipped through
+              const extractedVars: Record<string, string> = {};
+              extractedKeys.forEach(key => {
+                // Apply key mapping
+                const lower = key.toLowerCase();
+                const mappedKey = keyMap[lower] || key;
+                
+                // FINAL SAFETY CHECK: Reject any key that looks corrupted
+                const finalKey = mappedKey;
+                const finalKeyLower = finalKey.toLowerCase();
+                if (finalKeyLower.includes('nbsp') || 
+                    finalKeyLower.includes('p_p') || 
+                    finalKeyLower.match(/^p_\d+_/) ||
+                    finalKeyLower.includes('_nbsp_') ||
+                    finalKey.length > 100 ||
+                    finalKey.length === 0) {
+                  // Skip this corrupted variable
+                  console.warn('Skipping corrupted variable:', finalKey);
+                  return;
+                }
+                
+                // Get value from variables state if it exists, otherwise empty string
+                const existingVar = variables.find(v => v.key === mappedKey || v.key === key);
+                extractedVars[finalKey] = existingVar?.value || '';
+              });
+              
+              // CRITICAL: Return ONLY the extracted variables - do not merge with any other data
+              return extractedVars;
+            })(),
             knowledgeBase: data.knowledge_base,
             nodes: {},
             context: contextValue || "",

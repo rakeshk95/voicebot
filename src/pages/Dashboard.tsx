@@ -289,6 +289,14 @@ interface Campaign {
   org_id: string;
 }
 
+// FIXED: Explicit mapping of time period dropdown to days parameter
+const TIME_PERIOD_MAP: Record<string, number> = {
+  "7": 7,      // Last 7 days
+  "30": 30,    // Last 30 days
+  "90": 90,    // Last 90 days
+  "365": 365   // Last year
+};
+
 const Dashboard = () => {
   const { userPermissions, userRole, hasPermission } = usePermissions();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
@@ -726,8 +734,14 @@ const Dashboard = () => {
     };
   }, [userOrgId, hasInitialized, loading, refreshing, isSuperUser]);
 
-  // Debounced function to fetch dashboard data
-  const debouncedFetchDashboard = (newOrgId?: string, delay: number = 150) => {
+  // FIXED: Debounced function to fetch dashboard data with fresh overrides (prevents stale state)
+  // IMPORTANT: This is the ONLY function that should trigger fetchDashboard for filter changes.
+  // DO NOT add useEffect watching filters - it will cause duplicate API calls.
+  // Filter changes should ONLY go through: setFilters() → debouncedFetchDashboard()
+  const debouncedFetchDashboard = (
+    overrides: Partial<typeof filters> = {},
+    delay: number = 150
+  ) => {
     // Clear existing timer
     if (filterDebounceTimer) {
       clearTimeout(filterDebounceTimer);
@@ -735,11 +749,8 @@ const Dashboard = () => {
     
     // Set new timer
     const timer = setTimeout(() => {
-      // Create a temporary filter state for the API call
-      const tempFilters = {
-        ...filters,
-        org_id: newOrgId || filters.org_id
-      };
+      // Merge current filters with overrides to ensure fresh values are used
+      const tempFilters = { ...filters, ...overrides };
       
       // Call fetchDashboard with the updated filter state
       fetchDashboard(tempFilters);
@@ -1150,7 +1161,8 @@ const Dashboard = () => {
                     }
                     
                     // Use debounced API call to prevent rapid successive calls
-                    debouncedFetchDashboard(value); // Pass the new org_id value
+                    // FIXED: Pass org_id and reset campaign_id explicitly to avoid stale state
+                    debouncedFetchDashboard({ org_id: value, campaign_id: 'all' }, 150);
                   } catch (error) {
                     console.error('Dashboard: Error updating campaigns after org change:', error);
                     toast({
@@ -1215,10 +1227,8 @@ const Dashboard = () => {
                   });
                   
                   try {
-                    // Use debounced API call to prevent rapid successive calls
-                    debouncedFetchDashboard(undefined, 150); // Faster debounce
-                    // Use debounced API call to prevent rapid successive calls
-                    debouncedFetchDashboard(undefined, 150); // Faster debounce
+                    // FIXED: Single debounced call with explicit campaign_id override to avoid stale state
+                    debouncedFetchDashboard({ campaign_id: value }, 150);
                   } catch (error) {
                     console.error('Dashboard: Error updating dashboard after campaign change:', error);
                     toast({
@@ -1269,14 +1279,16 @@ const Dashboard = () => {
             <Select
               value={filters.days.toString()}
               onValueChange={async (value) => {
-                console.log('Dashboard: Time period changed to:', value, 'days');
+                // FIXED: Use explicit mapping to ensure correct days value
+                const daysValue = TIME_PERIOD_MAP[value] || 30;
+                console.log('Dashboard: Time period changed to:', value, '→ days:', daysValue);
                 
-                setFilters(prev => ({ ...prev, days: parseInt(value) }));
+                setFilters(prev => ({ ...prev, days: daysValue }));
                 
                 try {
-                  // Use debounced API call to prevent rapid successive calls
+                  // FIXED: Pass days explicitly to avoid stale state from async React updates
                   if (isFilterDataLoaded && hasInitialized) {
-                    debouncedFetchDashboard(undefined, 300); // Pass undefined for org_id, use current filters
+                    debouncedFetchDashboard({ days: daysValue }, 300);
                   }
                 } catch (error) {
                   console.error('Dashboard: Error updating dashboard after time period change:', error);
